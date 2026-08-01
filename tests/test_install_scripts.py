@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -9,12 +10,22 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/install.ps1"
+MARKETPLACE_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/install-marketplace.ps1"
 POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
 @unittest.skipUnless(POWERSHELL, "PowerShell is required")
 class InstallScriptTests(unittest.TestCase):
-    def run_install(self, codex_home: Path, *arguments: str, expected: int = 0) -> subprocess.CompletedProcess:
+    def run_script(
+        self,
+        script: Path,
+        *arguments: str,
+        expected: int = 0,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess:
+        process_env = os.environ.copy()
+        if env:
+            process_env.update(env)
         result = subprocess.run(
             [
                 POWERSHELL,
@@ -22,18 +33,20 @@ class InstallScriptTests(unittest.TestCase):
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                str(INSTALL_SCRIPT),
-                "-CodexHome",
-                str(codex_home),
+                str(script),
                 *arguments,
             ],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
+            env=process_env,
         )
         self.assertEqual(result.returncode, expected, result.stdout)
         return result
+
+    def run_install(self, codex_home: Path, *arguments: str, expected: int = 0) -> subprocess.CompletedProcess:
+        return self.run_script(INSTALL_SCRIPT, "-CodexHome", str(codex_home), *arguments, expected=expected)
 
     def test_preview_apply_preserve_custom_content_and_backup_updates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -76,6 +89,28 @@ class InstallScriptTests(unittest.TestCase):
                 expected=1,
             )
             self.assertIn("fixed release tag or commit", result.stdout)
+
+    def test_marketplace_install_uses_explicit_runnable_codex_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake_codex = root / "codex.cmd"
+            command_log = root / "codex-commands.log"
+            fake_codex.write_text('@echo %*>>"%CODEX_TEST_LOG%"\r\n@exit /b 0\r\n', encoding="ascii")
+
+            self.run_script(
+                MARKETPLACE_SCRIPT,
+                "-Marketplace",
+                "OWNER/codex-dev-kit",
+                "-Ref",
+                "v0.1.0",
+                "-Apply",
+                env={"CODEX_CLI": str(fake_codex), "CODEX_TEST_LOG": str(command_log)},
+            )
+
+            commands = command_log.read_text(encoding="utf-8")
+            self.assertIn("--version", commands)
+            self.assertIn("plugin marketplace add OWNER/codex-dev-kit --ref v0.1.0", commands)
+            self.assertIn("plugin add codex-personal-dev-kit@codex-dev-kit", commands)
 
 
 if __name__ == "__main__":

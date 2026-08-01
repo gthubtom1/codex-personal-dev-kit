@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "resolve-codex-cli.ps1")
 if ([string]::IsNullOrWhiteSpace($CodexHome)) {
     $CodexHome = if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
         $env:CODEX_HOME
@@ -36,8 +37,8 @@ Add-Check "Installed version marker" (Test-Path -LiteralPath $versionPath -PathT
 $sourcePath = Join-Path $codexHomePath "codex-dev-kit\source.json"
 Add-Check "Pinned marketplace source" (Test-Path -LiteralPath $sourcePath -PathType Leaf) $sourcePath
 
-$codexCommand = Get-Command codex -ErrorAction SilentlyContinue
-Add-Check "Codex CLI available" ($null -ne $codexCommand) $(if ($codexCommand) { $codexCommand.Source } else { "codex was not found on PATH" })
+$codexCommand = Resolve-CodexCli
+Add-Check "Runnable Codex CLI" ($null -ne $codexCommand) $(if ($codexCommand) { "$($codexCommand.Version) at $($codexCommand.Path)" } else { "No runnable PATH, CODEX_CLI, or Codex Desktop candidate" })
 
 $checks | Format-Table -AutoSize
 if ($checks.Where({ -not $_.Passed }).Count -gt 0) {

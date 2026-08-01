@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "resolve-codex-cli.ps1")
 if ($Ref.ToLowerInvariant() -in @("main", "master", "head", "latest")) {
     throw "Use a fixed release tag or commit, not '$Ref'."
 }
@@ -23,10 +24,10 @@ if (-not $Apply) {
     exit 0
 }
 
-$codex = Get-Command codex -ErrorAction Stop
-& $codex.Source plugin marketplace add $Marketplace --ref $Ref
+$codex = Resolve-CodexCli -ErrorIfMissing
+& $codex.Path plugin marketplace add $Marketplace --ref $Ref
 if ($LASTEXITCODE -ne 0) { throw "Marketplace installation failed." }
-& $codex.Source plugin add "$PluginName@$MarketplaceName"
+& $codex.Path plugin add "$PluginName@$MarketplaceName"
 if ($LASTEXITCODE -ne 0) { throw "Plugin installation failed." }
 
 Write-Host "Plugin installed. Start a new Codex task before using it."

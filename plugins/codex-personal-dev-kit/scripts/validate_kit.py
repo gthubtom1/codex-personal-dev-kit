@@ -47,7 +47,12 @@ def main() -> int:
     for event in ("SessionStart", "PreToolUse", "Stop", "SessionEnd"):
         if event not in hooks:
             errors.append(f"Missing required hook event: {event}")
-    for relative in ("scripts/feature_guard.py", "hooks/pre_tool_guard.py", "scripts/audit_project.py"):
+    for relative in (
+        "scripts/feature_guard.py",
+        "hooks/pre_tool_guard.py",
+        "scripts/audit_project.py",
+        "scripts/bootstrap/resolve-codex-cli.ps1",
+    ):
         if not (plugin_root / relative).is_file():
             errors.append(f"Missing required runtime file: {relative}")
 
