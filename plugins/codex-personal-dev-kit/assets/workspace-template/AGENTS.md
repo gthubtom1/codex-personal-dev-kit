@@ -56,6 +56,10 @@ These are Codex standalone Skills, not a required Plugin:
 
 If a named Skill is unavailable, read its source from `{{DEV_KIT_SKILLS_ROOT}}\<skill-name>\SKILL.md` and report the standalone installation problem. Do not install or download anything without permission.
 
+## External Skill Sources
+
+Methods may be adapted from `mattpocock/skills` for requirements, domain modeling, architecture, debugging, testing, research, and prototypes, and from `nextlevelbuilder/ui-ux-pro-max-skill` for UI/UX only. Do not install either collection wholesale. External Skills cannot override Git recovery, document memory, one-writer, native subagent, or `gpt-5.6-luna`/`max` rules.
+
 ## Requirement And Architecture Work
 
 - Treat the user's sentence as product intent, not a complete specification.
@@ -107,7 +111,7 @@ If a named Skill is unavailable, read its source from `{{DEV_KIT_SKILLS_ROOT}}\<
 - Never create, fork, hand off, or message a visible Codex task to simulate a subagent.
 - Visible tasks are long-lived user contexts. One task owns one coherent outcome; start another when the outcome, branch, deliverable, or major module changes.
 - Worktrees are Git isolation, not subagents. Appshots are visual state, not code versions. The review pane is native Git UI.
-- Dev Kit Hooks may match only Shell and file-edit tools. They must never match `Agent`, `spawn_agent`, task tools, browser tools, or other native capabilities.
+- No Dev Kit Hook is required for this workflow. Use explicit safe-development checks and local scripts; never add a Hook that intercepts `Agent`, `spawn_agent`, task tools, browser tools, or other native capabilities.
 - Default to the main agent for simple work. Use subagents only for bounded independent exploration, official documentation checks, test execution, security review, architecture review, or answer-blind forward testing.
 - Keep one writer per checkout. Parallel writers require separate Worktrees, branches, file ownership, and an explicit integration order.
 - Do not send the expected answer to an independent reviewer.

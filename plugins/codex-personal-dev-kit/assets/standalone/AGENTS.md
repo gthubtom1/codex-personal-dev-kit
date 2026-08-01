@@ -1,16 +1,25 @@
 <!-- codex-dev-kit:start -->
-## Codex Personal Dev Kit
+# Codex 全局短规则：零基础用户
 
-- The user is a complete software-development beginner. They do not know Git, branches, Worktrees, task planning, architecture, testing, folders, dependencies, deployment, or project documentation. Codex owns those mechanics and communicates in plain language.
-- Before any request to create, change, fix, continue, or audit software, read `{{WORKSPACE_AGENTS_PATH}}`. That file is the detailed operating authority for workspace structure, Skills, development flow, Git, documents, tasks, and native subagents.
-- Recommend one practical default, expand missing requirements, and ask only about decisions that materially change product behavior, cost, privacy, external access, compatibility, or reversibility.
-- Use Codex standalone Skills named by the detailed workspace instructions. A Plugin is not required for this development system.
-- Preserve Codex native meanings: subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, the Git review pane, Appshots, and other built-in tools must never be replaced, intercepted, or simulated.
-- Subagents require model `gpt-5.6-luna` with reasoning effort `max`. Verify that exact combination is available before spawning; if unavailable, report it and never silently substitute or claim a failed agent started.
-- Automatically initialize project-local Git, protect existing features, and create a verified local recovery point before completing development. Do not require the user to operate Git or create routine version branches.
-- One Codex task owns one coherent outcome. Recover long-term context from code, tests, Git, project instructions, and concise current docs, never from growing chat transcripts or development diaries.
-- Ask before production dependencies, external/private data, global Codex changes, Skills/Hooks/Rules/agents/Plugins, paid services, major migrations, or external state changes.
-- Never automatically push, pull, merge, rebase, tag, release, deploy, publish, rewrite history, run production migrations, change infrastructure, or discard unconfirmed work.
+我是完全零基础用户：不会 Git、分支、Worktree、任务树、规划、架构、测试、依赖、部署或项目文档。请把我当作只会用普通语言描述目标的人。
 
-If the detailed workspace instruction file is missing, stop and report the missing path. Do not download, install, or invent a replacement without permission.
+The user is a complete software-development beginner.
+
+## 必须遵守
+
+- 你负责把一句话需求扩展成合理范围、最小架构、实施步骤、测试和可回退结果；不要要求我先写技术方案。
+- 先说明你理解的目标和推荐默认方案，只询问会改变产品行为、成本、隐私、外部服务、兼容性或不可逆风险的问题。
+- 自动保护已有功能；修改前读取项目事实、功能清单和相关测试，不能为了改一个功能而删掉或遗漏其他功能。
+- Git、检查点、回退、项目文件夹、文档和测试由你负责；不要让我执行 Git 命令或选择技术细节。
+- 默认只做本地、可恢复的工作；禁止自动 push、pull、merge、rebase、发布、部署、生产迁移或删除未确认内容。
+- 只使用 Codex 原生 subagent；不得创建自定义 Agent、可见任务、替代 Plugin 或强制 Hook 来模拟它。
+- Native subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, and built-in tools must never be replaced, intercepted, or simulated.
+- 调用 subagent 前必须确认精确模型为 `gpt-5.6-luna`、推理强度为 `max`；不可用时报告并停止调用，不得静默降级。
+- 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。
+
+## 详细规则入口
+
+读取并遵守 `{{WORKSPACE_AGENTS_PATH}}`。如果该文件不存在，停止自动安装并报告缺失路径，不要下载或编造替代规则。
+
+不要要求我记住 Skill 名称。根据详细规则自动判断并调度 Skill；外部 Skill 只能作为经过适配的专业方法，不能覆盖以上规则。
 <!-- codex-dev-kit:end -->
