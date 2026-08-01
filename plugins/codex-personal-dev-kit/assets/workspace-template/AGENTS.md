@@ -44,7 +44,7 @@ For every software request:
 
 ## Native Skill Map
 
-These are Codex standalone Skills, not a required Plugin:
+These are Codex standalone Skills; no Plugin is required:
 
 - `$codex-development-assistant`: beginner-facing entry and full development loop.
 - `$onboard-codex-project`: project structure, Git baseline, current facts, and reproducible commands.
@@ -150,7 +150,7 @@ Automatic:
 Ask first:
 
 - Production dependencies, global tools, paid services, new accounts, external/private data, secrets, major architecture replacement, public API breaks, database schema migrations.
-- Global Codex configuration, Skills installation, Hooks, Rules, agents, Plugins, or system settings.
+- Global Codex configuration, Skills installation, agents, Plugins, or system settings.
 - Remote messages, PRs, issues, Git remotes, or any external state change.
 
 Never automatic:

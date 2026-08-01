@@ -83,10 +83,7 @@ class WorkspaceScriptTests(unittest.TestCase):
                 ignored_plan = self.git(project, "check-ignore", ".codex/active-plan.md")
                 self.assertEqual(ignored_plan.returncode, 0)
                 self.assertTrue((project / "docs/adr/INDEX.md").is_file())
-                hooks = (project / ".codex/hooks.json").read_text(encoding="utf-8")
-                self.assertNotIn("{{CODEX_DEV_KIT_ROOT", hooks)
-                self.assertIn("feature_guard.py", hooks)
-                self.assertNotIn("Agent", hooks.replace("never Agent", ""))
+                self.assertFalse((project / ".codex/hooks.json").exists())
                 project_agents = (project / "AGENTS.md").read_text(encoding="utf-8")
                 self.assertIn(str(workspace / "AGENTS.md"), project_agents)
                 self.assertNotIn("D:\\开发\\AGENTS.md", project_agents)
@@ -127,14 +124,14 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertEqual(readme.read_text(encoding="utf-8"), "# Existing user project\n")
             self.assertTrue((project / "AGENTS.md").is_file())
             self.assertTrue((project / "docs/FEATURES.md").is_file())
-            self.assertTrue((project / ".codex/hooks.json").is_file())
+            self.assertFalse((project / ".codex/hooks.json").exists())
             self.assertEqual(self.git(project, "rev-parse", "--show-toplevel").returncode, 0)
             self.assertEqual(self.git(project, "log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: initialize project")
             self.assertEqual(self.git(project, "status", "--porcelain").stdout.strip(), "")
             tracked = self.git(project, "ls-files", "README.md")
             self.assertEqual(tracked.stdout.strip(), "README.md")
 
-    def test_bootstrap_project_prefers_installed_central_runtime_for_hooks(self) -> None:
+    def test_bootstrap_project_does_not_install_lifecycle_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             project = root / "existing"
@@ -157,9 +154,7 @@ class WorkspaceScriptTests(unittest.TestCase):
                 "-Apply",
             )
 
-            hooks = (project / ".codex/hooks.json").read_text(encoding="utf-8")
-            self.assertIn(str(runtime).replace("\\", "\\\\"), hooks)
-            self.assertNotIn(str(SCRIPT_ROOT.parent).replace("\\", "\\\\"), hooks)
+            self.assertFalse((project / ".codex/hooks.json").exists())
 
     def test_existing_project_baseline_stops_before_generated_or_sensitive_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -246,6 +241,26 @@ class WorkspaceScriptTests(unittest.TestCase):
             )
             self.assertIn("config.json", json_result.stdout)
             self.assertNotEqual(self.git(json_secret, "rev-parse", "--verify", "HEAD").returncode, 0)
+
+            utf16_secret = root / "utf16-secret"
+            utf16_secret.mkdir()
+            (utf16_secret / "settings.json").write_text(
+                '{"clientSecret":"this-is-a-real-looking-utf16-secret-123456"}\n',
+                encoding="utf-16",
+            )
+            utf16_result = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(utf16_secret),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+                expected=1,
+            )
+            self.assertIn("settings.json", utf16_result.stdout)
+            self.assertNotEqual(self.git(utf16_secret, "rev-parse", "--verify", "HEAD").returncode, 0)
 
             large_secret = root / "large-secret"
             large_secret.mkdir()

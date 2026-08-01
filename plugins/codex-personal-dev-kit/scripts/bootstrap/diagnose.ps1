@@ -24,8 +24,6 @@ $workspaceAgents = Join-Path $workspacePath "AGENTS.md"
 Add-Check "Detailed mother-folder AGENTS" (Test-Path -LiteralPath $workspaceAgents -PathType Leaf) $workspaceAgents
 
 $kitRoot = Join-Path $codexHomePath "codex-dev-kit"
-$indexPath = Join-Path $kitRoot "INDEX.md"
-Add-Check "Standalone local index" (Test-Path -LiteralPath $indexPath -PathType Leaf) $indexPath
 $versionPath = Join-Path $kitRoot "VERSION"
 Add-Check "Standalone version marker" (Test-Path -LiteralPath $versionPath -PathType Leaf) $versionPath
 $sourcePath = Join-Path $kitRoot "source.json"
@@ -57,13 +55,10 @@ if ($source -and $source.sourceType -eq "local") {
         Add-Check "Local source HEAD" ($head -eq [string]$source.ref -and -not [string]::IsNullOrWhiteSpace($head)) "expected=$($source.ref); actual=$head"
         $status = (& $git.Source -C $localSource status --porcelain 2>$null) -join [Environment]::NewLine
         Add-Check "Local source working tree" ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($status)) $(if ([string]::IsNullOrWhiteSpace($status)) { "clean" } else { $status })
-        $sourceManifest = Join-Path $localSource "plugins\codex-personal-dev-kit\.codex-plugin\plugin.json"
-        if (-not (Test-Path -LiteralPath $sourceManifest -PathType Leaf)) {
-            $sourceManifest = Join-Path $localSource ".codex-plugin\plugin.json"
-        }
         $sourceVersion = ""
-        if (Test-Path -LiteralPath $sourceManifest -PathType Leaf) {
-            try { $sourceVersion = [string]((Get-Content -Raw $sourceManifest | ConvertFrom-Json).version) } catch { }
+        $sourceVersionPath = Join-Path $localSource "VERSION"
+        if (Test-Path -LiteralPath $sourceVersionPath -PathType Leaf) {
+            try { $sourceVersion = (Get-Content -Raw -LiteralPath $sourceVersionPath).Trim() } catch { }
         }
         $installedVersion = if (Test-Path -LiteralPath $versionPath) { (Get-Content -Raw $versionPath).Trim() } else { "" }
         Add-Check "Local source version" ($sourceVersion -eq $installedVersion -and -not [string]::IsNullOrWhiteSpace($sourceVersion)) "source=$sourceVersion; installed=$installedVersion"
@@ -82,7 +77,7 @@ foreach ($name in @(
     $path = Join-Path $codexHomePath ("skills\$name\SKILL.md")
     Add-Check "Standalone Skill $name" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }
-foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py", "scripts\bootstrap-project.ps1", "assets\project-template\.codex\hooks.json")) {
+foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py", "scripts\bootstrap-project.ps1")) {
     $path = Join-Path $kitRoot $relative
     Add-Check "Standalone runtime $relative" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }

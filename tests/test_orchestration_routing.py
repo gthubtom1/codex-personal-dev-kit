@@ -1,6 +1,4 @@
 from pathlib import Path
-import json
-import re
 import unittest
 
 
@@ -64,19 +62,10 @@ class OrchestrationRoutingTests(unittest.TestCase):
             self.assertIn("enabled = true", text)
             self.assertIn("multi_agent = true", text)
 
-    def test_plugin_does_not_intercept_or_reimplement_native_agent_tools(self):
-        hooks = json.loads((PLUGIN / "assets/project-template/.codex/hooks.json").read_text(encoding="utf-8"))["hooks"]
-        for entry in hooks.get("PreToolUse", []):
-            matcher = entry.get("matcher", "")
-            if not matcher:
-                continue
-            compiled = re.compile(matcher)
-            self.assertIsNone(compiled.search("Agent"), matcher)
-            self.assertIsNone(compiled.search("spawn_agent"), matcher)
-
-        manifest = json.loads((PLUGIN / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
-        self.assertNotIn("mcpServers", manifest)
-        self.assertNotIn("apps", manifest)
+    def test_native_agent_tools_have_no_replacement_interceptor(self):
+        self.assertFalse((PLUGIN / "assets/project-template/.codex/hooks.json").exists())
+        self.assertFalse((PLUGIN / ".codex-plugin/plugin.json").exists())
+        self.assertFalse((ROOT / ".agents/plugins/marketplace.json").exists())
         self.assertFalse((PLUGIN / ".mcp.json").exists())
         self.assertFalse((PLUGIN / ".app.json").exists())
         self.assertFalse((PLUGIN / "hooks/hooks.json").exists())

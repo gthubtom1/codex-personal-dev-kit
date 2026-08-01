@@ -47,10 +47,9 @@
 - 简短的全局 `~/.codex/AGENTS.md`：只保存零基础用户约定、关键安全边界和详细规则入口。
 - 详细的母文件夹 `D:\开发\AGENTS.md`：保存完整工作流、目录模型、需求拓展、架构、Git、文档、任务和原生 subagent 规则。
 - 七个 Codex standalone Skills：一个普通语言入口和六个专业能力，不依赖 Plugin 才能使用。
-- 中央运行时 `~/.codex/codex-dev-kit/`：Git 门禁、诊断、模板和脚本；项目 Hook 优先固定指向这个已安装版本，不复制整套框架，也不长期依赖可能被移动或改脏的源码 checkout。
-- 项目级 `.codex/hooks.json`：只匹配 Shell 和文件编辑，不匹配 `Agent`、`spawn_agent` 或任务工具。
+- 中央运行时 `~/.codex/codex-dev-kit/`：Git 检查、诊断、模板和脚本；项目只引用已验证的中央运行时，不复制整套框架。
 - 母文件夹和项目 `.codex/config.toml`：启用原生 multi-agent，并把 subagent 默认固定为 `gpt-5.6-luna`、推理强度 `max`。
-- 可选 Plugin 只作为七个 Skills 的分发包装，不包含 Hook、自定义 Agent、MCP 或 App。
+- 不使用 Dev Kit Plugin、项目生命周期 Hook 或自定义 Agent；Codex 原生能力和 standalone Skills 是唯一运行入口。
 
 ## 本地开发
 
@@ -63,7 +62,7 @@ powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\script
 # 确认后真正创建母文件夹结构
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\bootstrap-workspace.ps1 -WorkspaceRoot D:\开发 -Apply
 
-# 预览 standalone 安装；确认后追加 -Apply
+# 预览 standalone Skills、中央运行时和模板安装；确认后追加 -Apply
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source (Resolve-Path .)
 
 # 预览创建一个独立项目
@@ -78,17 +77,13 @@ powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\script
 
 ## GitHub 分发
 
-主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局规则、standalone Skills、中央运行时和 Rules；它不会启用 Plugin、全局 Hook 或自定义智能体。
+主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
 git clone --branch v0.1.0 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 
-安装或更新后必须开启新 Codex 任务，让全局规则、Skills 和配置重新加载。项目第一次打开时，Codex 仍可能要求确认项目级 Hook。
-
-安装器会独立查询 Codex 当前已安装的 Plugin，即使旧 `source.json` 已缺失或使用自定义 Marketplace，也不会漏过任何 `codex-personal-dev-kit@*`。检测到旧 Plugin、`codex-kit-*.toml` 或旧全局 Hook 时默认停止，避免新旧系统叠加。只有在确认预览目标后才使用 `-MigrateLegacy -Apply`；安装器先完整写入并核验 standalone 文件，再备份和切换旧状态，最后通过 Codex CLI 移除旧 Plugin。混合 `hooks.json` 只删除同时匹配已知 Dev Kit 根路径与已知 guard 调用的处理器，保留其他用户 Hook；模糊引用会停止等待人工检查。全局 `AGENTS.md` 的托管标记损坏或重复时也会停止，不追加重复规则块。
-
-可选的 Marketplace Plugin 只用于打包 Skills，不是运行本系统的前提，也不应包含 Hook、自定义 Agent、MCP 或 App。
+安装或更新后必须开启新 Codex 任务，让全局 `AGENTS.md` 和 Skills 重新加载。项目使用显式安全开发脚本和本地 Git 检查点，不依赖项目 Hook。
 
 完整设计见 `docs/DESIGN.md`。

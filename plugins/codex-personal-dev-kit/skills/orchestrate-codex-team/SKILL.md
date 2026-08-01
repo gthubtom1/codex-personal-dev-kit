@@ -13,7 +13,7 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 - 不得使用 `create_thread`、`fork_thread`、`send_message_to_thread`、`handoff_thread` 或任何可见聊天/任务功能模拟子代理。
 - 新 Codex 任务是用户可见的长期上下文，不是子代理。只有用户明确要求创建、分叉、交接或继续另一个任务时，才使用任务管理功能。
 - 不要为了启动子代理而修改 Codex、安装另一套代理系统或创建永久通信文档。可用的角色配置只负责约束原生 subagent 的职责。
-- Dev Kit 及其可选 Plugin 不得注册替代代理的 MCP/App 工具，不得让 Hook 匹配 `Agent` 或 `spawn_agent`，也不得关闭 `agents.enabled` 或 `features.multi_agent`。任务、Worktree、Git 审查面板和 Appshots 保持 Codex 原生语义。
+- Dev Kit 不得注册替代代理的 MCP/App 工具、安装生命周期 Hook 或关闭 `agents.enabled`/`features.multi_agent`。任务、Worktree、Git 审查面板和 Appshots 保持 Codex 原生语义。
 
 ## 强制模型策略
 

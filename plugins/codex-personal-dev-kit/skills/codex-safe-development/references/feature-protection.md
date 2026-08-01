@@ -53,6 +53,6 @@ python <dev-kit-root>/scripts/feature_guard.py complete --root .
 python <dev-kit-root>/scripts/feature_guard.py checkpoint --root . --message "checkpoint: <outcome>"
 ```
 
-该命令只保存 tree 与父提交都匹配验证快照的内容，并自动关闭契约。Stop Hook 会阻止已验证但尚未形成回退点的任务结束；新契约也不能覆盖这种未保存状态。SessionEnd 只清理已经形成匹配检查点的契约。
+该命令只保存 tree 与父提交都匹配验证快照的内容，并自动关闭契约。安全开发 Skill 在没有匹配回退点时不得声明任务完成；新契约也不能覆盖这种未保存状态。任务结束或开启新任务时，只清理已经形成匹配检查点的契约。
 
 契约是 `.codex/current-change.json` 中的单个临时文件，Git 忽略它；新契约覆盖旧契约，不形成历史文档。

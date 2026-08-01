@@ -1,6 +1,6 @@
 ---
 name: audit-codex-kit
-description: 只读审计一个项目、多个明确指定的项目或 Codex Personal Dev Kit 本身，检查 Git、文档膨胀、架构漂移、复杂度热点、依赖、安全、测试、Worktree、Hooks、Rules 和 Skill 质量。用户要求巡检、代码健康报告、流程审查、定期维护、验证 Skills 或查找长期风险时使用。
+description: 只读审计一个项目、多个明确指定的项目或 Codex Personal Dev Kit 本身，检查 Git、文档膨胀、架构漂移、复杂度热点、依赖、安全、测试、Worktree、原生配置和 Skill 质量。用户要求巡检、代码健康报告、流程审查、定期维护、验证 Skills 或查找长期风险时使用。
 ---
 
 # Audit Codex Kit
@@ -15,7 +15,7 @@ description: 只读审计一个项目、多个明确指定的项目或 Codex Per
 4. 检查 Git 状态、未跟踪或未备份成果、分支跟踪、Worktree 数量和危险操作痕迹。
 5. 检查当前项目文档是否缺失、过期、重复或超过预算；聊天记录不得被当作事实来源。
 6. 检查职责混杂、耦合和验证困难的复杂度热点，以及跨层依赖、缺少测试、锁文件漂移、敏感文件被跟踪、迁移和回滚缺口。行数只能作为线索。
-7. 审计本 Dev Kit 时运行官方 Skill validators、standalone 安装与诊断测试、项目 Hook 样例测试、脚本幂等性测试、未解决占位符检查，以及可选 Skills-only Plugin validator。
+7. 审计本 Dev Kit 时运行官方 Skill validators、standalone 安装与诊断测试、无生命周期 Hook 的模板测试、脚本幂等性测试和未解决占位符检查。
 8. 对复杂 Skill 读取 [forward-testing.md](references/forward-testing.md)，通过 Codex 原生 collaboration `spawn_agent` 使用全新子代理做无答案泄漏的前向测试。测试代理默认只读并使用临时项目，不得用可见任务或聊天替代。
 9. 按严重度排列发现：P0 会造成严重数据或安全损害；P1 高概率行为错误；P2 维护或流程风险；P3 改进建议。
 10. 每项发现必须有路径、命令、可复现证据或明确依据。无法确认时标为不确定，不猜测。

@@ -13,7 +13,7 @@
 - 新增生产依赖、全局工具、外部付费服务或新账号。
 - 访问项目范围外文件、私密目录、外部系统、密钥或真实用户数据。
 - 重大架构替换、公共 API 破坏、数据库结构迁移或大规模数据回填。
-- 修改全局 Codex 配置、安装或更新 Plugin、Hooks、Rules 和 Agents。
+- 修改全局 Codex 配置、安装 Skills、Hooks、Rules、Agents 或其他系统设置。
 - 对外发送消息、创建 PR、修改远程 issue 或执行其他外部状态变更。
 
 ## 禁止自动执行
@@ -22,7 +22,7 @@
 - `git reset --hard`、`git clean`、丢弃未确认的工作区修改。
 - release、deploy、包发布、生产迁移、基础设施 apply/destroy。
 - 删除生产数据、轮换密钥、关闭服务或不可恢复操作。
-- 绕过 sandbox、Hook、Rule 或组织安全策略。
+- 绕过 sandbox、审批或组织安全策略。
 
 ## 无人值守规则
 

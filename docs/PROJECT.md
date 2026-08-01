@@ -13,7 +13,7 @@ The primary user does not want to learn Git, Worktrees, task orchestration, test
 - One beginner-facing development entry Skill.
 - Internal project onboarding, Goal preparation, agent orchestration, safe implementation, continuity, and audit capabilities.
 - Independent project repositories under a mother folder.
-- Regression protection, local recovery points, concise project facts, and Codex-native Hooks/Rules/configuration.
+- Regression protection, local recovery points, concise project facts, and Codex-native configuration without replacing native agents or adding lifecycle Hooks/Rules.
 
 ## Non-Goals
 

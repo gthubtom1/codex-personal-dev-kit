@@ -13,5 +13,4 @@ default_subagent_reasoning_effort = "max"
 
 [features]
 goals = true
-hooks = true
 multi_agent = true

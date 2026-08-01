@@ -70,6 +70,11 @@ function Test-UnsafeBaselineContent {
             finally {
                 $stream.Dispose()
             }
+            $hasUtf16Bom = $sampleLength -ge 2 -and (($sample[0] -eq 0xFF -and $sample[1] -eq 0xFE) -or ($sample[0] -eq 0xFE -and $sample[1] -eq 0xFF))
+            $hasUtf8Bom = $sampleLength -ge 3 -and $sample[0] -eq 0xEF -and $sample[1] -eq 0xBB -and $sample[2] -eq 0xBF
+            if ($hasUtf16Bom -or $hasUtf8Bom) {
+                return $true
+            }
             if (@($sample[0..([Math]::Max(0, $sampleLength - 1))]) -contains 0) {
                 return $false
             }
@@ -81,13 +86,23 @@ function Test-UnsafeBaselineContent {
     }
     try {
         $bytes = [System.IO.File]::ReadAllBytes($fullPath)
-        if ($bytes -contains 0) {
+        $encoding = [System.Text.Encoding]::UTF8
+        if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+            $encoding = [System.Text.Encoding]::Unicode
+        }
+        elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+            $encoding = [System.Text.Encoding]::BigEndianUnicode
+        }
+        elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $encoding = [System.Text.Encoding]::UTF8
+        }
+        elseif ($bytes -contains 0) {
             return $false
         }
-        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+        $text = $encoding.GetString($bytes)
     }
     catch {
-        return $false
+        return $true
     }
 
     $strongPatterns = @(
@@ -113,8 +128,8 @@ function Test-UnsafeBaselineContent {
 }
 
 $projectPath = Get-SafeFullPath -Path $ProjectRoot
-$pluginRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$templateRoot = Join-Path $pluginRoot "assets\project-template"
+$kitRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$templateRoot = Join-Path $kitRoot "assets\project-template"
 if (-not (Test-Path -LiteralPath $templateRoot -PathType Container)) {
     throw "Project template not found: $templateRoot"
 }
@@ -123,20 +138,7 @@ if ([string]::IsNullOrWhiteSpace($CodexHome)) {
     $CodexHome = if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { $env:CODEX_HOME } else { Join-Path ([Environment]::GetFolderPath("UserProfile")) ".codex" }
 }
 $codexHomePath = [System.IO.Path]::GetFullPath($CodexHome)
-$hookRuntimeRoot = $pluginRoot
 $installedRuntimeRoot = Join-Path $codexHomePath "codex-dev-kit"
-$installedSourceMetadata = Join-Path $installedRuntimeRoot "source.json"
-if (Test-Path -LiteralPath $installedSourceMetadata -PathType Leaf) {
-    try {
-        $installedSource = Get-Content -Raw $installedSourceMetadata | ConvertFrom-Json
-        $requiredRuntimeFiles = @("scripts\feature_guard.py", "scripts\pre_tool_guard.py")
-        $runtimeComplete = $installedSource.mode -eq "standalone" -and -not ($requiredRuntimeFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $installedRuntimeRoot $_) -PathType Leaf) })
-        if ($runtimeComplete) {
-            $hookRuntimeRoot = $installedRuntimeRoot
-        }
-    }
-    catch { }
-}
 
 $projectName = Split-Path -Leaf $projectPath
 if ([string]::IsNullOrWhiteSpace($projectName)) {
@@ -149,7 +151,7 @@ if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) {
         $WorkspaceRoot = Split-Path -Parent $projectParent
     }
     else {
-        $sourceMetadataPath = Join-Path $pluginRoot "source.json"
+        $sourceMetadataPath = Join-Path $installedRuntimeRoot "source.json"
         if (Test-Path -LiteralPath $sourceMetadataPath -PathType Leaf) {
             try { $WorkspaceRoot = [string]((Get-Content -Raw $sourceMetadataPath | ConvertFrom-Json).workspaceRoot) } catch { }
         }
@@ -195,8 +197,6 @@ foreach ($action in $actions) {
     $content = [System.IO.File]::ReadAllText($action.Source)
     $content = $content.Replace("{{PROJECT_NAME}}", $projectName)
     $content = $content.Replace("{{WORKSPACE_AGENTS_PATH}}", $workspaceAgentsPath)
-    $content = $content.Replace("{{CODEX_DEV_KIT_ROOT_JSON}}", $hookRuntimeRoot.Replace('\', '\\'))
-    $content = $content.Replace("{{CODEX_DEV_KIT_ROOT_POSIX}}", $hookRuntimeRoot.Replace('\', '/'))
     [System.IO.File]::WriteAllText($action.Path, $content, $utf8NoBom)
 }
 

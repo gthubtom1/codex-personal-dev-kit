@@ -46,14 +46,14 @@ else {
     throw "Standalone installation requires a local Git checkout. Clone or check out a fixed tag/commit first: $Source"
 }
 $repoLayoutKitRoot = Join-Path $resolvedSource "plugins\codex-personal-dev-kit"
-if (Test-Path -LiteralPath (Join-Path $repoLayoutKitRoot "INDEX.md") -PathType Leaf) {
+if (Test-Path -LiteralPath (Join-Path $repoLayoutKitRoot "assets\standalone\AGENTS.md") -PathType Leaf) {
     $kitSourceRoot = $repoLayoutKitRoot
 }
-elseif ((Test-Path -LiteralPath (Join-Path $resolvedSource "INDEX.md") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $resolvedSource ".codex-plugin\plugin.json") -PathType Leaf)) {
+elseif (Test-Path -LiteralPath (Join-Path $resolvedSource "assets\standalone\AGENTS.md") -PathType Leaf) {
     $kitSourceRoot = $resolvedSource
 }
 else {
-    throw "Local Dev Kit checkout is missing plugins\codex-personal-dev-kit\INDEX.md: $resolvedSource"
+    throw "Local standalone Dev Kit checkout is missing the standalone AGENTS template: $resolvedSource"
 }
 
 $git = Get-Command git -ErrorAction SilentlyContinue
@@ -82,8 +82,18 @@ if (-not [string]::IsNullOrWhiteSpace($Ref)) {
 }
 $sourceType = "local"
 $resolvedRef = $head
-$manifest = Get-Content -Raw (Join-Path $kitSourceRoot ".codex-plugin\plugin.json") | ConvertFrom-Json
-$version = [string]$manifest.version
+$versionCandidates = @(
+    (Join-Path $resolvedSource "VERSION"),
+    (Join-Path $kitSourceRoot "VERSION")
+)
+$versionPath = $versionCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if (-not $versionPath) {
+    throw "Local standalone Dev Kit checkout is missing VERSION: $resolvedSource"
+}
+$version = (Get-Content -Raw -LiteralPath $versionPath).Trim()
+if ([string]::IsNullOrWhiteSpace($version)) {
+    throw "Local standalone Dev Kit VERSION is empty: $versionPath"
+}
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
@@ -301,7 +311,6 @@ else {
 Set-ManagedTextFile -Target $agentsTarget -Content $mergedAgents
 
 $kitTargetRoot = Join-Path $codexHomePath "codex-dev-kit"
-Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "INDEX.md") -Content ([System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "INDEX.md")))
 Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "VERSION") -Content ($version + [Environment]::NewLine)
 Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "config.fragment.toml") -Content ([System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "assets\global-profile\config.fragment.toml")))
 
@@ -320,24 +329,21 @@ Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "scripts") -TargetRoot (J
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\project-template") -TargetRoot (Join-Path $kitTargetRoot "assets\project-template")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\workspace-template") -TargetRoot (Join-Path $kitTargetRoot "assets\workspace-template")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "skills") -TargetRoot (Join-Path $codexHomePath "skills")
-Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\global-profile\rules") -TargetRoot (Join-Path $codexHomePath "rules")
 
 $planned | Format-Table -AutoSize
 if (-not $Apply) {
-    Write-Host "Preview only. Re-run with -Apply to install the short global AGENTS block, standalone Skills, central runtime, templates, and Rules."
+    Write-Host "Preview only. Re-run with -Apply to install the short global AGENTS block, standalone Skills, central runtime, and templates."
     exit 0
 }
 
 $requiredInstalledPaths = @(
     $agentsTarget,
-    (Join-Path $kitTargetRoot "INDEX.md"),
     (Join-Path $kitTargetRoot "VERSION"),
     (Join-Path $kitTargetRoot "source.json"),
     (Join-Path $kitTargetRoot "scripts\feature_guard.py"),
     (Join-Path $kitTargetRoot "scripts\pre_tool_guard.py"),
     (Join-Path $codexHomePath "skills\codex-development-assistant\SKILL.md"),
-    (Join-Path $codexHomePath "skills\orchestrate-codex-team\SKILL.md"),
-    (Join-Path $codexHomePath "rules\codex-dev-kit.rules")
+    (Join-Path $codexHomePath "skills\orchestrate-codex-team\SKILL.md")
 )
 $missingInstalledPaths = @($requiredInstalledPaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingInstalledPaths.Count -gt 0) {

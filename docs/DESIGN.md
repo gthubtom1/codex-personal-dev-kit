@@ -24,7 +24,7 @@ Mother Folder
 - 用户继续或修改已有项目时，先在 Codex 中打开该项目文件夹；母文件夹不替用户选择或进入项目。
 - 新项目创建完成后在该项目文件夹开启新任务，使项目 `AGENTS.md` 和 `.codex/config.toml` 在新运行中正确加载。
 - 不使用容易漂移的 `projects.json`；项目列表由 `projects/` 目录实时发现。
-- Dev Kit 以 standalone Skills 和中央运行时安装一次并全局复用；Plugin 仅为可选的 Skills 分发包装。
+- Dev Kit 以 standalone Skills 和中央运行时安装一次并全局复用；源码目录只是分发源码，不是运行时 Plugin。
 
 ## 3. Codex-Native Layers
 
@@ -34,22 +34,20 @@ Mother Folder
 | Mother-folder `AGENTS.md` | 完整工作流、目录、Skills、Git、文档、任务和原生 subagent 规则 |
 | Standalone Skills | 一个普通语言入口和六个按需加载的专业能力 |
 | Central runtime | `~/.codex/codex-dev-kit/` 下的脚本、模板、索引、版本和来源信息 |
-| Global rules | 仅限制危险 Shell 命令，不定义或替代智能体 |
+| Explicit safety scripts | 通过当前任务显式运行功能保全、危险命令和 Git 检查，不定义或替代智能体 |
 | Mother-folder files | 新建项目、项目隔离、归档和原生 subagent 默认配置 |
 | Project `AGENTS.md` | 当前项目命令、验证、边界和文档路由 |
-| Project `.codex/config.toml` | workspace-write、Goal、Hooks 和 `gpt-5.6-luna/max` 子代理默认设置 |
-| Project `.codex/hooks.json` | 仅针对 Shell/文件编辑的功能与命令门禁 |
-| Optional Plugin | 只打包七个 Skills；不包含 Hook、自定义 Agent、MCP 或 App |
+| Project `.codex/config.toml` | workspace-write、Goal 和 `gpt-5.6-luna/max` 子代理默认设置 |
 | Code/tests/Git/docs | 长期项目事实和恢复来源 |
 | Current Codex task | 一个连贯成果的临时上下文和持久 Goal |
 
-`AGENTS.md` 是软指令；Hooks、Rules、sandbox 和 approvals 提供独立防护。全局规则、Skills 或配置变化在新任务开始时加载。
+`AGENTS.md` 是软指令；sandbox、approvals、显式安全脚本和 Git 检查点提供可审计的恢复边界。全局 AGENTS、Skills 或配置变化在新任务开始时加载。
 
 ### Verified Codex Runtime Facts
 
 - Codex automatically loads one global instruction file from `~/.codex`, then discovers project instructions from the selected project root down to the working directory. When an individual project under `D:\开发\projects\` is the Git/project root, the parent `D:\开发\AGENTS.md` is not automatically discovered; the short global file must explicitly require reading it.
 - Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. Mother-folder and project templates set them to `gpt-5.6-luna` and `max`, while explicit spawn calls are forbidden from silently overriding that policy.
-- Codex loads Hooks from every active layer, and a local function-tool matcher for `spawn_agent` also matches `Agent`. Therefore Dev Kit Hooks use an allowlist matcher for Shell and file-edit tools only, and the optional Plugin contains no default `hooks/hooks.json`.
+- 本 Dev Kit 不安装生命周期 Hook，避免任何工具匹配器改变 Codex 原生 subagent、任务、浏览器或文件编辑语义；需要保护时由 Skill 调用显式脚本。
 - `AGENTS.md` should stay small and route to focused Skills or references. Project state is split across concise current documents instead of expanding one permanent transcript.
 
 ## 4. Assistant Architecture
@@ -79,7 +77,7 @@ Mother Folder
 
 ### Native Capability Non-Interference
 
-The Dev Kit orchestrates Codex capabilities; it does not replace them. It does not intercept `Agent` or `spawn_agent`; it does not create a replacement agent protocol through MCP or Apps; and it does not disable native multi-agent configuration or reinterpret user-visible tasks as subagents. The same boundary applies to the optional Plugin. Worktrees remain isolated Git checkouts, the review pane remains Codex's native staged/unstaged/commit UI, and Appshots remain visual app-state inputs rather than source-control snapshots.
+The Dev Kit orchestrates Codex capabilities; it does not replace them. It does not intercept `Agent` or `spawn_agent`; it does not create a replacement agent protocol through MCP or Apps; and it does not disable native multi-agent configuration or reinterpret user-visible tasks as subagents. Worktrees remain isolated Git checkouts, the review pane remains Codex's native staged/unstaged/commit UI, and Appshots remain visual app-state inputs rather than source-control snapshots.
 
 ## 5. End-To-End Behavior
 
@@ -118,15 +116,15 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 
 ### Central Runtime Pinning
 
-项目模板可以从源码 checkout 生成，但项目 Hook 在检测到有效 standalone 安装时必须指向 `~/.codex/codex-dev-kit/` 的中央运行时。这样源码目录移动、继续开发或出现未提交修改时，不会悄悄改变既有项目的安全门禁；只有尚未安装中央运行时的源码开发/测试场景才回退到当前脚本根目录。
+项目模板可以从源码 checkout 生成；项目不安装生命周期 Hook。需要安全检查时，Skill 显式调用 `~/.codex/codex-dev-kit/` 的中央脚本，这样源码目录移动、继续开发或出现未提交修改时，不会悄悄改变既有项目的检查脚本。
 
 ### Git Integration Errors
 
-正常顺序开发沿当前本地开发线创建小型检查点，不让零基础用户管理大量分支。验证完成后 Stop Hook 要求 guard-managed `checkpoint` 真正形成 Git 提交，不能只留下“允许提交”的状态。原生子代理默认只读，同一 checkout 一个写入者。Worktree 只用于真实隔离；Handoff 仅用于用户明确授权的 Worktree 交接，绝不用于模拟子代理。
+正常顺序开发沿当前本地开发线创建小型检查点，不让零基础用户管理大量分支。验证完成后，安全开发 Skill 必须调用 guard-managed `checkpoint` 形成 Git 提交；没有检查点就不能声明完成。原生子代理默认只读，同一 checkout 一个写入者。Worktree 只用于真实隔离；Handoff 仅用于用户明确授权的 Worktree 交接，绝不用于模拟子代理。
 
 ### Context Loss
 
-一个任务只负责一个连贯成果。SessionStart Hook 在启动、恢复、压缩和 clear 后注入有上限的当前事实包：当前变更契约、精简 STATUS、分支/脏状态和最近检查点；`Next Action` 有独立预算，不会被前面的大段验证记录截断。随后始终读取 AGENTS、PROJECT、FEATURES 主索引、相关领域表和 STATUS，只按任务读取相关 ARCHITECTURE/ADR 和必要测试。
+一个任务只负责一个连贯成果。启动、恢复、压缩或开启新任务时，Skill 读取有上限的当前事实包：当前变更契约、精简 STATUS、分支/脏状态和最近检查点；`Next Action` 有独立预算，不会被前面的大段验证记录截断。随后始终读取 AGENTS、PROJECT、FEATURES 主索引、相关领域表和 STATUS，只按任务读取相关 ARCHITECTURE/ADR 和必要测试。
 
 ### Document Bloat
 
@@ -155,7 +153,7 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 
 - 新项目自动初始化独立 Git，并创建本地基线检查点。
 - 旧项目缺少 Git 或首个提交时，经生成物、密钥和本地数据检查后自动建立基线。
-- 每个通过验证的纵向切片必须在任务结束前创建本地检查点；Stop Hook 会阻止遗漏。
+- 每个通过验证的纵向切片必须在任务结束前创建本地检查点；安全开发 Skill 会把缺少检查点报告为未完成。
 - 默认不创建需要用户整合的额外分支。
 - 用户只需说“回到上一个版本”；助手在确认没有未保存工作后创建一个恢复到上一版本的新提交，原版本和当前版本都保留。
 - 不混入任务外的用户修改，不修改全局 Git 身份。
@@ -184,8 +182,8 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 
 - 用户只用普通语言即可创建项目，并在打开对应项目文件夹后继续和改进该项目。
 - 新项目位于母文件夹的 `projects/` 下，并成为独立 Codex 工作文件夹和 Git 仓库。
-- 修改已有功能前后都有稳定功能 ID、临时变更契约、测试证据和 Stop 门禁。
+- 修改已有功能前后都有稳定功能 ID、临时变更契约、测试证据和显式完成检查。
 - 文档保持可快速定位，没有无限追加历史。
-- Standalone Skills、安装/诊断脚本、项目 Hooks、Rules 和可选 Skills-only Plugin 验证通过。
+- Standalone Skills、安装/诊断脚本、显式安全脚本和原生 subagent 边界验证通过；仓库不安装 Plugin、项目生命周期 Hook 或自定义 Rules。
 - 新上下文的原生子代理能在不看到设计答案时正确执行典型场景，且不会被替换成用户可见任务。
 - 创建本地 Dev Kit Git 检查点，但不自动安装到全局、不 push、不发布。

@@ -24,7 +24,7 @@
 
 ## 恢复顺序
 
-1. SessionStart Hook 注入的小型恢复包、`AGENTS.md`、当前 Goal 和未完成的 `.codex/current-change.json`。
+1. 新任务或恢复时读取的小型事实包、`AGENTS.md`、当前 Goal 和未完成的 `.codex/current-change.json`。
 2. 始终读取 `PROJECT.md`、FEATURES 主索引和 `STATUS.md`；只读取相关 `docs/features/` 领域表、架构章节和 ADR。
 3. Git 状态、当前分支和最近少量提交。
 4. 必要代码、测试和运行结果。

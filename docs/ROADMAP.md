@@ -3,7 +3,7 @@
 ## Current Milestone
 
 - Use the installed local Dev Kit in real projects and change it only for observed workflow failures.
-- Confirm Hook trust and the beginner-facing entry flow in a new Codex task.
+- Confirm the standalone AGENTS-to-Skills entry flow in a new Codex task, including explicit safety checks and native subagent access.
 
 ## Next Milestone
 
