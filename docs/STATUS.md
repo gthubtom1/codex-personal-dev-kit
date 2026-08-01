@@ -7,7 +7,7 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 ## Working State
 
 - Source candidate: `codex-personal-dev-kit` version `0.1.0` on the current local branch.
-- Mother folder: `D:\开发\AGENTS.md` contains the detailed system; workspace and project templates keep native multi-agent enabled with `gpt-5.6-luna` and reasoning effort `max`.
+- Mother folder: `D:\开发\AGENTS.md` contains the detailed system; workspace and project templates keep native multi-agent enabled, default Luna/max subagents, six concurrent slots, and no main-model lock.
 - Standalone installation writes the short global `AGENTS.md`, seven Skills, central explicit safety scripts, and project/workspace templates. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
 - Legacy Plugin, custom-agent, and Dev Kit Hook detection remains only as an explicit migration/diagnostic path; it is not a runtime dependency.
 
@@ -16,7 +16,7 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 - Seven standalone Skills pass the official Skill validator.
 - Unit tests cover feature contracts, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, legacy-state detection, project creation, secret-aware first baselines, and native-subagent boundaries.
 - PowerShell parsing, Python/JSON/TOML structural checks, unresolved placeholder checks, and the no-obsolete-artifact check pass after the cleanup is completed.
-- Native subagent policy remains `gpt-5.6-luna` with reasoning effort `max`; no custom Agent or visible-task replacement is shipped.
+- Native subagent policy defaults to Luna/max, supports multiple parallel agents and explicit Sol/Luna rosters at max; no custom Agent or visible-task replacement is shipped.
 
 ## Current Limitations
 

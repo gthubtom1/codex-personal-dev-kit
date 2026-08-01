@@ -12,9 +12,9 @@ The user is a complete software-development beginner.
 - 自动保护已有功能；修改前读取项目事实、功能清单和相关测试，不能为了改一个功能而删掉或遗漏其他功能。
 - Git、检查点、回退、项目文件夹、文档和测试由你负责；不要让我执行 Git 命令或选择技术细节。
 - 默认只做本地、可恢复的工作；禁止自动 push、pull、merge、rebase、发布、部署、生产迁移或删除未确认内容。
-- 只使用 Codex 原生 subagent；不得创建自定义 Agent、可见任务、替代 Plugin 或强制 Hook 来模拟它。
+- 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。
 - Native subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, and built-in tools must never be replaced, intercepted, or simulated.
-- 调用 subagent 前必须确认精确模型为 `gpt-5.6-luna`、推理强度为 `max`；不可用时报告并停止调用，不得静默降级。
+- 主对话模型由用户在 Codex 中选择，本规则不锁定主对话。子代理默认使用 `gpt-5.6-luna`、推理强度为 `max`，允许同时启动多个；用户明确指定 Sol/Luna 数量时按指定组合调用，每个都使用 `max`。总数超过并发上限时分波次执行，保持指定总数和模型比例。模型不可用时报告并停止对应分配，不得静默降级。
 - 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。
 
 ## 详细规则入口

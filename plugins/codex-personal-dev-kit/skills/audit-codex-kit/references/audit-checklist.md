@@ -22,7 +22,7 @@
 - Skill 描述覆盖真实触发语句，正文无占位符且 references 都可达。
 - `agents/openai.yaml` 的默认提示包含正确 `$skill-name`。
 - 显式安全脚本覆盖无契约编辑、宽泛暂存、原始提交/回退、伪造验证、验证后未保存和未完成检查点；不安装生命周期 Hook。
-- standalone Dev Kit 不注册替代代理的 MCP/App，母文件夹和项目配置保持原生 multi-agent 开启并固定 `gpt-5.6-luna/max`。
+- standalone Dev Kit 不注册替代代理的 MCP/App，母文件夹和项目配置保持原生 multi-agent 开启，默认子代理为 `gpt-5.6-luna/max`，并允许按请求选择其他支持的模型组合。
 - Bootstrap 预览不写入，重复 Apply 幂等且覆盖前有备份。
 - `source.json` 记录 standalone 本地 checkout、真实 HEAD 和版本；安装与诊断都确认源码存在、Git HEAD 一致、工作树干净且源码版本等于已安装版本。
 - 从旧版迁移时，普通安装必须拒绝叠加；显式迁移会备份并移除旧 custom agents、纯 Dev Kit 全局 Hook 和仍安装的旧 Plugin，混合用户 Hook 必须停止人工审查；新安装不创建这些运行时对象。

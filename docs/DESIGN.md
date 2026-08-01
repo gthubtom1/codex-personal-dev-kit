@@ -37,7 +37,7 @@ Mother Folder
 | Explicit safety scripts | 通过当前任务显式运行功能保全、危险命令和 Git 检查，不定义或替代智能体 |
 | Mother-folder files | 新建项目、项目隔离、归档和原生 subagent 默认配置 |
 | Project `AGENTS.md` | 当前项目命令、验证、边界和文档路由 |
-| Project `.codex/config.toml` | workspace-write、Goal 和 `gpt-5.6-luna/max` 子代理默认设置 |
+| Project `.codex/config.toml` | workspace-write、Goal、多代理并发上限和 Luna/max 子代理默认设置 |
 | Code/tests/Git/docs | 长期项目事实和恢复来源 |
 | Current Codex task | 一个连贯成果的临时上下文和持久 Goal |
 
@@ -46,7 +46,7 @@ Mother Folder
 ### Verified Codex Runtime Facts
 
 - Codex automatically loads one global instruction file from `~/.codex`, then discovers project instructions from the selected project root down to the working directory. When an individual project under `D:\开发\projects\` is the Git/project root, the parent `D:\开发\AGENTS.md` is not automatically discovered; the short global file must explicitly require reading it.
-- Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. Mother-folder and project templates set them to `gpt-5.6-luna` and `max`, while explicit spawn calls are forbidden from silently overriding that policy.
+- Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. Templates default to Luna/max and allow six concurrent subagent threads; the main model is independent and explicit per-call Sol/Luna selections are allowed, but every subagent must use `max`.
 - 本 Dev Kit 不安装生命周期 Hook，避免任何工具匹配器改变 Codex 原生 subagent、任务、浏览器或文件编辑语义；需要保护时由 Skill 调用显式脚本。
 - `AGENTS.md` should stay small and route to focused Skills or references. Project state is split across concise current documents instead of expanding one permanent transcript.
 

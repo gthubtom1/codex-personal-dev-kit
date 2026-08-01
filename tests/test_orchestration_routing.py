@@ -76,7 +76,7 @@ class OrchestrationRoutingTests(unittest.TestCase):
         self.assertIn("does not intercept `Agent`", design)
         self.assertIn("does not create a replacement agent protocol", design)
 
-    def test_required_subagent_model_is_declared_without_custom_agent_dependency(self):
+    def test_selectable_max_effort_subagent_policy_is_declared_without_custom_agent_dependency(self):
         orchestration_skill = (PLUGIN / "skills/orchestrate-codex-team/SKILL.md").read_text(encoding="utf-8")
         routing = (PLUGIN / "skills/orchestrate-codex-team/references/agent-routing.md").read_text(encoding="utf-8")
         workspace_agents = (PLUGIN / "assets/workspace-template/AGENTS.md").read_text(encoding="utf-8")
@@ -96,8 +96,20 @@ class OrchestrationRoutingTests(unittest.TestCase):
             self.assertIn("max", text)
         self.assertIn("default_subagent_reasoning_effort = \"max\"", workspace_config)
         self.assertIn("default_subagent_reasoning_effort = \"max\"", project_config)
-        self.assertIn("If unavailable", workspace_agents)
-        self.assertIn("不得选择会把模型或推理强度固定成其他值的自定义角色", orchestration_skill)
+        self.assertIn("The main conversation model is user-selected", workspace_agents)
+        self.assertIn("Default subagent model: `gpt-5.6-luna`", workspace_agents)
+        self.assertIn("Every subagent reasoning effort: `max`", workspace_agents)
+        self.assertIn("默认子代理使用 `gpt-5.6-luna`", orchestration_skill)
+        self.assertIn("每个子代理的推理强度必须为 `max`", orchestration_skill)
+        self.assertIn("2 个 Sol、3 个 Luna", orchestration_skill)
+        self.assertIn("gpt-5.6-sol", orchestration_skill)
+        self.assertIn("用户明确指定 Sol/Luna 数量", routing)
+        self.assertIn("2 Sol and 3 Luna", workspace_agents)
+        self.assertIn("run it in waves", workspace_agents)
+        self.assertIn("分波次执行", (PLUGIN / "assets/standalone/AGENTS.md").read_text(encoding="utf-8"))
+        for config in (workspace_config, project_config):
+            self.assertNotRegex(config, r"(?m)^model\s*=")
+            self.assertRegex(config, r"(?m)^max_concurrent_threads_per_session\s*=\s*[2-9]\d*\s*$")
         self.assertNotIn("`codex_kit_reviewer`", orchestration_skill)
 
 

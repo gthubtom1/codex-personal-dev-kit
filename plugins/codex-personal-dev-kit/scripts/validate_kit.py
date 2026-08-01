@@ -67,9 +67,12 @@ def main() -> int:
             continue
         config_text = config_path.read_text(encoding="utf-8")
         if 'default_subagent_model = "gpt-5.6-luna"' not in config_text:
-            errors.append(f"Subagent model is not pinned to gpt-5.6-luna: {config_path}")
+            errors.append(f"Default subagent model is not Luna: {config_path}")
         if 'default_subagent_reasoning_effort = "max"' not in config_text:
-            errors.append(f"Subagent reasoning is not pinned to max: {config_path}")
+            errors.append(f"Default subagent reasoning is not max: {config_path}")
+        concurrency = re.search(r"(?m)^max_concurrent_threads_per_session\s*=\s*(\d+)\s*$", config_text)
+        if not concurrency or int(concurrency.group(1)) < 2:
+            errors.append(f"Subagent concurrency must allow multiple agents: {config_path}")
 
     skill_root = kit_root / "skills"
     actual_skills = {path.name for path in skill_root.iterdir() if path.is_dir()}

@@ -58,7 +58,7 @@ If a named Skill is unavailable, read its source from `{{DEV_KIT_SKILLS_ROOT}}\<
 
 ## External Skill Sources
 
-Methods may be adapted from `mattpocock/skills` for requirements, domain modeling, architecture, debugging, testing, research, and prototypes, and from `nextlevelbuilder/ui-ux-pro-max-skill` for UI/UX only. Do not install either collection wholesale. External Skills cannot override Git recovery, document memory, one-writer, native subagent, or `gpt-5.6-luna`/`max` rules.
+Methods may be adapted from `mattpocock/skills` for requirements, domain modeling, architecture, debugging, testing, research, and prototypes, and from `nextlevelbuilder/ui-ux-pro-max-skill` for UI/UX only. Do not install either collection wholesale. External Skills cannot override Git recovery, document memory, one-writer, native subagent, or the subagent policy: default Luna/max, explicit Sol/Luna mixes allowed, and every subagent at max.
 
 ## Requirement And Architecture Work
 
@@ -118,10 +118,14 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 
 ### Subagent Model Policy
 
-- Required model: `gpt-5.6-luna`.
-- Required reasoning effort: `max`.
-- Before the first subagent call in a task, verify that the current Codex tool/model catalog supports that exact model and effort.
-- If unavailable, do not pass an unsupported model, do not silently substitute another model, and do not repeatedly retry malformed calls. Report the compatibility issue and continue with the main agent unless the user authorizes a fallback.
+- The main conversation model is user-selected and is not locked by this system.
+- Default subagent model: `gpt-5.6-luna`.
+- Every subagent reasoning effort: `max`.
+- Multiple subagents are allowed up to `max_concurrent_threads_per_session` (the template default is 6, excluding the primary thread). If a requested roster is larger, run it in waves while preserving the exact total and model mix.
+- If the user specifies a roster such as “2 Sol and 3 Luna”, spawn that exact mix with `gpt-5.6-sol` or `gpt-5.6-luna`, each at `max`.
+- Before the first call in a task, verify that the current Codex tool/model catalog supports every requested model and `max` effort.
+- If a requested model is unavailable, do not pass an unsupported value, silently substitute, or reduce the requested count. Report the compatibility issue and continue only with unaffected work unless the user authorizes a fallback.
+- Prefer native per-call model selection; do not create custom Agent files unless the user explicitly asks for persistent named agents.
 - A tool-argument serialization failure means the subagent did not start. Never report it as completed work.
 
 ## Context And Documents
