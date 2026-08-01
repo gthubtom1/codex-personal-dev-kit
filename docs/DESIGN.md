@@ -32,7 +32,7 @@ Mother Folder
 | --- | --- |
 | Global `AGENTS.md` | 简短的零基础交互、权限和 Plugin Bootstrap 约定 |
 | Plugin | 单入口助手、六个内部 Skills、Hooks、模板和脚本 |
-| Global agents/rules | 专业只读角色和命令政策 |
+| Global agents/rules | Codex 原生 subagent 的专业只读角色提示和命令政策 |
 | Mother-folder files | 新建项目、项目隔离和归档约定 |
 | Project `AGENTS.md` | 当前项目命令、验证、边界和文档路由 |
 | Project `.codex/config.toml` | workspace-write、Goal、Hooks 和子代理默认设置 |
@@ -51,7 +51,7 @@ Mother Folder
 
 1. `onboard-codex-project`: 建立项目事实、模板和 Git 基线。
 2. `prepare-codex-goal`: 从一句话拓展需求并形成可验证 Goal。
-3. `orchestrate-codex-team`: 自适应选择主代理、子代理、多任务和 Worktree。
+3. `orchestrate-codex-team`: 自适应选择主代理、Codex 原生 collaboration subagent 和必要 Worktree；不使用可见任务模拟子代理。
 4. `codex-safe-development`: 实现、测试、审查和本地检查点。
 5. `manage-project-continuity`: 新任务恢复、短状态和交接。
 6. `audit-codex-kit`: 只读巡检项目和助手本身。
@@ -61,10 +61,10 @@ Mother Folder
 - 小任务：主代理直接完成。
 - 中任务：主代理写入，1 个只读探索者或验证者辅助。
 - 大任务：产品/架构/探索/审查可并行只读，主代理保持单一写入。
-- 独立长期成果：多个 Codex 任务。
+- 独立长期成果：完成当前检查点后，建议用户开启新的 Codex 任务并使用精炼交接；只有用户明确要求时才创建或操作可见任务。
 - 真正需要并行写入或后台计划任务：独立 Worktree；普通开发不为了流程创建额外分支。
 
-子代理返回精炼证据，不通过永久报告文件交流，也不得把原始日志倾倒到主任务。
+子代理只通过 Codex 原生 collaboration 接口在当前任务内运行并返回精炼证据，不通过可见任务、聊天、跨任务消息、Handoff 或永久报告文件模拟，也不得把原始日志倾倒到主任务。
 
 ## 5. End-To-End Behavior
 
@@ -91,19 +91,19 @@ Mother Folder
 
 ### Missing Existing Features
 
-`docs/FEATURES.md` 用稳定 ID 保存当前用户能力、完整接线链路和验证入口；测试是可执行行为记忆；Git 保存恢复历史。修改前创建一个 Git 忽略的 `.codex/current-change.json`，声明允许改变、必须保护、邻接验证和有意删除。PreToolUse Hook 阻止无契约编辑或未验证提交，SessionStart 在新任务和压缩后恢复契约，Stop Hook 在验证缺失或验证后再次改动时要求 Codex 继续。契约只保留当前任务，不进入长期文档。
+`docs/FEATURES.md` 与 `docs/features/**/*.md` 聚合后用全局唯一稳定 ID 保存当前用户能力、完整接线链路和验证入口；测试是可执行行为记忆；Git 保存恢复历史。修改前创建一个 Git 忽略的 `.codex/current-change.json`，声明允许改变、必须保护、邻接验证、有意删除和需要接管的已有脏文件。门禁只按明确文件路径暂存，亲自执行验证命令并绑定退出码、Git tree 和内容指纹；验证后只允许单独 commit，且提交 tree 与父提交必须匹配验证快照。SessionEnd 不清理尚未形成检查点的契约。
 
 ### Git Integration Errors
 
-正常顺序开发沿当前本地开发线创建小型检查点，不让零基础用户管理大量分支。子代理默认只读，同一 checkout 一个写入者。Worktree 只用于真实隔离，优先由 Codex Handoff 处理，不依赖用户手工合并。
+正常顺序开发沿当前本地开发线创建小型检查点，不让零基础用户管理大量分支。原生子代理默认只读，同一 checkout 一个写入者。Worktree 只用于真实隔离；Handoff 仅用于用户明确授权的 Worktree 交接，绝不用于模拟子代理。
 
 ### Context Loss
 
-一个任务只负责一个连贯成果。SessionStart Hook 在启动、恢复和压缩后注入有上限的当前事实包：当前变更契约、精简 STATUS、分支/脏状态和最近检查点。随后始终读取 AGENTS、PROJECT、FEATURES、STATUS，只按任务读取相关 ARCHITECTURE/ADR 和必要测试。旧聊天和 Memories 是辅助召回，不是事实来源。
+一个任务只负责一个连贯成果。SessionStart Hook 在启动、恢复、压缩和 clear 后注入有上限的当前事实包：当前变更契约、精简 STATUS、分支/脏状态和最近检查点；`Next Action` 有独立预算，不会被前面的大段验证记录截断。随后始终读取 AGENTS、PROJECT、FEATURES 主索引、相关领域表和 STATUS，只按任务读取相关 ARCHITECTURE/ADR 和必要测试。
 
 ### Document Bloat
 
-不创建 `.ai/history/`、每日会话日志、永久 checkpoint 报告或每个小功能一份规格。复杂任务最多使用一个 Git 忽略的 `.codex/active-plan.md`，完成即删除。审计会提示超大开发/聊天日志、过期计划、缺少下一步的 STATUS 和失去索引的 ADR。当前文档覆盖更新，历史交给 Git。
+不创建 `.ai/history/`、每日会话日志、永久 checkpoint 报告或每个小功能一份规格。复杂任务最多使用一个 Git 忽略的 `.codex/active-plan.md`，完成即删除。审计不仅识别命名明显的开发/聊天日志，也对 `docs/` 下所有超大文本文件执行通用字节检查。当前文档覆盖更新，历史交给 Git。
 
 ## 7. Durable Project Documents
 
@@ -135,13 +135,13 @@ Mother Folder
 
 ## 9. Permissions And Unattended Work
 
-自动：项目内读写、已有测试和构建、只读子代理、本地 Git 初始化和检查点、精炼文档更新。
+自动：项目内读写、已有测试和构建、当前任务内的原生只读子代理、本地 Git 初始化和检查点、精炼文档更新。
 
 询问：生产依赖、付费服务、外部或隐私数据、重大架构替换、数据库结构迁移、全局 Codex 或系统工具变化。
 
 禁止自动：发布、部署、生产迁移、包发布、基础设施变更、远程 Git 集成和不可恢复数据操作。
 
-Goal 和计划任务不扩大权限。稳定的 Skill 定义方法，计划任务只定义时间；无人值守任务优先做只读审计、摘要和补丁准备，并使用 workspace-write 与隔离 Worktree。
+普通软件请求由全局 AGENTS 自动路由到入口 Skill。用户明确要求完成多步骤结果、做到可用、继续直到完成或无人值守时，入口 Skill 在范围明确后建立持久 Goal；用户不需要知道 Goal 这个词。Goal 和计划任务不扩大权限。
 
 ## 10. What The Drafts Contributed
 
@@ -158,5 +158,5 @@ Goal 和计划任务不扩大权限。稳定的 Skill 定义方法，计划任�
 - 修改已有功能前后都有稳定功能 ID、临时变更契约、测试证据和 Stop 门禁。
 - 文档保持可快速定位，没有无限追加历史。
 - Plugin、Skills、Hooks、Rules 和脚本验证通过。
-- 新上下文子代理能在不看到设计答案时正确执行典型场景。
+- 新上下文的原生子代理能在不看到设计答案时正确执行典型场景，且不会被替换成用户可见任务。
 - 创建本地 Dev Kit Git 检查点，但不自动安装到全局、不 push、不发布。

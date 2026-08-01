@@ -33,6 +33,21 @@ if ($LASTEXITCODE -ne 0) { throw "Plugin validation failed." }
 & $python.Source (Join-Path $pluginRoot "scripts\validate_kit.py")
 if ($LASTEXITCODE -ne 0) { throw "Dev Kit structural validation failed." }
 
+$powerShellParseErrors = New-Object System.Collections.Generic.List[object]
+Get-ChildItem -LiteralPath $repoRoot -Recurse -Filter *.ps1 -File | ForEach-Object {
+    $tokens = $null
+    $parseErrors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+    foreach ($parseError in $parseErrors) {
+        $powerShellParseErrors.Add($parseError)
+    }
+}
+if ($powerShellParseErrors.Count -gt 0) {
+    $powerShellParseErrors | Format-List
+    throw "PowerShell parsing failed."
+}
+Write-Host "PowerShell parse checks passed."
+
 $codex = Resolve-CodexCli
 if ($codex) {
     $rulesPath = Join-Path $pluginRoot "assets\global-profile\rules\codex-dev-kit.rules"
@@ -54,8 +69,13 @@ if ($codex) {
     Assert-ExecPolicyDecision -CommandTokens @("git", "push") -Expected "forbidden"
     Assert-ExecPolicyDecision -CommandTokens @("git", "status") -Expected "allow"
     Assert-ExecPolicyDecision -CommandTokens @("winget", "install", "Git.Git") -Expected "prompt"
+    Assert-ExecPolicyDecision -CommandTokens @("winget", "upgrade", "Git.Git") -Expected "prompt"
+    Assert-ExecPolicyDecision -CommandTokens @("npm", "install", "typescript", "-g") -Expected "prompt"
+    Assert-ExecPolicyDecision -CommandTokens @("pip", "install", "ruff") -Expected "prompt"
+    Assert-ExecPolicyDecision -CommandTokens @("python", "-m", "pip", "install", "ruff") -Expected "prompt"
     Assert-ExecPolicyDecision -CommandTokens @("npm", "publish") -Expected "forbidden"
     Assert-ExecPolicyDecision -CommandTokens @("npm", "test") -Expected "allow"
+    Assert-ExecPolicyDecision -CommandTokens @("python", "-m", "unittest") -Expected "allow"
     Write-Host "Rules parser checks passed with $($codex.Version) at $($codex.Path)"
 }
 else {

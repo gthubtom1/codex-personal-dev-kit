@@ -1,6 +1,6 @@
 {
   "name": "codex-personal-dev-kit",
-  "version": "0.1.0+codex.20260801151424",
+  "version": "0.1.0+codex.20260801171741",
   "description": "A beginner-friendly Codex development assistant that turns plain-language ideas into reliable long-term software.",
   "author": {
     "name": "Codex Personal Dev Kit"
@@ -12,11 +12,19 @@
     "longDescription": "A single beginner-friendly entry point backed by project onboarding, requirement expansion, adaptive subagents, safe implementation, regression protection, concise continuity, and workflow audits.",
     "developerName": "Codex Personal Dev Kit",
     "category": "Productivity",
-    "capabilities": ["Beginner development assistant", "Requirement expansion", "Project onboarding", "Adaptive subagents", "Safe development", "Regression protection", "Project continuity"],
+    "capabilities": [
+      "Beginner development assistant",
+      "Requirement expansion",
+      "Project onboarding",
+      "Adaptive subagents",
+      "Safe development",
+      "Regression protection",
+      "Project continuity"
+    ],
     "defaultPrompt": [
-      "我想做一个软件，请把我的想法整理清楚并负责做到可以试用。",
-      "继续开发这个项目，先恢复已有功能和当前进度，再完成下一步。",
-      "检查这个项目为什么越来越难维护，并在不丢功能的前提下改进。"
+      "\u6211\u60f3\u505a\u4e00\u4e2a\u8f6f\u4ef6\uff0c\u8bf7\u628a\u6211\u7684\u60f3\u6cd5\u6574\u7406\u6e05\u695a\u5e76\u8d1f\u8d23\u505a\u5230\u53ef\u4ee5\u8bd5\u7528\u3002",
+      "\u7ee7\u7eed\u5f00\u53d1\u8fd9\u4e2a\u9879\u76ee\uff0c\u5148\u6062\u590d\u5df2\u6709\u529f\u80fd\u548c\u5f53\u524d\u8fdb\u5ea6\uff0c\u518d\u5b8c\u6210\u4e0b\u4e00\u6b65\u3002",
+      "\u68c0\u67e5\u8fd9\u4e2a\u9879\u76ee\u4e3a\u4ec0\u4e48\u8d8a\u6765\u8d8a\u96be\u7ef4\u62a4\uff0c\u5e76\u5728\u4e0d\u4e22\u529f\u80fd\u7684\u524d\u63d0\u4e0b\u6539\u8fdb\u3002"
     ]
   }
 }

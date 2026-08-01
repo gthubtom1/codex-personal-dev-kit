@@ -47,6 +47,9 @@ def main() -> int:
     for event in ("SessionStart", "PreToolUse", "Stop", "SessionEnd"):
         if event not in hooks:
             errors.append(f"Missing required hook event: {event}")
+    session_matchers = [str(item.get("matcher", "")) for item in hooks.get("SessionStart", [])]
+    if not any("clear" in matcher for matcher in session_matchers):
+        errors.append("SessionStart Hook must restore context after clear as well as startup/resume/compact")
     for relative in (
         "scripts/feature_guard.py",
         "hooks/pre_tool_guard.py",

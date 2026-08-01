@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -18,10 +19,14 @@ from typing import Iterable, Sequence
 
 CONTRACT_RELATIVE = Path(".codex/current-change.json")
 FEATURE_MAP_RELATIVE = Path("docs/FEATURES.md")
+FEATURE_MAP_DIRECTORY_RELATIVE = Path("docs/features")
 STATUS_RELATIVE = Path("docs/STATUS.md")
 PROJECT_CONFIG_RELATIVE = Path(".codex/config.toml")
 RECOVERY_STATUS_MAX_CHARS = 1600
+RECOVERY_NEXT_ACTION_MAX_CHARS = 700
 RECOVERY_PACKET_MAX_CHARS = 3600
+MAX_VERIFICATION_RUNS = 20
+MAX_COMMAND_CHARS = 2000
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
     ".js", ".jsx", ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts",
@@ -66,6 +71,7 @@ class Feature:
     verification: str
     criticality: str
     status: str
+    source: str = "docs/FEATURES.md"
 
     def invariant(self) -> dict[str, str]:
         return {
@@ -141,7 +147,7 @@ def _split_markdown_row(line: str) -> list[str]:
     return [cell.replace("\\|", "|").strip() for cell in cells]
 
 
-def read_feature_map(path: Path) -> dict[str, Feature]:
+def _read_feature_map(path: Path, *, allow_index_only: bool = False, source: str | None = None) -> dict[str, Feature]:
     if not path.is_file():
         raise GuardError(f"Feature map not found: {path}")
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -156,7 +162,9 @@ def read_feature_map(path: Path) -> dict[str, Feature]:
             headers = [HEADER_ALIASES.get(item, item) for item in normalized]
             break
     if header_index < 0:
-        raise GuardError("docs/FEATURES.md needs a Markdown table with an ID column.")
+        if allow_index_only:
+            return {}
+        raise GuardError(f"{source or path.as_posix()} needs a Markdown table with an ID column.")
 
     features: dict[str, Feature] = {}
     for line in lines[header_index + 2 :]:
@@ -172,7 +180,7 @@ def read_feature_map(path: Path) -> dict[str, Feature]:
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*", feature_id):
             raise GuardError(f"Invalid feature ID '{feature_id}'. Use a stable value such as F-014.")
         if feature_id in features:
-            raise GuardError(f"Duplicate feature ID in docs/FEATURES.md: {feature_id}")
+            raise GuardError(f"Duplicate feature ID in {source or path.as_posix()}: {feature_id}")
         features[feature_id] = Feature(
             id=feature_id,
             capability=values.get("capability", ""),
@@ -181,7 +189,37 @@ def read_feature_map(path: Path) -> dict[str, Feature]:
             verification=values.get("verification", ""),
             criticality=values.get("criticality", ""),
             status=values.get("status", ""),
+            source=source or path.as_posix(),
         )
+    return features
+
+
+def read_feature_map(path: Path) -> dict[str, Feature]:
+    return _read_feature_map(path)
+
+
+def _feature_map_paths(root: Path) -> list[Path]:
+    paths = [root / FEATURE_MAP_RELATIVE]
+    split_root = root / FEATURE_MAP_DIRECTORY_RELATIVE
+    if split_root.is_dir():
+        paths.extend(sorted(path for path in split_root.rglob("*.md") if path.is_file()))
+    return paths
+
+
+def read_feature_catalog(root: Path) -> dict[str, Feature]:
+    features: dict[str, Feature] = {}
+    sources: dict[str, str] = {}
+    paths = _feature_map_paths(root)
+    for index, path in enumerate(paths):
+        source = path.relative_to(root).as_posix()
+        current = _read_feature_map(path, allow_index_only=index == 0 and len(paths) > 1, source=source)
+        for feature_id, feature in current.items():
+            if feature_id in features:
+                raise GuardError(f"Duplicate feature ID {feature_id} in {sources[feature_id]} and {source}.")
+            features[feature_id] = feature
+            sources[feature_id] = source
+    if not features:
+        raise GuardError("No feature records were found in docs/FEATURES.md or docs/features/**/*.md.")
     return features
 
 
@@ -231,6 +269,74 @@ def _deleted_files(root: Path, baseline_head: str | None) -> set[str]:
     if result.returncode != 0:
         return set()
     return {line[3:].strip().replace("\\", "/") for line in result.stdout.splitlines() if line[:2] in {" D", "D "}}
+
+
+def _staged_files(root: Path) -> set[str]:
+    result = _run_git(root, "diff", "--cached", "--name-only", "--diff-filter=ACDMRTUXB", "--")
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Unable to inspect the Git index.")
+    return {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
+
+
+def _index_tree(root: Path) -> str:
+    result = _run_git(root, "write-tree")
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Unable to create a Git tree from the staged snapshot.")
+    return result.stdout.strip()
+
+
+def _content_fingerprint(root: Path) -> str:
+    """Hash the index plus unstaged and untracked content; stays stable across a matching commit."""
+    digest = hashlib.sha256()
+    digest.update(_index_tree(root).encode("ascii"))
+    unstaged = _run_git(root, "diff", "--binary", "--no-ext-diff", "--", text=False)
+    if unstaged.returncode != 0:
+        raise GuardError("Unable to fingerprint unstaged project content.")
+    digest.update(unstaged.stdout)
+    untracked = _run_git(root, "ls-files", "--others", "--exclude-standard", "-z", text=False)
+    if untracked.returncode != 0:
+        raise GuardError("Unable to fingerprint untracked project content.")
+    for raw in sorted(item for item in untracked.stdout.split(b"\0") if item):
+        relative = raw.decode("utf-8", errors="surrogateescape")
+        path = root / relative
+        digest.update(raw)
+        try:
+            digest.update(path.read_bytes() if path.is_file() else b"not-a-file")
+        except OSError:
+            digest.update(b"missing")
+    return digest.hexdigest()
+
+
+def _path_state(root: Path, relative: str) -> str:
+    path = root / relative
+    try:
+        if path.is_symlink():
+            return "symlink:" + os.readlink(path)
+        if not path.exists():
+            return "missing"
+        if not path.is_file():
+            return "not-a-file"
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return f"file:{path.stat().st_size}:{digest}"
+    except OSError as exc:
+        return f"error:{exc.__class__.__name__}"
+
+
+def _normalize_contract_path(root: Path, value: str) -> str:
+    normalized = value.strip().replace("\\", "/")
+    if not normalized or normalized in {".", "./"}:
+        raise GuardError("Use explicit file paths; repository-wide pathspecs are not allowed.")
+    if any(character in normalized for character in "*?[]{}"):
+        raise GuardError(f"Wildcard pathspecs are not allowed in the change contract: {value}")
+    candidate = Path(normalized)
+    if candidate.is_absolute() or re.match(r"^[A-Za-z]:", normalized):
+        raise GuardError(f"Use a project-relative file path: {value}")
+    resolved = (root / candidate).resolve(strict=False)
+    try:
+        relative = resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise GuardError(f"Path escapes the selected project: {value}") from exc
+    return relative.as_posix()
 
 
 def _worktree_fingerprint(root: Path) -> str:
@@ -287,6 +393,57 @@ def _source_changed(root: Path, contract: dict) -> bool:
     return any(Path(name).suffix.lower() in SOURCE_EXTENSIONS for name in current_files)
 
 
+def _snapshot_errors(root: Path, contract: dict) -> list[str]:
+    errors: list[str] = []
+    baseline_head = contract.get("baselineHead")
+    if _git_head(root) != baseline_head:
+        errors.append("Git HEAD changed before the verified checkpoint was created.")
+
+    staged = _staged_files(root)
+    declared_staged = set(contract.get("stagedPaths", []))
+    unexpected_staged = staged - declared_staged
+    missing_staged = declared_staged - staged
+    if unexpected_staged:
+        errors.append("The Git index contains paths not staged by the change guard: " + ", ".join(sorted(unexpected_staged)))
+    if missing_staged:
+        errors.append("Previously declared staged paths no longer match the Git index: " + ", ".join(sorted(missing_staged)))
+
+    baseline_changed = set(contract.get("baselineChangedFiles", []))
+    owned = set(contract.get("taskOwnedPaths", []))
+    protected_staged = (set(contract.get("baselineStagedFiles", [])) & staged) - owned
+    if protected_staged:
+        errors.append("Pre-existing staged user work cannot enter this checkpoint: " + ", ".join(sorted(protected_staged)))
+    mixed_baseline = (staged & baseline_changed) - owned
+    if mixed_baseline:
+        errors.append("Pre-existing changed paths require explicit --own-path ownership before staging: " + ", ".join(sorted(mixed_baseline)))
+
+    current_changed = _changed_files(root, baseline_head)
+    baseline_states = contract.get("baselinePathStates", {})
+    task_delta: set[str] = set()
+    for relative in current_changed | baseline_changed:
+        if relative not in staged and relative in baseline_changed and _path_state(root, relative) == baseline_states.get(relative):
+            continue
+        if relative in staged:
+            unstaged = _run_git(root, "diff", "--name-only", "--", relative)
+            if unstaged.returncode != 0 or any(line.strip() for line in unstaged.stdout.splitlines()):
+                errors.append(f"Staged path has additional unverified working-tree edits: {relative}")
+            task_delta.add(relative)
+        elif relative in current_changed or _path_state(root, relative) != baseline_states.get(relative):
+            task_delta.add(relative)
+
+    unstaged_task_delta = task_delta - staged
+    if unstaged_task_delta:
+        errors.append("Task changes must be staged through feature_guard.py stage before verification: " + ", ".join(sorted(unstaged_task_delta)))
+    return errors
+
+
+def _require_staged_snapshot(root: Path, contract: dict) -> tuple[str, str]:
+    errors = _snapshot_errors(root, contract)
+    if errors:
+        raise GuardError("\n".join(errors))
+    return _index_tree(root), _content_fingerprint(root)
+
+
 def _required_verification_ids(root: Path, contract: dict, current: dict[str, Feature]) -> set[str]:
     required = set(contract.get("explicitVerificationIds", []))
     required.update(feature_id for feature_id in contract.get("changedFeatureIds", []) if feature_id in current and _is_active(current[feature_id]))
@@ -298,7 +455,7 @@ def _required_verification_ids(root: Path, contract: dict, current: dict[str, Fe
 def _evaluate(root: Path, contract: dict) -> tuple[list[str], list[str], set[str]]:
     errors: list[str] = []
     warnings: list[str] = []
-    current = read_feature_map(root / FEATURE_MAP_RELATIVE)
+    current = read_feature_catalog(root)
     changed_ids = set(contract.get("changedFeatureIds", []))
     protected = contract.get("protectedFeatures", {})
 
@@ -339,16 +496,42 @@ def _evaluate(root: Path, contract: dict) -> tuple[list[str], list[str], set[str
 def _verification_still_matches(root: Path, contract: dict) -> bool:
     if contract.get("state") != "verified":
         return False
-    current_fingerprint = _worktree_fingerprint(root)
-    if current_fingerprint == contract.get("verifiedWorktreeFingerprint"):
+    verified_tree = contract.get("verifiedIndexTree")
+    verified_fingerprint = contract.get("verifiedContentFingerprint")
+    if not verified_tree or not verified_fingerprint:
+        return False
+    try:
+        if _index_tree(root) != verified_tree or _content_fingerprint(root) != verified_fingerprint:
+            return False
+    except GuardError:
+        return False
+    if _git_head(root) == contract.get("verifiedHead"):
         return True
-    return (
-        current_fingerprint == contract.get("baselineWorktreeFingerprint")
-        and _git_head(root) != contract.get("baselineHead")
-    )
+    return _verification_is_committed(root, contract)
 
 
-def start_contract(root: Path, objective: str, changed: Sequence[str], verify: Sequence[str], allowed_delete: Sequence[str]) -> dict:
+def _verification_is_committed(root: Path, contract: dict) -> bool:
+    head = _git_head(root)
+    if not head or head == contract.get("verifiedHead"):
+        return False
+    tree = _run_git(root, "rev-parse", "HEAD^{tree}")
+    parents = _run_git(root, "rev-list", "--parents", "-n", "1", "HEAD")
+    if tree.returncode != 0 or parents.returncode != 0:
+        return False
+    parent_ids = parents.stdout.strip().split()[1:]
+    verified_head = contract.get("verifiedHead")
+    expected_parents = [verified_head] if verified_head else []
+    return tree.stdout.strip() == contract.get("verifiedIndexTree") and parent_ids == expected_parents
+
+
+def start_contract(
+    root: Path,
+    objective: str,
+    changed: Sequence[str],
+    verify: Sequence[str],
+    allowed_delete: Sequence[str],
+    owned_paths: Sequence[str] = (),
+) -> dict:
     objective = " ".join(objective.split())
     if not objective:
         raise GuardError("Objective must describe the user-visible outcome.")
@@ -359,10 +542,17 @@ def start_contract(root: Path, objective: str, changed: Sequence[str], verify: S
     if existing and existing.get("state") == "open":
         raise GuardError("A change contract is already open. Resume it or cancel it only after restoring its baseline.")
 
-    features = read_feature_map(root / FEATURE_MAP_RELATIVE)
+    features = read_feature_catalog(root)
     changed_ids = _split_values(changed)
     verify_ids = _split_values(verify)
-    allowed_deleted = [value.replace("\\", "/").lstrip("./") for value in _split_values(allowed_delete)]
+    invalid_changed_ids = [feature_id for feature_id in changed_ids if not re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*", feature_id)]
+    if invalid_changed_ids:
+        raise GuardError("Invalid new feature ID(s): " + ", ".join(sorted(invalid_changed_ids)))
+    unknown_verify_ids = set(verify_ids) - set(features)
+    if unknown_verify_ids:
+        raise GuardError("Unknown adjacent verification feature ID(s): " + ", ".join(sorted(unknown_verify_ids)))
+    allowed_deleted = [_normalize_contract_path(root, value) for value in _split_values(allowed_delete)]
+    task_owned = [_normalize_contract_path(root, value) for value in _split_values(owned_paths)]
     active = {feature_id: feature for feature_id, feature in features.items() if _is_active(feature)}
     protected = {
         feature_id: feature.invariant()
@@ -370,51 +560,247 @@ def start_contract(root: Path, objective: str, changed: Sequence[str], verify: S
         if feature_id not in changed_ids
     }
     baseline_head = _git_head(root)
+    baseline_changed = sorted(_changed_files(root, baseline_head))
     contract = {
         "schemaVersion": 1,
         "state": "open",
         "objective": objective,
         "startedAt": _now(),
         "baselineHead": baseline_head,
+        "baselineIndexTree": _index_tree(root),
         "baselineWorktreeFingerprint": _worktree_fingerprint(root),
-        "baselineChangedFiles": sorted(_changed_files(root, baseline_head)),
+        "baselineChangedFiles": baseline_changed,
+        "baselinePathStates": {relative: _path_state(root, relative) for relative in baseline_changed},
+        "baselineStagedFiles": sorted(_staged_files(root)),
         "baselineDeletedFiles": sorted(_deleted_files(root, baseline_head)),
         "changedFeatureIds": changed_ids,
         "explicitVerificationIds": verify_ids,
         "protectedFeatures": protected,
         "allowedDeletedFiles": sorted(allowed_deleted),
+        "taskOwnedPaths": sorted(task_owned),
+        "stagedPaths": [],
+        "verificationRuns": [],
     }
     _write_contract(root, contract)
     return contract
+
+
+def _clear_verification(contract: dict) -> None:
+    for key in (
+        "verifiedAt",
+        "verifiedFeatureIds",
+        "verificationEvidence",
+        "verificationNotes",
+        "verificationWarnings",
+        "verifiedHead",
+        "verifiedIndexTree",
+        "verifiedContentFingerprint",
+        "verifiedWorktreeFingerprint",
+    ):
+        contract.pop(key, None)
+
+
+def stage_paths(root: Path, paths: Sequence[str]) -> dict:
+    contract = _read_contract(root)
+    if not contract or contract.get("state") != "open":
+        raise GuardError("Open or reopen the current change contract before staging task files.")
+    normalized = [_normalize_contract_path(root, value) for value in _split_values(paths)]
+    if not normalized:
+        raise GuardError("Stage at least one explicit project-relative file path.")
+    for relative in normalized:
+        if (root / relative).is_dir():
+            raise GuardError(f"Stage explicit files, not a directory path: {relative}")
+
+    baseline_changed = set(contract.get("baselineChangedFiles", []))
+    owned = set(contract.get("taskOwnedPaths", []))
+    mixed = (set(normalized) & baseline_changed) - owned
+    if mixed:
+        raise GuardError("These paths already contained user work at contract start; declare --own-path before editing them: " + ", ".join(sorted(mixed)))
+
+    existing_staged = _staged_files(root)
+    existing_allowed = set(contract.get("stagedPaths", [])) | owned
+    existing_unexpected = existing_staged - existing_allowed
+    if existing_unexpected:
+        raise GuardError("The Git index already contains undeclared user work: " + ", ".join(sorted(existing_unexpected)))
+    existing_protected = (set(contract.get("baselineStagedFiles", [])) & existing_staged) - owned
+    if existing_protected:
+        raise GuardError("Pre-existing staged user work must be unstaged before this checkpoint: " + ", ".join(sorted(existing_protected)))
+
+    previous_tree = _index_tree(root)
+    result = _run_git(root, "add", "--", *normalized)
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Git could not stage the declared task paths.")
+    staged = _staged_files(root)
+    allowed = set(normalized) | set(contract.get("stagedPaths", [])) | owned
+    unexpected = staged - allowed
+    if unexpected:
+        _run_git(root, "read-tree", previous_tree)
+        raise GuardError("The Git index contains undeclared paths; leave user work unstaged: " + ", ".join(sorted(unexpected)))
+    protected_staged = (set(contract.get("baselineStagedFiles", [])) & staged) - owned
+    if protected_staged:
+        _run_git(root, "read-tree", previous_tree)
+        raise GuardError("Pre-existing staged user work must be unstaged before this checkpoint: " + ", ".join(sorted(protected_staged)))
+
+    contract["state"] = "open"
+    contract["stagedPaths"] = sorted(staged)
+    contract["verificationRuns"] = []
+    _clear_verification(contract)
+    _write_contract(root, contract)
+    return contract
+
+
+def _verification_command_error(command: Sequence[str]) -> str | None:
+    if not command:
+        return "Provide one executable verification command after --."
+    rendered = subprocess.list2cmdline(command)
+    if len(rendered) > MAX_COMMAND_CHARS:
+        return f"Verification command exceeds {MAX_COMMAND_CHARS} characters."
+
+    base = Path(command[0].strip('"\'')).name.lower()
+    args = [item.lower() for item in command[1:]]
+    if base in {"git", "git.exe"}:
+        read_only = {"status", "diff", "show", "log", "rev-parse", "ls-files", "check-ignore", "branch", "worktree"}
+        subcommand = next((item for item in args if not item.startswith("-")), "")
+        if subcommand not in read_only:
+            return "Verification commands may inspect Git but may not mutate Git state."
+    if base in {"npm", "pnpm", "yarn", "bun"} and any(item in {"install", "i", "add", "remove", "uninstall", "publish"} for item in args[:2]):
+        return "Dependency installation and publishing cannot be hidden inside a verification command."
+    if base in {"pip", "pip3", "winget", "choco", "scoop"} and any(item in {"install", "upgrade", "uninstall"} for item in args[:2]):
+        return "Global or dependency installation cannot be hidden inside a verification command."
+    if base in {"python", "python3", "py"} and len(args) >= 2 and args[0] == "-m" and args[1] == "pip" and any(item in {"install", "uninstall"} for item in args[2:4]):
+        return "Python package installation cannot be hidden inside a verification command."
+
+    hook_root = Path(__file__).resolve().parents[1] / "hooks"
+    if str(hook_root) not in sys.path:
+        sys.path.insert(0, str(hook_root))
+    from pre_tool_guard import classify_command  # type: ignore
+
+    decision = classify_command(rendered)
+    return decision.reason if decision.blocked else None
+
+
+def run_verification(root: Path, feature_ids: Sequence[str], command: Sequence[str], timeout: int = 600) -> dict:
+    contract = _read_contract(root)
+    if not contract or contract.get("state") != "open":
+        raise GuardError("Open or reopen the current change contract before running verification.")
+    features = read_feature_catalog(root)
+    verified_ids = _split_values(feature_ids)
+    unknown = set(verified_ids) - set(features)
+    if unknown:
+        raise GuardError("Unknown verification feature ID(s): " + ", ".join(sorted(unknown)))
+    command = list(command)
+    command_error = _verification_command_error(command)
+    if command_error:
+        raise GuardError(command_error)
+    timeout = max(1, min(int(timeout), 3600))
+    before_tree, before_fingerprint = _require_staged_snapshot(root, contract)
+    rendered = subprocess.list2cmdline(command)
+    started = _now()
+    try:
+        result = subprocess.run(
+            command,
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=timeout,
+            errors="replace",
+        )
+        output = result.stdout or ""
+        exit_code: int | str = result.returncode
+    except subprocess.TimeoutExpired as exc:
+        output = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        exit_code = "timeout"
+
+    snapshot_error = ""
+    try:
+        after_tree, after_fingerprint = _require_staged_snapshot(root, contract)
+        if after_tree != before_tree or after_fingerprint != before_fingerprint:
+            snapshot_error = "Project content or the Git index changed during verification."
+    except GuardError as exc:
+        after_tree, after_fingerprint = "", ""
+        snapshot_error = str(exc)
+
+    passed = exit_code == 0 and not snapshot_error
+    run = {
+        "command": rendered,
+        "featureIds": sorted(verified_ids),
+        "startedAt": started,
+        "finishedAt": _now(),
+        "exitCode": exit_code,
+        "passed": passed,
+        "indexTree": before_tree,
+        "contentFingerprint": before_fingerprint,
+    }
+    runs = list(contract.get("verificationRuns", []))
+    runs.append(run)
+    contract["verificationRuns"] = runs[-MAX_VERIFICATION_RUNS:]
+    _write_contract(root, contract)
+    if output:
+        print(output, end="" if output.endswith("\n") else "\n")
+    if not passed:
+        reason = f"Verification failed with exit code {exit_code}."
+        if snapshot_error:
+            reason += " " + snapshot_error
+        raise GuardError(reason)
+    return run
 
 
 def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[str]) -> dict:
     contract = _read_contract(root)
     if not contract:
         raise GuardError("No current change contract exists. Start one before editing.")
-    if contract.get("state") not in {"open", "verified"}:
+    if contract.get("state") != "open":
         raise GuardError("The current change contract is not open.")
 
     errors, warnings, required = _evaluate(root, contract)
-    verified_ids = set(_split_values(verified))
-    missing = required - verified_ids
-    if missing:
-        errors.append("Required feature verification was not recorded for: " + ", ".join(sorted(missing)))
-    evidence_items = [" ".join(item.split()) for item in evidence if item.strip()]
-    if _new_changes_exist(root, contract) and not evidence_items:
-        errors.append("Record at least one test, build, browser, API, or repeatable manual verification result.")
     if errors:
         raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
+    index_tree, content_fingerprint = _require_staged_snapshot(root, contract)
+    successful_runs = [
+        run
+        for run in contract.get("verificationRuns", [])
+        if run.get("passed")
+        and run.get("exitCode") == 0
+        and run.get("indexTree") == index_tree
+        and run.get("contentFingerprint") == content_fingerprint
+    ]
+    actual_verified_ids = {
+        feature_id
+        for run in successful_runs
+        for feature_id in run.get("featureIds", [])
+    }
+    claimed_ids = set(_split_values(verified))
+    unsupported_claims = claimed_ids - actual_verified_ids
+    if unsupported_claims:
+        errors.append("Feature IDs were claimed without a successful recorded verification command: " + ", ".join(sorted(unsupported_claims)))
+    missing = required - actual_verified_ids
+    if missing:
+        errors.append("Required feature verification lacks a successful recorded command for: " + ", ".join(sorted(missing)))
+    if not successful_runs:
+        errors.append("Run at least one verification command through feature_guard.py verify; free-form evidence text cannot seal a checkpoint.")
+    notes = [" ".join(item.split()) for item in evidence if item.strip()]
+    if errors:
+        raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
+
+    evidence_items = [
+        f"exit 0: {run['command']} [features: {', '.join(run.get('featureIds', [])) or 'none'}]"
+        for run in successful_runs
+    ]
 
     contract.update(
         {
             "state": "verified",
             "verifiedAt": _now(),
-            "verifiedFeatureIds": sorted(verified_ids),
-            "verificationEvidence": evidence_items[:20],
+            "verifiedFeatureIds": sorted(actual_verified_ids),
+            "verificationEvidence": evidence_items[-MAX_VERIFICATION_RUNS:],
+            "verificationNotes": notes[:20],
             "verificationWarnings": warnings[:20],
             "verifiedHead": _git_head(root),
-            "verifiedWorktreeFingerprint": _worktree_fingerprint(root),
+            "verifiedIndexTree": index_tree,
+            "verifiedContentFingerprint": content_fingerprint,
+            "verifiedWorktreeFingerprint": content_fingerprint,
         }
     )
     _write_contract(root, contract)
@@ -426,8 +812,8 @@ def reopen_contract(root: Path) -> dict:
     if not contract:
         raise GuardError("No current change contract exists.")
     contract["state"] = "open"
-    for key in ("verifiedAt", "verifiedFeatureIds", "verificationEvidence", "verificationWarnings", "verifiedHead", "verifiedWorktreeFingerprint"):
-        contract.pop(key, None)
+    contract["verificationRuns"] = []
+    _clear_verification(contract)
     _write_contract(root, contract)
     return contract
 
@@ -437,8 +823,31 @@ def allow_deletions(root: Path, paths: Sequence[str]) -> dict:
     if not contract or contract.get("state") != "open":
         raise GuardError("Open a current change contract before declaring intentional file deletions.")
     allowed = set(contract.get("allowedDeletedFiles", []))
-    allowed.update(value.replace("\\", "/").lstrip("./") for value in _split_values(paths))
+    allowed.update(_normalize_contract_path(root, value) for value in _split_values(paths))
     contract["allowedDeletedFiles"] = sorted(allowed)
+    _write_contract(root, contract)
+    return contract
+
+
+def declare_changed_features(root: Path, feature_ids: Sequence[str]) -> dict:
+    contract = _read_contract(root)
+    if not contract or contract.get("state") != "open":
+        raise GuardError("Open or reopen the current change contract before declaring additional changed features.")
+    declared = _split_values(feature_ids)
+    if not declared:
+        raise GuardError("Declare at least one feature ID that the current task now intends to change.")
+    invalid = [feature_id for feature_id in declared if not re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*", feature_id)]
+    if invalid:
+        raise GuardError("Invalid changed feature ID(s): " + ", ".join(sorted(invalid)))
+
+    changed = set(contract.get("changedFeatureIds", []))
+    changed.update(declared)
+    contract["changedFeatureIds"] = sorted(changed)
+    contract["explicitVerificationIds"] = sorted(set(contract.get("explicitVerificationIds", [])) - changed)
+    protected = dict(contract.get("protectedFeatures", {}))
+    for feature_id in declared:
+        protected.pop(feature_id, None)
+    contract["protectedFeatures"] = protected
     _write_contract(root, contract)
     return contract
 
@@ -460,16 +869,22 @@ def close_contract(root: Path) -> None:
         raise GuardError("Cannot close an open change contract. Complete its regression verification first.")
     if not _verification_still_matches(root, contract):
         raise GuardError("Cannot close because the project changed after verification. Reopen, recheck, and complete it again.")
+    if not _verification_is_committed(root, contract):
+        raise GuardError("Cannot close until the verified snapshot has a local checkpoint commit.")
     _contract_path(root).unlink(missing_ok=True)
 
 
 def _contract_summary(contract: dict) -> str:
     changed = ", ".join(contract.get("changedFeatureIds", [])) or "none declared"
     required = ", ".join(contract.get("explicitVerificationIds", [])) or "risk-derived at completion"
-    return (
+    staged = len(contract.get("stagedPaths", []))
+    successful_runs = sum(1 for run in contract.get("verificationRuns", []) if run.get("passed"))
+    return _clip_text(
         f"Current change guard is {contract.get('state')}: {contract.get('objective')}. "
         f"Intentionally changed feature IDs: {changed}. Required/adjacent verification: {required}. "
-        "Read docs/FEATURES.md before editing and keep protected behavior intact."
+        f"Guard-staged paths: {staged}; successful recorded verification commands: {successful_runs}. "
+        "Read the FEATURES index and relevant docs/features domain maps before editing and keep protected behavior intact.",
+        900,
     )
 
 
@@ -502,7 +917,6 @@ def _status_recovery_summary(root: Path) -> str:
         "current risks", "risks", "当前风险",
         "current limitations", "limitations", "当前限制",
         "blockers", "阻塞",
-        "next action", "next actions", "下一步",
         "verified", "已验证",
     )
     selected: list[str] = []
@@ -512,11 +926,22 @@ def _status_recovery_summary(root: Path) -> str:
         if normalized in sections and normalized not in seen:
             content = "\n".join(sections[normalized]).strip()
             if content:
-                selected.append(_clip_text(content, 600))
+                selected.append(_clip_text(content, 500))
                 seen.add(normalized)
 
-    if selected:
-        return _clip_text("\n\n".join(selected), RECOVERY_STATUS_MAX_CHARS)
+    next_action = ""
+    for name in ("next action", "next actions", "下一步"):
+        normalized = _normalize_text(name)
+        if normalized in sections:
+            next_action = _clip_text("\n".join(sections[normalized]).strip(), RECOVERY_NEXT_ACTION_MAX_CHARS)
+            if next_action:
+                break
+
+    if selected or next_action:
+        separator_cost = 2 if selected and next_action else 0
+        other_budget = max(0, RECOVERY_STATUS_MAX_CHARS - len(next_action) - separator_cost)
+        other = _clip_text("\n\n".join(selected), other_budget) if selected and other_budget else ""
+        return "\n\n".join(item for item in (other, next_action) if item)
 
     compact = "\n".join(line for line in text.splitlines() if line.strip())
     return _clip_text(compact, RECOVERY_STATUS_MAX_CHARS)
@@ -549,7 +974,7 @@ def _recovery_packet(root: Path, contract: dict | None) -> str:
         f"Change guard: {contract_context}\n"
         f"Git: {git_state}. Latest checkpoint: {checkpoint}.\n"
         f"STATUS (capped):\n{_status_recovery_summary(root)}\n"
-        "Always read AGENTS.md, docs/PROJECT.md, and docs/FEATURES.md before changing behavior. "
+        "Always read AGENTS.md, docs/PROJECT.md, docs/FEATURES.md, and the relevant docs/features domain maps before changing behavior. "
         "Read architecture, ADRs, roadmap, or runbook only when relevant. Do not create permanent chat or development logs."
     )
     return _clip_text(packet, RECOVERY_PACKET_MAX_CHARS)
@@ -570,16 +995,131 @@ def _deny(reason: str) -> None:
 
 
 def _is_guard_command(command: str) -> bool:
-    return "feature_guard.py" in command and re.search(r"\b(start|status|complete|reopen|allow-delete|cancel|close)\b", command) is not None
+    if _has_shell_control(command):
+        return False
+    segments = _shell_segments(command)
+    if len(segments) != 1:
+        return False
+    tokens = segments[0]
+    script_index = next(
+        (
+            index
+            for index, token in enumerate(tokens)
+            if token.strip('"\'').replace("\\", "/").lower().endswith("/feature_guard.py")
+            or token.strip('"\'').lower() == "feature_guard.py"
+        ),
+        None,
+    )
+    if script_index is None or script_index + 1 >= len(tokens):
+        return False
+    return tokens[script_index + 1].lower() in {"start", "status", "stage", "verify", "complete", "reopen", "allow-delete", "cancel", "close"}
 
 
 def _is_git_commit(command: str) -> bool:
     return re.search(r"(?i)(?:^|[;&|]\s*)git(?:\.exe)?(?:\s+-[Cc]\s+\S+|\s+-c\s+\S+)*\s+commit\b", command) is not None
 
 
+def _shell_segments(command: str) -> list[list[str]]:
+    if "\n" in command or "\r" in command:
+        return []
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except (TypeError, ValueError):
+        return []
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token and set(token) <= {";", "&", "|", "<", ">"}:
+            if current:
+                segments.append(current)
+                current = []
+            continue
+        current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _has_shell_control(command: str) -> bool:
+    if "\n" in command or "\r" in command:
+        return True
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        return any(token and set(token) <= {";", "&", "|", "<", ">"} for token in lexer)
+    except (TypeError, ValueError):
+        return True
+
+
+def _git_subcommand_and_args(tokens: Sequence[str]) -> tuple[str | None, list[str]]:
+    if not tokens or Path(tokens[0].strip('"\'')).name.lower() not in {"git", "git.exe"}:
+        return None, []
+    index = 1
+    while index < len(tokens):
+        lower = tokens[index].lower()
+        if lower in {"-c", "--git-dir", "--work-tree", "--namespace"}:
+            index += 2
+            continue
+        if lower.startswith(("--git-dir=", "--work-tree=", "--namespace=")):
+            index += 1
+            continue
+        if lower.startswith("-"):
+            index += 1
+            continue
+        return lower, list(tokens[index + 1 :])
+    return None, []
+
+
+def _git_subcommand(tokens: Sequence[str]) -> str | None:
+    return _git_subcommand_and_args(tokens)[0]
+
+
+def _has_git_subcommand(command: str, expected: str) -> bool:
+    return any(_git_subcommand(segment) == expected for segment in _shell_segments(command))
+
+
+def _is_standalone_git_commit(command: str) -> bool:
+    segments = _shell_segments(command)
+    return not _has_shell_control(command) and len(segments) == 1 and _git_subcommand(segments[0]) == "commit"
+
+
+def _commit_command_error(command: str) -> str | None:
+    segments = _shell_segments(command)
+    if _has_shell_control(command) or len(segments) != 1:
+        return "git commit must be the only command and may not use redirection, pipes, separators, or newlines."
+    subcommand, args = _git_subcommand_and_args(segments[0])
+    if subcommand != "commit":
+        return "The checkpoint command is not a standalone git commit."
+
+    allowed_flags = {"-q", "--quiet", "-s", "--signoff", "--allow-empty", "--allow-empty-message", "--no-gpg-sign"}
+    expects_message = False
+    for argument in args:
+        lower = argument.lower()
+        if expects_message:
+            expects_message = False
+            continue
+        if lower in {"-m", "--message"}:
+            expects_message = True
+            continue
+        if lower.startswith("-m") and len(argument) > 2:
+            continue
+        if lower.startswith("--message=") or lower.startswith("--cleanup=") or lower.startswith("--gpg-sign="):
+            continue
+        if lower in allowed_flags:
+            continue
+        return "The verified checkpoint may not auto-stage files, bypass hooks, amend history, or include pathspecs. Use only message/signing options on git commit."
+    if expects_message:
+        return "git commit -m requires a checkpoint message."
+    return None
+
+
 def _looks_like_mutation(command: str) -> bool:
     patterns = [
-        r"(?i)\bgit(?:\.exe)?\s+(?:add|commit)\b",
+        r"(?i)\bgit(?:\.exe)?(?:\s+-[Cc]\s+\S+|\s+-c\s+\S+)*\s+(?:add|commit|reset|rm|mv|update-index)\b",
         r"(?i)\b(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|uninstall)\b",
         r"(?i)\b(?:pip|pip3|poetry|uv)\s+(?:install|add|remove|uninstall)\b",
         r"(?i)\b(?:cargo|dotnet)\s+(?:add|remove)\b",
@@ -627,9 +1167,14 @@ def hook_main() -> int:
             command = ""
 
         is_patch = tool_name == "apply_patch"
-        is_commit = tool_name == "Bash" and _is_git_commit(command)
+        is_commit = tool_name == "Bash" and _has_git_subcommand(command, "commit")
+        is_standalone_commit = tool_name == "Bash" and _is_standalone_git_commit(command)
+        commit_error = _commit_command_error(command) if is_commit else None
         is_mutation = is_patch or (tool_name == "Bash" and (_looks_like_mutation(command) or is_commit))
         if tool_name == "Bash" and _is_guard_command(command):
+            return 0
+        if tool_name == "Bash" and _has_git_subcommand(command, "add"):
+            _deny("Do not run raw git add in a managed project. Stage explicit task files through feature_guard.py stage so pre-existing user work cannot enter the checkpoint.")
             return 0
         if not is_mutation:
             return 0
@@ -640,7 +1185,9 @@ def hook_main() -> int:
             _deny("The current change was already sealed for verification. Run feature_guard.py reopen before making another edit, then verify again.")
             return 0
         if is_commit:
-            if contract.get("state") != "verified":
+            if not is_standalone_commit or commit_error:
+                _deny(commit_error or "After verification, git commit must be the only command in the tool call.")
+            elif contract.get("state") != "verified":
                 _deny("Complete feature regression verification before creating the checkpoint commit.")
             elif not _verification_still_matches(root, contract):
                 _deny("The project changed after feature verification. Reopen and complete the current change contract again before committing.")
@@ -672,7 +1219,7 @@ def hook_main() -> int:
         return 0
 
     if event == "SessionEnd":
-        if contract and _verification_still_matches(root, contract):
+        if contract and _verification_still_matches(root, contract) and _verification_is_committed(root, contract):
             _contract_path(root).unlink(missing_ok=True)
         return 0
     return 0
@@ -706,10 +1253,25 @@ def main() -> int:
     start.add_argument("--change", action="append", default=[])
     start.add_argument("--verify", action="append", default=[])
     start.add_argument("--allow-delete", action="append", default=[])
+    start.add_argument("--own-path", action="append", default=[])
 
     status = subparsers.add_parser("status", help="Inspect the current contract")
     status.add_argument("--root", default=".")
     status.add_argument("--json", action="store_true")
+
+    stage = subparsers.add_parser("stage", help="Stage only explicit task-owned file paths")
+    stage.add_argument("--root", default=".")
+    stage.add_argument("--path", action="append", required=True)
+
+    declare_change = subparsers.add_parser("declare-change", help="Promote an adjacent feature to an intentional current change")
+    declare_change.add_argument("--root", default=".")
+    declare_change.add_argument("--change", action="append", required=True)
+
+    verify = subparsers.add_parser("verify", help="Run and bind one verification command to the staged snapshot")
+    verify.add_argument("--root", default=".")
+    verify.add_argument("--feature", action="append", default=[])
+    verify.add_argument("--timeout", type=int, default=600)
+    verify.add_argument("verification_command", nargs=argparse.REMAINDER)
 
     complete = subparsers.add_parser("complete", help="Seal the current contract after regression checks")
     complete.add_argument("--root", default=".")
@@ -737,10 +1299,22 @@ def main() -> int:
     try:
         root = _require_root(args.root)
         if args.command == "start":
-            contract = start_contract(root, args.objective, args.change, args.verify, args.allow_delete)
+            contract = start_contract(root, args.objective, args.change, args.verify, args.allow_delete, args.own_path)
             print(_contract_summary(contract))
         elif args.command == "status":
             _print_status(root, _read_contract(root), args.json)
+        elif args.command == "stage":
+            contract = stage_paths(root, args.path)
+            print("Guard-staged paths: " + ", ".join(contract.get("stagedPaths", [])))
+        elif args.command == "declare-change":
+            contract = declare_changed_features(root, args.change)
+            print("Intentionally changed feature IDs: " + ", ".join(contract.get("changedFeatureIds", [])))
+        elif args.command == "verify":
+            command = list(args.verification_command)
+            if command[:1] == ["--"]:
+                command = command[1:]
+            run = run_verification(root, args.feature, command, args.timeout)
+            print("Recorded verification: " + run["command"])
         elif args.command == "complete":
             contract = complete_contract(root, args.verified, args.evidence)
             print("Feature guard verified. Evidence: " + "; ".join(contract.get("verificationEvidence", [])))

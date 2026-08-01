@@ -39,6 +39,13 @@ class PreToolGuardTests(unittest.TestCase):
             "terraform apply",
             "kubectl delete deployment app",
             "Remove-Item -Recurse -Force C:\\",
+            "npm install typescript -g",
+            "npm --global install typescript",
+            "pip install ruff",
+            "pip --isolated install ruff",
+            "python -m pip install ruff",
+            "winget upgrade Git.Git",
+            "winget --source winget upgrade Git.Git",
         ):
             with self.subTest(command=command):
                 self.assert_blocked(command)

@@ -13,16 +13,19 @@
 - 对话充满大量日志、反复试验或多次压缩，关键事实难定位。
 - 需要独立权限、Worktree、长期 Goal 或不同专业上下文。
 
+默认输出一段交接提示并建议用户开启新任务。只有用户明确要求 Codex 创建、分叉、交接或操作另一个任务时，才调用任务管理工具。
+
 ## 使用子代理
 
 - 当前任务内部有有界且可并行的探索、测试或审查。
 - 结果应回到主任务立即整合。
 - 不需要长期保留独立上下文。
+- 子代理必须通过原生 collaboration `spawn_agent` 启动；不得用新任务、聊天、跨任务消息或 Handoff 模拟。
 
 ## 恢复顺序
 
 1. SessionStart Hook 注入的小型恢复包、`AGENTS.md`、当前 Goal 和未完成的 `.codex/current-change.json`。
-2. 始终读取 `PROJECT.md`、`FEATURES.md`、`STATUS.md`；只读取相关架构章节和 ADR。
+2. 始终读取 `PROJECT.md`、FEATURES 主索引和 `STATUS.md`；只读取相关 `docs/features/` 领域表、架构章节和 ADR。
 3. Git 状态、当前分支和最近少量提交。
 4. 必要代码、测试和运行结果。
 5. 旧任务或本地 memory 只在仍有缺口时使用。

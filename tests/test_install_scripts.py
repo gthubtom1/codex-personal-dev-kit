@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/install.ps1"
 MARKETPLACE_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/install-marketplace.ps1"
+DIAGNOSE_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/diagnose.ps1"
+PLUGIN_MANIFEST = REPO_ROOT / "plugins/codex-personal-dev-kit/.codex-plugin/plugin.json"
 POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
@@ -61,6 +64,10 @@ class InstallScriptTests(unittest.TestCase):
             self.assertTrue((codex_home / "agents/codex-kit-reviewer.toml").is_file())
             self.assertTrue((codex_home / "codex-dev-kit/source.json").is_file())
             self.assertFalse((codex_home / "config.toml").exists())
+            source = json.loads((codex_home / "codex-dev-kit/source.json").read_text(encoding="utf-8"))
+            self.assertEqual(source["sourceType"], "git")
+            self.assertEqual(source["ref"], "v0.1.0")
+            self.assertEqual(source["pluginVersion"], json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8"))["version"])
 
             content = agents.read_text(encoding="utf-8")
             customized = "# My personal rule\n\n" + content.replace(
@@ -111,6 +118,71 @@ class InstallScriptTests(unittest.TestCase):
             self.assertIn("--version", commands)
             self.assertIn("plugin marketplace add OWNER/codex-dev-kit --ref v0.1.0", commands)
             self.assertIn("plugin add codex-personal-dev-kit@codex-dev-kit", commands)
+
+    def test_local_marketplace_install_omits_git_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            marketplace = root / "local-marketplace"
+            (marketplace / ".agents/plugins").mkdir(parents=True)
+            (marketplace / ".agents/plugins/marketplace.json").write_text('{"name":"codex-dev-kit","plugins":[]}', encoding="utf-8")
+            fake_codex = root / "codex.cmd"
+            command_log = root / "codex-commands.log"
+            fake_codex.write_text('@echo %*>>"%CODEX_TEST_LOG%"\r\n@exit /b 0\r\n', encoding="ascii")
+
+            self.run_script(
+                MARKETPLACE_SCRIPT,
+                "-Marketplace",
+                str(marketplace),
+                "-Apply",
+                env={"CODEX_CLI": str(fake_codex), "CODEX_TEST_LOG": str(command_log)},
+            )
+
+            commands = command_log.read_text(encoding="utf-8")
+            self.assertIn(f"plugin marketplace add {marketplace}", commands)
+            self.assertNotIn("--ref", commands)
+
+    def test_diagnose_detects_local_head_dirty_state_and_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            marketplace = root / "marketplace"
+            plugin_root = marketplace / "plugins/codex-personal-dev-kit/.codex-plugin"
+            plugin_root.mkdir(parents=True)
+            (marketplace / ".agents/plugins").mkdir(parents=True)
+            (marketplace / ".agents/plugins/marketplace.json").write_text('{"name":"codex-dev-kit","plugins":[]}', encoding="utf-8")
+            manifest = json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8"))
+            (plugin_root / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+            subprocess.run(["git", "-C", str(marketplace), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["git", "-C", str(marketplace), "add", "."], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(
+                ["git", "-C", str(marketplace), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            codex_home = root / "codex-home"
+            self.run_install(codex_home, "-Marketplace", str(marketplace), "-Apply")
+            cache = codex_home / f"plugins/cache/codex-dev-kit/codex-personal-dev-kit/{manifest['version']}"
+            cache.mkdir(parents=True)
+            fake_codex = root / "codex.cmd"
+            fake_codex.write_text(
+                '@if "%1"=="--version" echo codex-test 1.0\r\n'
+                f'@if "%1"=="plugin" if "%2"=="list" echo codex-personal-dev-kit installed, enabled {manifest["version"]}\r\n'
+                '@exit /b 0\r\n',
+                encoding="ascii",
+            )
+            result = self.run_script(DIAGNOSE_SCRIPT, "-CodexHome", str(codex_home), env={"CODEX_CLI": str(fake_codex)})
+            self.assertIn("Local source HEAD", result.stdout)
+
+            (marketplace / "dirty.txt").write_text("dirty", encoding="utf-8")
+            dirty = self.run_script(
+                DIAGNOSE_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                expected=1,
+                env={"CODEX_CLI": str(fake_codex)},
+            )
+            self.assertIn("Local source working tree", dirty.stdout)
 
 
 if __name__ == "__main__":

@@ -24,11 +24,51 @@ if ($codexHomePath.TrimEnd('\', '/') -eq $filesystemRoot.TrimEnd('\', '/')) {
     throw "Refusing to install into a filesystem root: $codexHomePath"
 }
 
-if (([string]::IsNullOrWhiteSpace($Marketplace)) -xor ([string]::IsNullOrWhiteSpace($Ref))) {
-    throw "Marketplace and Ref must be provided together."
+$sourceType = $null
+$resolvedMarketplace = $Marketplace
+$resolvedRef = $Ref
+if (-not [string]::IsNullOrWhiteSpace($Marketplace)) {
+    if (Test-Path -LiteralPath $Marketplace -PathType Container) {
+        $sourceType = "local"
+        $resolvedMarketplace = [System.IO.Path]::GetFullPath($Marketplace)
+        $localMarketplaceFile = Join-Path $resolvedMarketplace ".agents\plugins\marketplace.json"
+        if (-not (Test-Path -LiteralPath $localMarketplaceFile -PathType Leaf)) {
+            throw "Local Marketplace file not found: $localMarketplaceFile"
+        }
+        $localMarketplaceName = [string]((Get-Content -Raw $localMarketplaceFile | ConvertFrom-Json).name)
+        if ($localMarketplaceName -ne $MarketplaceName) {
+            throw "Local Marketplace name '$localMarketplaceName' does not match requested name '$MarketplaceName'."
+        }
+        $git = Get-Command git -ErrorAction SilentlyContinue
+        if (-not $git) { throw "Git is required to pin a local Marketplace source." }
+        $localHeadOutput = @(& $git.Source -C $resolvedMarketplace rev-parse HEAD 2>$null)
+        $localHeadExit = $LASTEXITCODE
+        $localHead = if ($localHeadOutput.Count -gt 0) { ([string]$localHeadOutput[0]).Trim() } else { "" }
+        if ($localHeadExit -ne 0 -or [string]::IsNullOrWhiteSpace($localHead)) {
+            throw "Local Marketplace must be inside a Git repository: $resolvedMarketplace"
+        }
+        $localStatus = (& $git.Source -C $resolvedMarketplace status --porcelain 2>$null) -join [Environment]::NewLine
+        if ($LASTEXITCODE -ne 0) { throw "Unable to inspect local Marketplace Git status." }
+        if (-not [string]::IsNullOrWhiteSpace($localStatus)) {
+            throw "Local Marketplace has uncommitted changes. Create a verified local checkpoint before installing the global profile."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($Ref) -and $Ref -ne $localHead) {
+            throw "Local Marketplace HEAD $localHead does not match requested Ref $Ref."
+        }
+        $resolvedRef = [string]$localHead
+    }
+    else {
+        $sourceType = "git"
+        if ([string]::IsNullOrWhiteSpace($Ref)) {
+            throw "A Git Marketplace requires a fixed release tag or commit Ref."
+        }
+        if ($Ref.ToLowerInvariant() -in @("main", "master", "head", "latest")) {
+            throw "Ref must be a fixed release tag or commit, not '$Ref'."
+        }
+    }
 }
-if (-not [string]::IsNullOrWhiteSpace($Ref) -and $Ref.ToLowerInvariant() -in @("main", "master", "head", "latest")) {
-    throw "Ref must be a fixed release tag or commit, not '$Ref'."
+elseif (-not [string]::IsNullOrWhiteSpace($Ref)) {
+    throw "Ref cannot be provided without a Marketplace."
 }
 
 $pluginRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
@@ -105,10 +145,13 @@ Set-ManagedTextFile -Target (Join-Path $kitStateRoot "VERSION") -Content ($versi
 
 if (-not [string]::IsNullOrWhiteSpace($Marketplace)) {
     $sourceConfig = [ordered]@{
-        marketplace = $Marketplace
-        ref = $Ref
+        schemaVersion = 1
+        sourceType = $sourceType
+        marketplace = $resolvedMarketplace
+        ref = $resolvedRef
         marketplaceName = $MarketplaceName
         plugin = "codex-personal-dev-kit"
+        pluginVersion = $version
     } | ConvertTo-Json
     Set-ManagedTextFile -Target (Join-Path $kitStateRoot "source.json") -Content ($sourceConfig + [Environment]::NewLine)
 }

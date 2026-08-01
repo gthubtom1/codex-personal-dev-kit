@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from feature_guard import GuardError, is_active_feature, is_critical_feature, read_feature_map
+from feature_guard import GuardError, is_active_feature, is_critical_feature, read_feature_catalog
 
 
 SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
@@ -33,6 +33,8 @@ DOC_BUDGETS = {
 ACTIVE_PLAN_RELATIVE = Path(".codex/active-plan.md")
 ACTIVE_PLAN_STALE_DAYS = 14
 OVERSIZED_HISTORY_BYTES = 64 * 1024
+OVERSIZED_DOCUMENT_BYTES = 128 * 1024
+TEXT_DOCUMENT_SUFFIXES = {".md", ".markdown", ".txt", ".rst", ".adoc"}
 HISTORY_NAME_PATTERN = re.compile(
     r"(?:development[-_ ]?(?:log|notes?|history|journal|document)|dev[-_ ]?(?:log|notes?|history)|chat[-_ ]?(?:log|history|transcript)|conversation[-_ ]?(?:log|history|transcript)|session[-_ ]?(?:log|notes?|history)|progress[-_ ]?log|ai[-_ ]?history|开发(?:日志|记录|文档|笔记|历史)|聊天(?:记录|日志|历史)|对话(?:记录|日志|历史)|会话(?:记录|日志|历史)|进度日志)",
     flags=re.IGNORECASE,
@@ -113,7 +115,7 @@ def audit(root: Path) -> dict:
     feature_map = root / "docs/FEATURES.md"
     if feature_map.is_file():
         try:
-            features = read_feature_map(feature_map)
+            features = read_feature_catalog(root)
             active_features = [feature for feature in features.values() if is_active_feature(feature)]
             metrics["feature_count"] = len(features)
             metrics["active_feature_count"] = len(active_features)
@@ -122,10 +124,10 @@ def audit(root: Path) -> dict:
                 findings.append(finding("P2", "feature-map-empty", "No accepted active feature is recorded yet. Confirm the first real user journey before broad implementation.", "docs/FEATURES.md"))
             for feature in active_features:
                 if not feature.entry_points.strip():
-                    findings.append(finding("P2", "feature-entry-missing", f"Active feature {feature.id} does not record its connected UI/API/background path.", "docs/FEATURES.md"))
+                    findings.append(finding("P2", "feature-entry-missing", f"Active feature {feature.id} does not record its connected UI/API/background path.", feature.source))
                 if not feature.verification.strip() or feature.verification.strip().lower() in {"not yet confirmed", "待确认"}:
                     severity = "P1" if is_critical_feature(feature) else "P2"
-                    findings.append(finding(severity, "feature-verification-missing", f"Active feature {feature.id} has no repeatable verification entry.", "docs/FEATURES.md"))
+                    findings.append(finding(severity, "feature-verification-missing", f"Active feature {feature.id} has no repeatable verification entry.", feature.source))
         except GuardError as exc:
             findings.append(finding("P1", "feature-map-invalid", str(exc), "docs/FEATURES.md"))
 
@@ -156,8 +158,11 @@ def audit(root: Path) -> dict:
             size = path.stat().st_size
         except OSError:
             size = 0
-        if size > OVERSIZED_HISTORY_BYTES and HISTORY_NAME_PATTERN.search(relative):
+        history_match = HISTORY_NAME_PATTERN.search(relative)
+        if size > OVERSIZED_HISTORY_BYTES and history_match:
             findings.append(finding("P2", "oversized-history-log", f"This {size}-byte development/chat history is too large for project memory. Keep current facts in STATUS/features/architecture and let Git retain history.", relative))
+        elif relative.startswith("docs/") and path.suffix.lower() in TEXT_DOCUMENT_SUFFIXES and size > OVERSIZED_DOCUMENT_BYTES:
+            findings.append(finding("P2", "oversized-document", f"This {size}-byte text document is too large for fast project recovery. Keep a concise index/current-state file and split durable details by stable domain.", relative))
         if path.suffix.lower() in SOURCE_EXTENSIONS:
             try:
                 source_sizes.append((size, relative))

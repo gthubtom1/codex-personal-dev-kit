@@ -71,6 +71,7 @@ class AuditProjectTests(unittest.TestCase):
             active_plan.touch()
             os.utime(active_plan, (old, old))
             (root / "docs/history/development-notes.md").write_text("x" * (audit_project.OVERSIZED_HISTORY_BYTES + 1), encoding="utf-8")
+            (root / "docs/reference.md").write_text("x" * (audit_project.OVERSIZED_DOCUMENT_BYTES + 1), encoding="utf-8")
             for number in range(1, 4):
                 (root / f"docs/adr/{number:04d}-decision.md").write_text(f"# ADR {number}\n", encoding="utf-8")
             (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
@@ -81,6 +82,7 @@ class AuditProjectTests(unittest.TestCase):
             self.assertIn("status-next-action-missing", codes)
             self.assertIn("stale-active-plan", codes)
             self.assertIn("oversized-history-log", codes)
+            self.assertIn("oversized-document", codes)
             self.assertIn("adr-index-missing", codes)
 
 

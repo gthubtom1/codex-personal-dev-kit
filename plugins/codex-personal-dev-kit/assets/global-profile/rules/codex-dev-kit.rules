@@ -130,17 +130,41 @@ prefix_rule(
 
 # Global software installation requires an interactive decision.
 prefix_rule(
-    pattern = [["winget", "choco", "scoop"], "install"],
+    pattern = [["winget", "choco", "scoop"], ["install", "upgrade", "update"]],
     decision = "prompt",
-    justification = "Installing global software changes the machine. Confirm the exact package and source first.",
-    match = ["winget install Git.Git", "choco install nodejs", "scoop install python"],
+    justification = "Installing or upgrading global software changes the machine. Confirm the exact package and source first.",
+    match = ["winget install Git.Git", "winget upgrade Git.Git", "choco install nodejs", "scoop update python"],
     not_match = ["winget list", "scoop status"],
 )
 
 prefix_rule(
-    pattern = ["npm", ["install", "i"], ["--global", "-g"]],
+    pattern = ["npm", ["install", "i"]],
     decision = "prompt",
-    justification = "Global package installation changes the machine. Prefer project-local tools.",
-    match = ["npm install --global typescript", "npm i -g pnpm"],
-    not_match = ["npm install", "npm test"],
+    justification = "Dependency installation changes the project or machine. Confirm the package, scope, and source first.",
+    match = ["npm install", "npm install typescript -g", "npm i -g pnpm"],
+    not_match = ["npm test", "npm run build"],
+)
+
+prefix_rule(
+    pattern = [["pnpm", "yarn", "bun"], ["install", "add"]],
+    decision = "prompt",
+    justification = "Dependency installation requires confirmation of the package, scope, and source.",
+    match = ["pnpm add react", "yarn add zod", "bun install"],
+    not_match = ["pnpm test", "yarn build", "bun test"],
+)
+
+prefix_rule(
+    pattern = [["pip", "pip3", "pipx"], ["install", "upgrade"]],
+    decision = "prompt",
+    justification = "Python package installation may change the system or project environment. Confirm the exact environment and package first.",
+    match = ["pip install requests", "pip3 install ruff", "pipx install poetry"],
+    not_match = ["pip list", "pip check"],
+)
+
+prefix_rule(
+    pattern = [["python", "python3", "py"], "-m", "pip", ["install", "uninstall"]],
+    decision = "prompt",
+    justification = "Confirm the Python environment and dependency change before installation.",
+    match = ["python -m pip install requests", "py -m pip uninstall requests"],
+    not_match = ["python -m unittest", "python -m pip list"],
 )

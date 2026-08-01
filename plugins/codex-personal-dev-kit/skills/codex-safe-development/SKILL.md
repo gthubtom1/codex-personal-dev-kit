@@ -12,12 +12,12 @@ description: 在 Git、测试、审查和权限保护下实施功能、修复、
 1. 读取当前范围内的 `AGENTS.md`、Goal、项目状态和相关源码。确认工作目录、Git 状态、分支或 Worktree，以及已有用户修改。
 2. 对中大型任务先调用 `$prepare-codex-goal`。存在独立并行工作时再调用 `$orchestrate-codex-team`。
 3. 读取 [git-policy.md](references/git-policy.md)。默认沿当前本地开发线工作并创建检查点；只有隔离实验、后台任务或并行写入确实能降低冲突时才自动创建分支或 Worktree。不得把用户未提交的无关修改混入检查点。
-4. 读取 [feature-protection.md](references/feature-protection.md)。在已有 Dev Kit 项目第一次编辑前，用 bundled `scripts/feature_guard.py` 建立当前变更契约，声明本次改变的功能 ID、需要额外验证的邻接功能和有意删除的文件。没有契约不得直接修改源码。
+4. 读取 [feature-protection.md](references/feature-protection.md)。在已有 Dev Kit 项目第一次编辑前，用 bundled `scripts/feature_guard.py` 建立当前变更契约，声明本次改变的功能 ID、邻接验证、有意删除，以及确需接管的已有脏文件。没有契约不得直接修改源码。
 5. 在编辑前确定最小影响面、回归风险和验证计划。遵循项目现有架构与工具，不顺手重构无关代码。
 6. 分成可验证的小切片实现。新增抽象必须真实减少复杂度或匹配项目现有模式。
-7. 先核对 `docs/FEATURES.md` 中受影响的现有能力，再按 [quality-gates.md](references/quality-gates.md) 运行风险相称的测试、静态检查、构建和必要的人工行为验证。
-8. 审查最终 diff：行为、边界条件、安全、兼容性、错误处理、可维护性和遗漏测试。运行 feature guard `complete`，记录已验证功能 ID 和简短证据；检查失败时不得提交或宣告完成。
-9. 每个独立且验证通过的切片可自动创建本地检查点提交，消息使用 `checkpoint: <outcome>` 或项目既有约定。只暂存本任务文件。
+7. 聚合核对 `docs/FEATURES.md` 和 `docs/features/**/*.md` 中受影响的现有能力，再按 [quality-gates.md](references/quality-gates.md) 选择风险相称的测试、静态检查、构建和行为验证。
+8. 审查最终 diff 后，用 feature guard `stage` 明确暂存任务文件，并用 `verify` 让门禁实际运行验证命令、记录退出码、功能 ID、Git tree 和内容指纹。最后运行 `complete`；自由文本不能代替成功命令。
+9. 每个独立且验证通过的切片可自动创建本地检查点提交，消息使用 `checkpoint: <outcome>` 或项目既有约定。提交必须是单独的一条 `git commit` 命令，不得与生成、编辑、暂存或其他命令串联。
 10. 更新真正发生变化的架构、状态或运行说明，然后调用 `$manage-project-continuity` 完成交接。
 
 ## 高风险路由

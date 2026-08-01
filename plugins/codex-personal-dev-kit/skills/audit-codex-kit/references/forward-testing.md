@@ -7,7 +7,7 @@
 ## 流程
 
 1. 为每个场景创建临时 Git 项目或只读 fixture。
-2. 启动全新子代理，给出自然用户请求，例如：`Use $onboard-codex-project at <path> to prepare this existing project.`
+2. 通过 Codex 原生 collaboration `spawn_agent` 启动全新子代理，给出自然用户请求，例如：`Use $onboard-codex-project at <path> to prepare this existing project.` 不得创建、分叉或转发用户可见任务来模拟前向测试代理。
 3. 不提供设计结论、已知 bug、期望修复或上一轮测试结果。
 4. 限制权限；审计、探索和方案测试保持只读。写入测试只允许临时 Worktree。
 5. 检查触发是否正确、是否读取需要的 reference、是否遵守权限、输出是否可供零基础用户理解。

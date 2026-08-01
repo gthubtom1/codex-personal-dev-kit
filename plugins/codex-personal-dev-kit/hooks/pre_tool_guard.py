@@ -132,6 +132,7 @@ def _classify_external(tokens: Sequence[str]) -> Decision:
         return Decision(False)
     base = _basename(tokens[0])
     args = [token.lower() for token in tokens[1:]]
+    executable = tokens[0].strip('"\'').replace("\\", "/").lower()
 
     if base in {"npx", "bunx"} and args:
         return _classify_tokens(tokens[1:])
@@ -141,6 +142,19 @@ def _classify_external(tokens: Sequence[str]) -> Decision:
         return _classify_tokens(tokens[2:])
     if base in {"python", "python3", "py"} and len(args) >= 3 and args[0] == "-m" and args[1] == "twine" and args[2] == "upload":
         return Decision(True, "Blocked package upload. Build and verify artifacts locally; publish manually.")
+
+    if base in {"winget", "choco", "scoop"} and any(arg in {"install", "upgrade", "update"} for arg in args[:4]):
+        return Decision(True, "Blocked automatic global software installation or upgrade. Ask the user to run the reviewed command manually.")
+    if base in {"npm", "pnpm", "yarn", "bun"} and any(arg in {"install", "i", "add"} for arg in args[:4]) and any(arg in {"-g", "--global"} for arg in args):
+        return Decision(True, "Blocked automatic global JavaScript package installation. Prefer a project-local dependency or ask the user to install it manually.")
+    if base == "yarn" and args[:2] == ["global", "add"]:
+        return Decision(True, "Blocked automatic global JavaScript package installation.")
+    if base in {"pip", "pip3", "pipx"} and any(arg in {"install", "upgrade", "uninstall"} for arg in args[:4]):
+        return Decision(True, "Blocked ambiguous system-level Python package installation. Use an explicit project virtual environment or ask the user to install it manually.")
+    if base in {"python", "python3", "py"} and len(args) >= 3 and args[:2] == ["-m", "pip"] and any(arg in {"install", "uninstall"} for arg in args[2:6]):
+        explicit_venv = "/.venv/" in executable or "/venv/" in executable
+        if not explicit_venv:
+            return Decision(True, "Blocked Python package installation outside an explicit project virtual environment.")
 
     if base == "gh" and (args[:2] == ["pr", "merge"] or args[:1] == ["release"] or args[:2] == ["repo", "delete"]):
         return Decision(True, "Blocked remote GitHub mutation. Prepare local evidence and let the user perform it manually.")
