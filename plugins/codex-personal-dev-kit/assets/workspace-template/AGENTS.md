@@ -169,3 +169,7 @@ Do not say a development request is complete until:
 - A matching local recovery point exists.
 - Current docs changed only where facts changed.
 - Remaining risk and the next user action are stated in plain language.
+
+## Beginner-safe Codex desktop settings
+
+The user does not configure local environments, setup/cleanup scripts, Worktrees, Git branch prefixes, merge strategies, force-push, draft pull requests, or prompt boxes. Use the current project checkout for routine work. Create a Worktree only for real parallel isolation, and treat it as a temporary copy rather than a version or recovery point. Generate setup actions only after onboarding verifies the project's commands; keep cleanup empty unless it is demonstrably safe. Keep force-push and automatic draft PR creation off, and let the development Skills own local checkpoints and review.
