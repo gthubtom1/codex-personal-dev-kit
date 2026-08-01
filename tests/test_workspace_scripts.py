@@ -49,6 +49,7 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertEqual(config["projectsDirectory"], "projects")
 
             agents = workspace / "AGENTS.md"
+            self.assertIn("Existing-project development never starts from this mother folder", agents.read_text(encoding="utf-8"))
             agents.write_text(agents.read_text(encoding="utf-8") + "\nCUSTOM-WORKSPACE-RULE\n", encoding="utf-8")
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
             self.assertIn("CUSTOM-WORKSPACE-RULE", agents.read_text(encoding="utf-8"))

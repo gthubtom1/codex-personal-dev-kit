@@ -19,8 +19,9 @@ Mother Folder
 └── archives/
 ```
 
-- 母文件夹只负责创建、总览和归档，不建立总 Git 仓库。
+- 母文件夹只负责创建、总览和归档，不建立总 Git 仓库，也不作为已有项目的开发入口。
 - 每个项目独立 Git、独立 Codex Local Project、独立任务和文档。
+- 用户继续或修改已有项目时，先在 Codex 中打开该项目文件夹；母文件夹不替用户选择或进入项目。
 - 新项目创建完成后在该项目文件夹开启新任务，使项目 `AGENTS.md` 和 `.codex/config.toml` 在新运行中正确加载。
 - 不使用容易漂移的 `projects.json`；项目列表由 `projects/` 目录实时发现。
 - Dev Kit 通过 Plugin 安装一次并全局复用。
@@ -44,7 +45,7 @@ Mother Folder
 
 ### User Front Door
 
-`codex-development-assistant` 捕获普通软件请求。它负责判断当前位于母文件夹还是项目文件夹，并在内部调用专业 Skills。
+`codex-development-assistant` 捕获普通软件请求。位于母文件夹时只创建或管理项目；位于已打开的项目文件夹时才恢复上下文并开发该项目，然后在内部调用专业 Skills。
 
 ### Internal Capabilities
 
@@ -150,7 +151,7 @@ Goal 和计划任务不扩大权限。稳定的 Skill 定义方法，计划任�
 
 ## 11. Completion Criteria
 
-- 用户只用普通语言即可创建、继续和改进项目。
+- 用户只用普通语言即可创建项目，并在打开对应项目文件夹后继续和改进该项目。
 - 新项目位于母文件夹的 `projects/` 下，并成为独立 Codex 工作文件夹和 Git 仓库。
 - 修改已有功能前后都有稳定功能 ID、临时变更契约、测试证据和 Stop 门禁。
 - 文档保持可快速定位，没有无限追加历史。

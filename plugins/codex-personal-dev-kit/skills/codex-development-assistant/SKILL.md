@@ -18,6 +18,7 @@ description: 面向零基础用户的一句话软件开发入口，把“我想�
 读取 [workspace-model.md](references/workspace-model.md)：
 
 - 在母文件夹中收到“新建项目”请求时，在 `projects/<project-name>/` 创建独立项目，初始化模板和本地 Git 基线，然后要求在该项目文件夹开启新的 Codex 任务。
+- 母文件夹只处理新建、总览和归档。不要从母文件夹选择或进入某个已有项目继续开发；用户会先在 Codex 中打开对应项目文件夹。
 - 在具体项目文件夹中工作时，只读取该项目，不扫描 `projects/` 下其他项目。
 - Dev Kit 通过 Plugin 全局复用，不复制进每个项目。
 
