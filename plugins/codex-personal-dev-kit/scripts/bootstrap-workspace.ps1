@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "merge-codex-config.ps1")
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $filesystemRoot = [System.IO.Path]::GetPathRoot($workspacePath)
 if ($workspacePath.TrimEnd('\', '/') -eq $filesystemRoot.TrimEnd('\', '/')) {
@@ -35,8 +36,17 @@ $targets = @(
 )
 
 $preview = foreach ($target in $targets) {
+    $action = if (-not (Test-Path -LiteralPath $target.Path)) {
+        "create"
+    }
+    elseif ($target.Type -eq "file" -and $target.Path -eq (Join-Path $workspacePath ".codex\config.toml")) {
+        "merge"
+    }
+    else {
+        "keep"
+    }
     [pscustomobject]@{
-        Action = if (Test-Path -LiteralPath $target.Path) { "keep" } else { "create" }
+        Action = $action
         Type = $target.Type
         Path = $target.Path
     }
@@ -50,6 +60,14 @@ if (-not $Apply) {
 New-Item -ItemType Directory -Path $workspacePath -Force | Out-Null
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($target in $targets) {
+    if ($target.Type -eq "file" -and $target.Path -eq (Join-Path $workspacePath ".codex\config.toml") -and (Test-Path -LiteralPath $target.Path)) {
+        $existing = [System.IO.File]::ReadAllText($target.Path)
+        $merged = Merge-CodexNativeAgentDefaults -Content $existing
+        if ($merged -ne $existing) {
+            [System.IO.File]::WriteAllText($target.Path, $merged, $utf8NoBom)
+        }
+        continue
+    }
     if (Test-Path -LiteralPath $target.Path) {
         continue
     }

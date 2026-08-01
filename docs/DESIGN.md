@@ -46,7 +46,7 @@ Mother Folder
 ### Verified Codex Runtime Facts
 
 - Codex automatically loads one global instruction file from `~/.codex`, then discovers project instructions from the selected project root down to the working directory. When an individual project under `D:\开发\projects\` is the Git/project root, the parent `D:\开发\AGENTS.md` is not automatically discovered; the short global file must explicitly require reading it.
-- Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. Templates default to Luna/max and allow six concurrent subagent threads; the main model is independent and explicit per-call Sol/Luna selections are allowed, but every subagent must use `max`.
+- Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. The Dev Kit repository and generated templates default to Luna/max and allow six concurrent subagent threads; existing project/workspace configs are merged in place without changing a top-level main-model choice. The main model is independent and explicit per-call Sol/Luna selections are allowed, but every subagent must use `max` with the required fork override rule.
 - 本 Dev Kit 不安装生命周期 Hook，避免任何工具匹配器改变 Codex 原生 subagent、任务、浏览器或文件编辑语义；需要保护时由 Skill 调用显式脚本。
 - `AGENTS.md` should stay small and route to focused Skills or references. Project state is split across concise current documents instead of expanding one permanent transcript.
 

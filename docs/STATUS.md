@@ -17,6 +17,7 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 - Unit tests cover feature contracts, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, legacy-state detection, project creation, secret-aware first baselines, and native-subagent boundaries.
 - PowerShell parsing, Python/JSON/TOML structural checks, unresolved placeholder checks, and the no-obsolete-artifact check pass after the cleanup is completed.
 - Native subagent policy defaults to Luna/max, supports multiple parallel agents and explicit Sol/Luna rosters at max; no custom Agent or visible-task replacement is shipped.
+- Existing project and workspace Codex configs receive the native agent defaults in place while preserving any top-level main-model choice; explicit model overrides use the required fork-depth parameter.
 
 ## Current Limitations
 
@@ -27,4 +28,4 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 
 ## Next Action
 
-Run the full repository validation, create the verified local cleanup checkpoint, then separately decide whether to migrate any old files still present under the user's global `~/.codex` directory. Do not change that global state automatically.
+Open a new Codex task in a real project folder and verify the beginner-facing flow there; change this Dev Kit only for an observed workflow failure. Do not migrate unrelated files under the user's global `~/.codex` directory automatically.

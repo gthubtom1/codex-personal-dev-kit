@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "merge-codex-config.ps1")
 
 function Get-SafeFullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -167,8 +168,17 @@ $templateFiles = Get-ChildItem -LiteralPath $templateRoot -Recurse -Force -File
 $actions = foreach ($source in $templateFiles) {
     $relative = $source.FullName.Substring($templateRoot.Length).TrimStart('\', '/')
     $destination = Join-Path $projectPath $relative
+    $action = if (-not (Test-Path -LiteralPath $destination)) {
+        "create"
+    }
+    elseif ($relative.Replace('\', '/') -eq ".codex/config.toml") {
+        "merge"
+    }
+    else {
+        "keep"
+    }
     [pscustomobject]@{
-        Action = if (Test-Path -LiteralPath $destination) { "keep" } else { "create" }
+        Action = $action
         Path = $destination
         Source = $source.FullName
     }
@@ -189,6 +199,14 @@ if (-not $Apply) {
 New-Item -ItemType Directory -Path $projectPath -Force | Out-Null
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($action in $actions) {
+    if ($action.Action -eq "merge") {
+        $existing = [System.IO.File]::ReadAllText($action.Path)
+        $merged = Merge-CodexNativeAgentDefaults -Content $existing
+        if ($merged -ne $existing) {
+            [System.IO.File]::WriteAllText($action.Path, $merged, $utf8NoBom)
+        }
+        continue
+    }
     if ($action.Action -ne "create") {
         continue
     }

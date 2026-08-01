@@ -37,6 +37,19 @@ class WorkspaceScriptTests(unittest.TestCase):
 
     def test_workspace_preview_apply_idempotence_and_independent_projects(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            legacy_workspace = Path(directory) / "legacy-mother"
+            (legacy_workspace / ".codex").mkdir(parents=True)
+            (legacy_workspace / ".codex/config.toml").write_text(
+                'model = "gpt-5.5"\n\n[features]\ngoals = true\n',
+                encoding="utf-8",
+            )
+            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(legacy_workspace), "-Apply")
+            legacy_config = (legacy_workspace / ".codex/config.toml").read_text(encoding="utf-8")
+            self.assertIn('model = "gpt-5.5"', legacy_config)
+            self.assertIn('default_subagent_model = "gpt-5.6-luna"', legacy_config)
+            self.assertIn('default_subagent_reasoning_effort = "max"', legacy_config)
+            self.assertIn("max_concurrent_threads_per_session = 6", legacy_config)
+
             workspace = Path(directory) / "mother"
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace))
             self.assertFalse(workspace.exists())
@@ -110,6 +123,11 @@ class WorkspaceScriptTests(unittest.TestCase):
             project.mkdir()
             readme = project / "README.md"
             readme.write_text("# Existing user project\n", encoding="utf-8")
+            (project / ".codex").mkdir()
+            (project / ".codex/config.toml").write_text(
+                'model = "gpt-5.5"\n\n[features]\ngoals = true\n',
+                encoding="utf-8",
+            )
 
             self.run_script(
                 "bootstrap-project.ps1",
@@ -125,6 +143,11 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertTrue((project / "AGENTS.md").is_file())
             self.assertTrue((project / "docs/FEATURES.md").is_file())
             self.assertFalse((project / ".codex/hooks.json").exists())
+            project_config = (project / ".codex/config.toml").read_text(encoding="utf-8")
+            self.assertIn('model = "gpt-5.5"', project_config)
+            self.assertIn('default_subagent_model = "gpt-5.6-luna"', project_config)
+            self.assertIn('default_subagent_reasoning_effort = "max"', project_config)
+            self.assertIn("max_concurrent_threads_per_session = 6", project_config)
             self.assertEqual(self.git(project, "rev-parse", "--show-toplevel").returncode, 0)
             self.assertEqual(self.git(project, "log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: initialize project")
             self.assertEqual(self.git(project, "status", "--porcelain").stdout.strip(), "")

@@ -82,6 +82,7 @@ class OrchestrationRoutingTests(unittest.TestCase):
         workspace_agents = (PLUGIN / "assets/workspace-template/AGENTS.md").read_text(encoding="utf-8")
         workspace_config = (PLUGIN / "assets/workspace-template/.codex/config.toml").read_text(encoding="utf-8")
         project_config = (PLUGIN / "assets/project-template/.codex/config.toml").read_text(encoding="utf-8")
+        repo_config = (ROOT / ".codex/config.toml").read_text(encoding="utf-8")
         short_agents = (PLUGIN / "assets/standalone/AGENTS.md").read_text(encoding="utf-8")
 
         for text in (
@@ -90,6 +91,7 @@ class OrchestrationRoutingTests(unittest.TestCase):
             workspace_agents,
             workspace_config,
             project_config,
+            repo_config,
             short_agents,
         ):
             self.assertIn("gpt-5.6-luna", text)
@@ -103,11 +105,13 @@ class OrchestrationRoutingTests(unittest.TestCase):
         self.assertIn("每个子代理的推理强度必须为 `max`", orchestration_skill)
         self.assertIn("2 个 Sol、3 个 Luna", orchestration_skill)
         self.assertIn("gpt-5.6-sol", orchestration_skill)
+        self.assertIn('fork_turns="none"', orchestration_skill)
+        self.assertIn("正整数 fork 深度", routing)
         self.assertIn("用户明确指定 Sol/Luna 数量", routing)
         self.assertIn("2 Sol and 3 Luna", workspace_agents)
         self.assertIn("run it in waves", workspace_agents)
         self.assertIn("分波次执行", (PLUGIN / "assets/standalone/AGENTS.md").read_text(encoding="utf-8"))
-        for config in (workspace_config, project_config):
+        for config in (workspace_config, project_config, repo_config):
             self.assertNotRegex(config, r"(?m)^model\s*=")
             self.assertRegex(config, r"(?m)^max_concurrent_threads_per_session\s*=\s*[2-9]\d*\s*$")
         self.assertNotIn("`codex_kit_reviewer`", orchestration_skill)

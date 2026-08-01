@@ -48,7 +48,7 @@
 - 详细的母文件夹 `D:\开发\AGENTS.md`：保存完整工作流、目录模型、需求拓展、架构、Git、文档、任务和原生 subagent 规则。
 - 七个 Codex standalone Skills：一个普通语言入口和六个专业能力，不依赖 Plugin 才能使用。
 - 中央运行时 `~/.codex/codex-dev-kit/`：Git 检查、诊断、模板和脚本；项目只引用已验证的中央运行时，不复制整套框架。
-- 母文件夹和项目 `.codex/config.toml`：启用原生 multi-agent，默认子代理为 `gpt-5.6-luna`/`max`，并允许多个并行子代理；主对话模型由用户选择。
+- 母文件夹和项目 `.codex/config.toml`：启用原生 multi-agent，默认子代理为 `gpt-5.6-luna`/`max`，并允许多个并行子代理；已有配置会合并这些子代理默认值但保留主对话模型，主对话模型由用户选择。
 - 不使用 Dev Kit Plugin、项目生命周期 Hook 或自定义 Agent；Codex 原生能力和 standalone Skills 是唯一运行入口。
 
 ## 本地开发

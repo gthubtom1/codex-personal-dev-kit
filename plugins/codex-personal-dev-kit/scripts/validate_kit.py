@@ -48,6 +48,7 @@ def main() -> int:
         "scripts/feature_guard.py",
         "scripts/pre_tool_guard.py",
         "scripts/audit_project.py",
+        "scripts/merge-codex-config.ps1",
         "scripts/bootstrap/resolve-codex-cli.ps1",
     ):
         if not (kit_root / relative).is_file():
@@ -59,6 +60,7 @@ def main() -> int:
     if not standalone_agents.is_file() or "{{WORKSPACE_AGENTS_PATH}}" not in standalone_agents.read_text(encoding="utf-8"):
         errors.append("Short standalone AGENTS template must point to the detailed mother-folder AGENTS.md")
     for config_path in (
+        repo_root / ".codex/config.toml",
         kit_root / "assets/workspace-template/.codex/config.toml",
         kit_root / "assets/project-template/.codex/config.toml",
     ):
@@ -73,6 +75,8 @@ def main() -> int:
         concurrency = re.search(r"(?m)^max_concurrent_threads_per_session\s*=\s*(\d+)\s*$", config_text)
         if not concurrency or int(concurrency.group(1)) < 2:
             errors.append(f"Subagent concurrency must allow multiple agents: {config_path}")
+        if re.search(r"(?m)^model\s*=", config_text):
+            errors.append(f"Main conversation model must remain user-selectable: {config_path}")
 
     skill_root = kit_root / "skills"
     actual_skills = {path.name for path in skill_root.iterdir() if path.is_dir()}
