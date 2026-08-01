@@ -27,6 +27,9 @@ RECOVERY_NEXT_ACTION_MAX_CHARS = 700
 RECOVERY_PACKET_MAX_CHARS = 3600
 MAX_VERIFICATION_RUNS = 20
 MAX_COMMAND_CHARS = 2000
+MAX_CHECKPOINT_MESSAGE_CHARS = 240
+CHECKPOINT_AUTHOR_NAME = "Codex Dev Kit"
+CHECKPOINT_AUTHOR_EMAIL = "codex-dev-kit@local.invalid"
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
     ".js", ".jsx", ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts",
@@ -524,6 +527,121 @@ def _verification_is_committed(root: Path, contract: dict) -> bool:
     return tree.stdout.strip() == contract.get("verifiedIndexTree") and parent_ids == expected_parents
 
 
+def _checkpoint_message(value: str | None, fallback: str) -> str:
+    message = " ".join((value or fallback).split())
+    if not message:
+        raise GuardError("Checkpoint message must describe the saved outcome.")
+    if not message.lower().startswith("checkpoint:"):
+        message = "checkpoint: " + message
+    if len(message) > MAX_CHECKPOINT_MESSAGE_CHARS:
+        message = message[: MAX_CHECKPOINT_MESSAGE_CHARS - 3].rstrip() + "..."
+    return message
+
+
+def _commit_with_local_identity(root: Path, message: str) -> str:
+    result = _run_git(
+        root,
+        "-c",
+        f"user.name={CHECKPOINT_AUTHOR_NAME}",
+        "-c",
+        f"user.email={CHECKPOINT_AUTHOR_EMAIL}",
+        "commit",
+        "--no-gpg-sign",
+        "-m",
+        message,
+    )
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or result.stdout.strip() or "Unable to create the local checkpoint.")
+    head = _git_head(root)
+    if not head:
+        raise GuardError("Git did not report the new local checkpoint.")
+    return head
+
+
+def create_checkpoint(root: Path, message: str | None = None) -> str:
+    contract = _read_contract(root)
+    if not contract:
+        raise GuardError("No verified current change exists to save as a local recovery point.")
+    if contract.get("state") != "verified":
+        raise GuardError("Complete feature regression verification before creating the local recovery point.")
+    if _verification_is_committed(root, contract):
+        head = _git_head(root)
+        _contract_path(root).unlink(missing_ok=True)
+        return head or ""
+    if not _verification_still_matches(root, contract):
+        raise GuardError("The project changed after verification. Reopen, recheck, and complete it again before saving a recovery point.")
+
+    checkpoint = _commit_with_local_identity(
+        root,
+        _checkpoint_message(message, contract.get("objective", "verified change")),
+    )
+    if not _verification_is_committed(root, contract):
+        raise GuardError("The new commit does not match the verified project snapshot. Keep the contract and inspect the commit before continuing.")
+    _contract_path(root).unlink(missing_ok=True)
+    return checkpoint
+
+
+def _working_tree_status(root: Path) -> list[str]:
+    result = _run_git(root, "status", "--porcelain=v1", "--untracked-files=all")
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Unable to inspect the Git working tree.")
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def rollback_last_checkpoint(root: Path, message: str | None = None) -> str:
+    contract = _read_contract(root)
+    if contract:
+        if contract.get("state") == "verified" and _verification_is_committed(root, contract):
+            _contract_path(root).unlink(missing_ok=True)
+        else:
+            raise GuardError("Finish or preserve the current change before returning to an earlier version.")
+
+    pending = _working_tree_status(root)
+    if pending:
+        preview = ", ".join(line[3:].strip() for line in pending[:8])
+        suffix = " ..." if len(pending) > 8 else ""
+        raise GuardError(
+            "The project has unsaved changes. Create a recovery point before rollback so nothing is lost: "
+            + preview
+            + suffix
+        )
+
+    head = _git_head(root)
+    parent = _run_git(root, "rev-parse", "HEAD^")
+    if not head or parent.returncode != 0:
+        raise GuardError("There is no earlier local version to return to.")
+    parent_id = parent.stdout.strip()
+    parent_tree = _run_git(root, "rev-parse", f"{parent_id}^{{tree}}")
+    if parent_tree.returncode != 0:
+        raise GuardError(parent_tree.stderr.strip() or "Unable to inspect the previous local version.")
+
+    applied = _run_git(root, "revert", "--no-commit", head)
+    if applied.returncode != 0:
+        _run_git(root, "revert", "--abort")
+        raise GuardError(
+            "Git could not safely return to the previous version and restored the current one. "
+            + (applied.stderr.strip() or applied.stdout.strip())
+        )
+
+    try:
+        if _index_tree(root) != parent_tree.stdout.strip():
+            raise GuardError("The rollback result did not exactly match the previous version.")
+        if _run_git(root, "diff", "--name-only", "--").stdout.strip():
+            raise GuardError("The rollback left unstaged file changes, so it was not saved.")
+        checkpoint = _commit_with_local_identity(
+            root,
+            _checkpoint_message(message, f"return to previous version {parent_id[:8]}"),
+        )
+    except GuardError:
+        _run_git(root, "revert", "--abort")
+        raise
+
+    committed_tree = _run_git(root, "rev-parse", "HEAD^{tree}")
+    if committed_tree.returncode != 0 or committed_tree.stdout.strip() != parent_tree.stdout.strip():
+        raise GuardError("The rollback commit was created, but its content does not exactly match the previous version. Inspect it before continuing.")
+    return checkpoint
+
+
 def start_contract(
     root: Path,
     objective: str,
@@ -539,8 +657,12 @@ def start_contract(
         raise GuardError("Objective is too long; keep the current change contract under 500 characters.")
 
     existing = _read_contract(root)
-    if existing and existing.get("state") == "open":
-        raise GuardError("A change contract is already open. Resume it or cancel it only after restoring its baseline.")
+    if existing:
+        if existing.get("state") == "open":
+            raise GuardError("A change contract is already open. Resume it or cancel it only after restoring its baseline.")
+        if not _verification_is_committed(root, existing):
+            raise GuardError("The previous verified change has not been saved as a local recovery point. Create its checkpoint before starting another change.")
+        _contract_path(root).unlink(missing_ok=True)
 
     features = read_feature_catalog(root)
     changed_ids = _split_values(changed)
@@ -1012,11 +1134,10 @@ def _is_guard_command(command: str) -> bool:
     )
     if script_index is None or script_index + 1 >= len(tokens):
         return False
-    return tokens[script_index + 1].lower() in {"start", "status", "stage", "verify", "complete", "reopen", "allow-delete", "cancel", "close"}
-
-
-def _is_git_commit(command: str) -> bool:
-    return re.search(r"(?i)(?:^|[;&|]\s*)git(?:\.exe)?(?:\s+-[Cc]\s+\S+|\s+-c\s+\S+)*\s+commit\b", command) is not None
+    return tokens[script_index + 1].lower() in {
+        "start", "status", "stage", "verify", "complete", "checkpoint", "rollback",
+        "reopen", "allow-delete", "cancel", "close",
+    }
 
 
 def _shell_segments(command: str) -> list[list[str]]:
@@ -1082,41 +1203,6 @@ def _has_git_subcommand(command: str, expected: str) -> bool:
     return any(_git_subcommand(segment) == expected for segment in _shell_segments(command))
 
 
-def _is_standalone_git_commit(command: str) -> bool:
-    segments = _shell_segments(command)
-    return not _has_shell_control(command) and len(segments) == 1 and _git_subcommand(segments[0]) == "commit"
-
-
-def _commit_command_error(command: str) -> str | None:
-    segments = _shell_segments(command)
-    if _has_shell_control(command) or len(segments) != 1:
-        return "git commit must be the only command and may not use redirection, pipes, separators, or newlines."
-    subcommand, args = _git_subcommand_and_args(segments[0])
-    if subcommand != "commit":
-        return "The checkpoint command is not a standalone git commit."
-
-    allowed_flags = {"-q", "--quiet", "-s", "--signoff", "--allow-empty", "--allow-empty-message", "--no-gpg-sign"}
-    expects_message = False
-    for argument in args:
-        lower = argument.lower()
-        if expects_message:
-            expects_message = False
-            continue
-        if lower in {"-m", "--message"}:
-            expects_message = True
-            continue
-        if lower.startswith("-m") and len(argument) > 2:
-            continue
-        if lower.startswith("--message=") or lower.startswith("--cleanup=") or lower.startswith("--gpg-sign="):
-            continue
-        if lower in allowed_flags:
-            continue
-        return "The verified checkpoint may not auto-stage files, bypass hooks, amend history, or include pathspecs. Use only message/signing options on git commit."
-    if expects_message:
-        return "git commit -m requires a checkpoint message."
-    return None
-
-
 def _looks_like_mutation(command: str) -> bool:
     patterns = [
         r"(?i)\bgit(?:\.exe)?(?:\s+-[Cc]\s+\S+|\s+-c\s+\S+)*\s+(?:add|commit|reset|rm|mv|update-index)\b",
@@ -1166,31 +1252,30 @@ def hook_main() -> int:
         if not isinstance(command, str):
             command = ""
 
-        is_patch = tool_name == "apply_patch"
+        normalized_tool_name = str(tool_name or "").lower()
+        is_file_edit = normalized_tool_name in {"apply_patch", "edit", "write"}
         is_commit = tool_name == "Bash" and _has_git_subcommand(command, "commit")
-        is_standalone_commit = tool_name == "Bash" and _is_standalone_git_commit(command)
-        commit_error = _commit_command_error(command) if is_commit else None
-        is_mutation = is_patch or (tool_name == "Bash" and (_looks_like_mutation(command) or is_commit))
+        is_revert = tool_name == "Bash" and _has_git_subcommand(command, "revert")
+        is_mutation = is_file_edit or (tool_name == "Bash" and (_looks_like_mutation(command) or is_commit))
         if tool_name == "Bash" and _is_guard_command(command):
             return 0
         if tool_name == "Bash" and _has_git_subcommand(command, "add"):
             _deny("Do not run raw git add in a managed project. Stage explicit task files through feature_guard.py stage so pre-existing user work cannot enter the checkpoint.")
+            return 0
+        if is_commit:
+            _deny("Do not run raw git commit in a managed project. Use feature_guard.py checkpoint after verification so the exact verified snapshot is saved with a local recovery identity.")
+            return 0
+        if is_revert:
+            _deny("Do not run raw git revert for a beginner-managed rollback. Use feature_guard.py rollback so unsaved work is protected and the previous version remains recoverable.")
             return 0
         if not is_mutation:
             return 0
         if not contract:
             _deny("Start the Dev Kit current change contract before modifying this existing project. This records which accepted features must survive the change.")
             return 0
-        if contract.get("state") == "verified" and not is_commit:
+        if contract.get("state") == "verified":
             _deny("The current change was already sealed for verification. Run feature_guard.py reopen before making another edit, then verify again.")
             return 0
-        if is_commit:
-            if not is_standalone_commit or commit_error:
-                _deny(commit_error or "After verification, git commit must be the only command in the tool call.")
-            elif contract.get("state") != "verified":
-                _deny("Complete feature regression verification before creating the checkpoint commit.")
-            elif not _verification_still_matches(root, contract):
-                _deny("The project changed after feature verification. Reopen and complete the current change contract again before committing.")
         return 0
 
     if event == "Stop":
@@ -1212,6 +1297,15 @@ def hook_main() -> int:
                 {
                     "decision": "block",
                     "reason": "Do not finish yet. Files changed after the recorded regression verification. Reopen the feature guard, recheck affected behavior, and complete it again.",
+                },
+                sys.stdout,
+                ensure_ascii=False,
+            )
+        elif not _verification_is_committed(root, contract):
+            json.dump(
+                {
+                    "decision": "block",
+                    "reason": "Do not finish yet. The verified change has not been saved as a local recovery point. Run feature_guard.py checkpoint --root . --message \"checkpoint: <outcome>\"; it uses a one-time local identity and does not create a new branch.",
                 },
                 sys.stdout,
                 ensure_ascii=False,
@@ -1278,6 +1372,14 @@ def main() -> int:
     complete.add_argument("--verified", action="append", default=[])
     complete.add_argument("--evidence", action="append", default=[])
 
+    checkpoint = subparsers.add_parser("checkpoint", help="Save the exact verified snapshot as a local recovery point")
+    checkpoint.add_argument("--root", default=".")
+    checkpoint.add_argument("--message")
+
+    rollback = subparsers.add_parser("rollback", help="Return to the previous committed version with a new reversible checkpoint")
+    rollback.add_argument("--root", default=".")
+    rollback.add_argument("--message")
+
     reopen = subparsers.add_parser("reopen", help="Reopen a verified contract before more edits")
     reopen.add_argument("--root", default=".")
 
@@ -1318,6 +1420,12 @@ def main() -> int:
         elif args.command == "complete":
             contract = complete_contract(root, args.verified, args.evidence)
             print("Feature guard verified. Evidence: " + "; ".join(contract.get("verificationEvidence", [])))
+        elif args.command == "checkpoint":
+            checkpoint_id = create_checkpoint(root, args.message)
+            print(f"Local recovery point created: {checkpoint_id[:12]}")
+        elif args.command == "rollback":
+            checkpoint_id = rollback_last_checkpoint(root, args.message)
+            print(f"Returned to the previous version with recovery point: {checkpoint_id[:12]}")
         elif args.command == "reopen":
             print(_contract_summary(reopen_contract(root)))
         elif args.command == "allow-delete":

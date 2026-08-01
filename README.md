@@ -35,27 +35,42 @@
 - `docs/FEATURES.md`、临时变更契约、测试和 Git 共同保护已有功能；未建立契约不能直接改源码，旧功能未复核不能结束任务或创建检查点。
 - FEATURES 可按领域拆到 `docs/features/`，门禁会聚合读取并拒绝重复 ID；检查点只接收明确暂存的任务文件，并绑定门禁实际运行的测试命令和内容指纹。
 - 默认只有一个源码写入者并沿当前开发线创建本地回退点，减少分支合并冲突。
+- Git 缺失时会自动初始化并建立安全基线；每次验证完成后 Stop 门禁要求真正保存本地回退点，不会只留下几千个未提交文件，也不会用 `codex/v1`、`codex/v2` 分支冒充版本历史。
+- 用户可以直接说“回到上一个版本”。助手会先保护未保存工作，再用一个新的恢复提交回到上一回退点，不改写或删除历史。
 - 子代理只使用 Codex 当前任务内的原生 collaboration 能力；不会用侧边栏新任务、聊天、跨任务消息或 Handoff 假装子代理。
+- Dev Kit 只编排原生 subagent、任务、Worktree、Git 审查面板和 Appshots，不拦截 `Agent` 工具，也不注册另一套代理接口。
 - 一个 Codex 任务只负责一个连贯成果；启动、恢复或压缩后先得到有上限的当前事实包，再从短状态、功能地图、相关架构、测试和 Git 恢复。
 - 项目文档保存当前事实并覆盖更新；复杂任务最多保留一个临时计划，不保存聊天全文、原始日志或无限增长的开发流水账。
 
-## Plugin 内容
+## 系统内容
 
-- 一个用户入口：`codex-development-assistant`
-- 六个内部能力：项目接入、Goal 准备、团队编排、安全开发、项目连续性、系统审计
-- Plugin Hook 和 Codex Rules：阻止破坏性命令，并在编辑、上下文压缩、提交和结束任务时执行功能保全门禁
-- 工作区与项目模板、原生 subagent 的专业只读角色提示、安装/诊断/审计/验证脚本
+- 简短的全局 `~/.codex/AGENTS.md`：只保存零基础用户约定、关键安全边界和详细规则入口。
+- 详细的母文件夹 `D:\开发\AGENTS.md`：保存完整工作流、目录模型、需求拓展、架构、Git、文档、任务和原生 subagent 规则。
+- 七个 Codex standalone Skills：一个普通语言入口和六个专业能力，不依赖 Plugin 才能使用。
+- 中央运行时 `~/.codex/codex-dev-kit/`：Git 门禁、诊断、模板和脚本；项目 Hook 优先固定指向这个已安装版本，不复制整套框架，也不长期依赖可能被移动或改脏的源码 checkout。
+- 项目级 `.codex/hooks.json`：只匹配 Shell 和文件编辑，不匹配 `Agent`、`spawn_agent` 或任务工具。
+- 母文件夹和项目 `.codex/config.toml`：启用原生 multi-agent，并把 subagent 默认固定为 `gpt-5.6-luna`、推理强度 `max`。
+- 可选 Plugin 只作为七个 Skills 的分发包装，不包含 Hook、自定义 Agent、MCP 或 App。
 
 ## 本地开发
 
 本仓库不会自动修改 `~/.codex`。脚本默认只预览，显式 `-Apply` 才写入目标位置，并在更新已有托管文件前创建备份。
 
 ```powershell
-# 创建母文件夹结构
+# 预览母文件夹结构
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\bootstrap-workspace.ps1 -WorkspaceRoot D:\开发
 
-# 创建一个独立项目
+# 确认后真正创建母文件夹结构
+powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\bootstrap-workspace.ps1 -WorkspaceRoot D:\开发 -Apply
+
+# 预览 standalone 安装；确认后追加 -Apply
+powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source (Resolve-Path .)
+
+# 预览创建一个独立项目
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\create-project.ps1 -WorkspaceRoot D:\开发 -ProjectName my-app
+
+# 确认后真正创建项目、Git 和首个本地回退点
+powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\create-project.ps1 -WorkspaceRoot D:\开发 -ProjectName my-app -Apply
 
 # 验证 Dev Kit
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\validate-kit.ps1
@@ -63,15 +78,17 @@ powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\script
 
 ## GitHub 分发
 
-发布后使用固定 Tag 或 commit 安装 Marketplace，禁止从未固定的 `main` 自动下载：
+主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局规则、standalone Skills、中央运行时和 Rules；它不会启用 Plugin、全局 Hook 或自定义智能体。
 
 ```text
-codex plugin marketplace add OWNER/codex-dev-kit --ref v0.1.0
-codex plugin add codex-personal-dev-kit@codex-dev-kit
+git clone --branch v0.1.0 --depth 1 <repository> codex-dev-kit
+powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 
-安装或更新 Plugin 后必须开启新 Codex 任务。Plugin Hooks 还需要在 Codex 的 Hook 审查界面确认信任。
+安装或更新后必须开启新 Codex 任务，让全局规则、Skills 和配置重新加载。项目第一次打开时，Codex 仍可能要求确认项目级 Hook。
 
-本地开发 Marketplace 使用目录路径且不带 `--ref`；全局 Profile 的 `source.json` 会另外记录该目录的真实 Git HEAD 和插件版本。`diagnose.ps1` 会检查本地源码是否变脏或漂移。GitHub Marketplace 才使用固定 Tag/commit 的 `--ref`。
+安装器会独立查询 Codex 当前已安装的 Plugin，即使旧 `source.json` 已缺失或使用自定义 Marketplace，也不会漏过任何 `codex-personal-dev-kit@*`。检测到旧 Plugin、`codex-kit-*.toml` 或旧全局 Hook 时默认停止，避免新旧系统叠加。只有在确认预览目标后才使用 `-MigrateLegacy -Apply`；安装器先完整写入并核验 standalone 文件，再备份和切换旧状态，最后通过 Codex CLI 移除旧 Plugin。混合 `hooks.json` 只删除同时匹配已知 Dev Kit 根路径与已知 guard 调用的处理器，保留其他用户 Hook；模糊引用会停止等待人工检查。全局 `AGENTS.md` 的托管标记损坏或重复时也会停止，不追加重复规则块。
+
+可选的 Marketplace Plugin 只用于打包 Skills，不是运行本系统的前提，也不应包含 Hook、自定义 Agent、MCP 或 App。
 
 完整设计见 `docs/DESIGN.md`。

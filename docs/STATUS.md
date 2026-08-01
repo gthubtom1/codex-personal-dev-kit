@@ -2,36 +2,29 @@
 
 ## Milestone
 
-The beginner-first Codex Personal Dev Kit is hardened against fabricated verification, mixed checkpoints, feature-map splits, context loss, unsafe global installs, local Marketplace drift, and accidental replacement of native subagents with user-visible tasks.
+The Codex Personal Dev Kit now uses a two-layer instruction model and standalone Codex Skills as the primary runtime. It is designed for a complete beginner while preserving Codex native subagents, tasks, Worktrees, Git UI, Appshots, configuration, and Hooks.
 
 ## Working State
 
-- Branch/worktree: `main`, one writer, one Worktree.
-- Source candidate: `codex-personal-dev-kit` version `0.1.0+codex.20260801171741` in this repository.
-- Installed Plugin: version `0.1.0+codex.20260801163726` from local Marketplace `codex-dev-kit`; it remains active until the verified candidate is explicitly reinstalled and a new Codex task starts.
-- Global profile: managed `AGENTS.md` block, four specialist agents, safety Rules, and reference fragments installed under `C:\Users\Administrator\.codex`.
-- Global backup: the previous `AGENTS.md` is under `C:\Users\Administrator\.codex\backups\codex-dev-kit\20260801-151604`.
+- Source candidate: `codex-personal-dev-kit` version `0.1.0+codex.20260801171741` on `main`, one writer, one Worktree.
+- Mother folder: `D:\开发\AGENTS.md` contains the detailed system and `D:\开发\.codex\config.toml` enables native multi-agent defaults with `gpt-5.6-luna` and reasoning effort `max`.
+- Global installation: the standalone short `~/.codex/AGENTS.md`, Skills, runtime, and Rules have not been installed in this task because global Codex changes require explicit permission.
+- Legacy local state: `codex plugin list` does not currently list Codex Personal Dev Kit as installed, no global Dev Kit Hook is present, but four old `codex-kit-*.toml` files and legacy `source.json` metadata remain under `~/.codex` until an approved migration.
 
 ## Verified
 
-- Seven Skills pass the official Skill validator.
-- The Plugin passes the official Plugin validator.
-- Thirty-three automated tests cover exact-tree/content verification, explicit staging and dirty-baseline isolation, mid-task feature-scope promotion, composite/auto-staging commit rejection, new and split feature maps, bounded startup/resume/compact/clear recovery, uncommitted-contract preservation, generic document-bloat audits, command safety, local/Git Marketplace handling, HEAD/worktree/version diagnostics, project creation, preservation, idempotence, and the native-subagent versus visible-task boundary.
-- Python, JSON, TOML, and PowerShell syntax checks pass.
-- The Rules parser checks pass through the runnable Codex Desktop CLI resolved from its local bin directory.
-- The real `D:\开发` mother folder was initialized without a Git repository.
-- `codex plugin list` reports the local Plugin installed and enabled.
-- The installed cached Hook generates a capped recovery packet with a reserved `Next Action`, aggregated FEATURES routing, current change scope, Git state, and latest checkpoint.
-- Installed Rules and Hook protection reject remote/destructive actions and automatic global installs; dependency changes require explicit review.
-- Local source diagnosis checks Marketplace identity, pinned HEAD, clean worktree, source/marker/cache/active Plugin version, and enabled state.
-- Orchestration routing now requires native collaboration `spawn_agent` for subagents and explicitly forbids `create_thread`, `fork_thread`, cross-task messages, or Handoff as substitutes.
+- Current official Codex behavior was checked for global/project `AGENTS.md` discovery, `[agents]` subagent defaults, `gpt-5.6-luna`, `max`, multi-agent settings, and Hook matching behavior.
+- Seven standalone Skills pass the official Skill validator; the optional Skills-only Plugin passes the official Plugin validator and contains no lifecycle Hook, custom agent, MCP, or App surface.
+- Fifty-three automated tests cover feature regression contracts, native apply_patch/Edit/Write mutation enforcement, exact verified checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, generic document-bloat audits, dangerous command protection, standalone install/update/diagnosis, installed-versus-not-installed Plugin status parsing, metadata-restored custom workspace roots, all-Marketplace Plugin-only legacy detection, damaged managed-marker rejection before legacy switching, exact-versus-ambiguous Hook migration handling with backups, prepare-before-switch migration ordering, central-runtime Hook pinning, project creation, secret-aware first baselines, and native-subagent versus visible-task boundaries.
+- PowerShell parsing, Python/JSON/TOML structural checks, unresolved placeholder checks, and Codex Rules parser checks pass.
+- Native current-task subagents using the current `gpt-5.6-luna/max` selection completed multiple read-only review passes. Their findings drove the legacy migration gate, stronger secret and large-text checks, exact Hook recognition, path templating, native Edit/Write enforcement, exact Luna/max orchestration policy, all-Marketplace Plugin detection, selective mixed-Hook cleanup, central-runtime Hook pinning, metadata-restored updates, README correction, and this status refresh. All reported P1/P2 findings were implemented and covered by the final verification recorded in this task.
 
 ## Current Limitations
 
-- Codex Desktop may ask the user to trust the newly installed Plugin Hooks the first time they run.
-- The current Codex task loaded the previous Plugin instructions. The routing fix can only be exercised after explicit reinstall and a new task.
-- No Git remote is configured, so the local checkpoint is recoverable on this machine but is not an off-device backup.
+- Local Git recovery protects work on this machine but is not an off-device backup.
+- Secret detection covers common named files, quoted JSON/YAML or assignment-style keys, common provider tokens, and bounded large-text handling. It remains intentionally conservative and does not replace a dedicated security scanner for release-critical projects.
+- The current Codex task began before the new mother-folder config was loaded. A new task is required for the definitive native-subagent runtime test after standalone installation.
 
 ## Next Action
 
-After the verified local checkpoint, obtain permission to reinstall version `0.1.0+codex.20260801171741`, run diagnostics, and start a new Codex task for a real native-subagent forward test. Open `D:\开发` only to create/manage projects; open `D:\开发\projects\<project>` directly to develop an existing project.
+After the verified local source checkpoint, obtain explicit permission to run the standalone installer with legacy migration, then start a new Codex task and run diagnosis plus a native `gpt-5.6-luna/max` subagent smoke test.

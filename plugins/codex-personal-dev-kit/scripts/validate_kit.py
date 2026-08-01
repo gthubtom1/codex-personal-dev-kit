@@ -31,7 +31,8 @@ def main() -> int:
     repo_root = plugin_root.parents[1]
     errors: list[str] = []
 
-    for path in [repo_root / ".agents/plugins/marketplace.json", plugin_root / ".codex-plugin/plugin.json", plugin_root / "hooks/hooks.json"]:
+    project_hooks_path = plugin_root / "assets/project-template/.codex/hooks.json"
+    for path in [repo_root / ".agents/plugins/marketplace.json", plugin_root / ".codex-plugin/plugin.json", project_hooks_path]:
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc:
@@ -43,21 +44,56 @@ def main() -> int:
     if not isinstance(manifest.get("interface", {}).get("defaultPrompt"), list):
         errors.append("interface.defaultPrompt must be an array")
 
-    hooks = json.loads((plugin_root / "hooks/hooks.json").read_text(encoding="utf-8")).get("hooks", {})
+    hooks = json.loads(project_hooks_path.read_text(encoding="utf-8")).get("hooks", {})
     for event in ("SessionStart", "PreToolUse", "Stop", "SessionEnd"):
         if event not in hooks:
             errors.append(f"Missing required hook event: {event}")
     session_matchers = [str(item.get("matcher", "")) for item in hooks.get("SessionStart", [])]
     if not any("clear" in matcher for matcher in session_matchers):
         errors.append("SessionStart Hook must restore context after clear as well as startup/resume/compact")
+    for entry in hooks.get("PreToolUse", []):
+        matcher = str(entry.get("matcher", ""))
+        if not matcher:
+            continue
+        try:
+            compiled = re.compile(matcher)
+        except re.error as exc:
+            errors.append(f"Invalid PreToolUse matcher {matcher!r}: {exc}")
+            continue
+        if compiled.search("Agent") or compiled.search("spawn_agent"):
+            errors.append("Project Hooks must not intercept Codex native subagent tools")
+    if "mcpServers" in manifest or "apps" in manifest or (plugin_root / ".mcp.json").exists() or (plugin_root / ".app.json").exists():
+        errors.append("This workflow-only Plugin must not add replacement MCP or app agent surfaces")
     for relative in (
         "scripts/feature_guard.py",
-        "hooks/pre_tool_guard.py",
+        "scripts/pre_tool_guard.py",
         "scripts/audit_project.py",
         "scripts/bootstrap/resolve-codex-cli.ps1",
     ):
         if not (plugin_root / relative).is_file():
             errors.append(f"Missing required runtime file: {relative}")
+    if (plugin_root / "hooks/hooks.json").exists():
+        errors.append("The optional Plugin must not bundle lifecycle Hooks; safeguards belong to project-local .codex/hooks.json")
+    legacy_agents = list((plugin_root / "assets/global-profile/agents").glob("codex-kit-*.toml"))
+    if legacy_agents:
+        errors.append("Standalone mode must not ship required custom agent files: " + ", ".join(path.name for path in legacy_agents))
+    if not (plugin_root / "INDEX.md").is_file():
+        errors.append("Missing standalone Dev Kit INDEX.md")
+    standalone_agents = plugin_root / "assets/standalone/AGENTS.md"
+    if not standalone_agents.is_file() or "{{WORKSPACE_AGENTS_PATH}}" not in standalone_agents.read_text(encoding="utf-8"):
+        errors.append("Short standalone AGENTS template must point to the detailed mother-folder AGENTS.md")
+    for config_path in (
+        plugin_root / "assets/workspace-template/.codex/config.toml",
+        plugin_root / "assets/project-template/.codex/config.toml",
+    ):
+        if not config_path.is_file():
+            errors.append(f"Missing native Codex config template: {config_path}")
+            continue
+        config_text = config_path.read_text(encoding="utf-8")
+        if 'default_subagent_model = "gpt-5.6-luna"' not in config_text:
+            errors.append(f"Subagent model is not pinned to gpt-5.6-luna: {config_path}")
+        if 'default_subagent_reasoning_effort = "max"' not in config_text:
+            errors.append(f"Subagent reasoning is not pinned to max: {config_path}")
 
     skill_root = plugin_root / "skills"
     actual_skills = {path.name for path in skill_root.iterdir() if path.is_dir()}

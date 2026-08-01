@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Codex PreToolUse guard for commands that must never run automatically."""
+"""Project-local Codex PreToolUse guard for commands that must never run automatically."""
 
 from __future__ import annotations
 

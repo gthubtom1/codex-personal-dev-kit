@@ -13,12 +13,12 @@ description: 将新建或已有软件项目接入 Codex Personal Dev Kit，建�
 2. 判断项目类型：空目录或仅有草稿为新项目；已有源码、清单、数据库或 Git 历史为现有项目。
 3. 对现有项目先做只读评估。读取 [project-assessment.md](references/project-assessment.md)，优先检查目录、清单、入口、测试、Git 状态和大文件，不要一开始完整读取超大源码。
 4. 新建或重组目录时读取 [repository-layout.md](references/repository-layout.md)。每个长期项目默认使用独立目录和独立 Git 仓库，不把无关项目塞进同一个仓库。
-5. Git 不存在时可自动初始化本地仓库和默认分支。保留现有未提交修改，不把不属于本任务的内容混入提交，不配置或修改远程仓库。
-6. 使用插件根目录下的 `scripts/bootstrap-project.ps1` 预览缺失模板；确认目标正确后以 `-Apply` 写入。脚本只创建缺失文件，不覆盖已有项目文件。
+5. Git 不存在或还没有任何提交时，自动初始化本地仓库、默认分支和首个基线回退点。先检查 `.gitignore`、生成目录、密钥、本地数据库和用户数据；发现可疑路径就停下整理忽略规则，不把它们塞进 Git。
+6. 使用 Dev Kit 根目录下的 `scripts/bootstrap-project.ps1` 预览缺失模板，并显式传入当前项目对应的 `-WorkspaceRoot <母文件夹>`；确认目标正确后再追加 `-Apply -InitializeGit -CreateBaselineCheckpoint` 写入。脚本只创建缺失文件，不覆盖已有项目文件；已有 Git 历史不会被替换或重新初始化。只有脚本能从 `projects/<项目>` 结构或已安装的 standalone metadata 明确推导母文件夹时，才可省略 `-WorkspaceRoot`。
 7. 用真实发现更新 `AGENTS.md`、`docs/PROJECT.md`、`docs/FEATURES.md`、`docs/ARCHITECTURE.md`、`docs/STATUS.md` 和 `docs/ROADMAP.md`。FEATURES 为当前用户能力分配稳定 ID，并记录完整入口/接线链路、预期结果、验证、重要性和状态；未知命令明确标为未确认，不要编造。
 8. 识别职责混杂、耦合过高或难以验证的复杂度热点。文件行数只用于帮助定位，不作为强制拆分标准；是否拆分由职责、变更风险、测试难度和项目约定决定，也不要在接入阶段顺手进行无关的大规模重写。
 9. 运行成本最低的基线检查。记录成功命令、失败原因和环境缺口。
-10. 若本次产生了独立、可验证的接入改动，在当前本地开发线上创建检查点提交。只有隔离实验或并行写入确有价值时才创建额外分支或 Worktree。不得 push、merge、rebase 或发布。
+10. 若已有 Git 历史且本次产生了独立、可验证的接入改动，使用 `$codex-safe-development` 在当前本地开发线上创建回退点。只有隔离实验或并行写入确有价值时才创建额外分支或 Worktree。不得 push、merge、rebase 或发布。
 
 ## 接入完成标准
 

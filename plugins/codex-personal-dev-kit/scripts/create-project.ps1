@@ -48,16 +48,10 @@ if (-not $Apply) {
 
 New-Item -ItemType Directory -Path $projectsRoot -Force | Out-Null
 $bootstrapProject = Join-Path $PSScriptRoot "bootstrap-project.ps1"
-& $bootstrapProject -ProjectRoot $projectPath -Apply -InitializeGit
+& $bootstrapProject -ProjectRoot $projectPath -WorkspaceRoot $workspacePath -Apply -InitializeGit -CreateBaselineCheckpoint
 if ($LASTEXITCODE -ne 0) {
     throw "Project bootstrap failed."
 }
-
-$git = Get-Command git -ErrorAction Stop
-& $git.Source -C $projectPath add -- AGENTS.md README.md .gitignore .worktreeinclude .codex docs
-if ($LASTEXITCODE -ne 0) { throw "Unable to stage the initial project template." }
-& $git.Source -c user.name="Codex Dev Kit" -c user.email="codex-dev-kit@local.invalid" -C $projectPath commit -m "checkpoint: initialize project"
-if ($LASTEXITCODE -ne 0) { throw "Unable to create the initial local checkpoint." }
 
 Write-Host "Project created with a local recovery point."
 Write-Host "Next: open '$projectPath' as the Codex working folder and start a new task."

@@ -18,15 +18,18 @@
 
 ## Dev Kit 审计
 
-- Marketplace、manifest 和七个 Skill（一个入口、六个内部能力）通过官方 validator。
+- 七个 standalone Skill（一个入口、六个内部能力）通过官方 validator；可选 Skills-only Plugin 的 manifest 另行通过官方 validator。
 - Skill 描述覆盖真实触发语句，正文无占位符且 references 都可达。
 - `agents/openai.yaml` 的默认提示包含正确 `$skill-name`。
-- Hook 对危险命令和全局安装阻止、对常见安全命令放行，并覆盖无契约编辑、宽泛暂存、复合提交、伪造验证、压缩/clear 恢复和未完成 Stop。
+- Hook 对危险命令和全局安装阻止、对常见安全命令放行，并覆盖无契约编辑、宽泛暂存、原始提交/回退、伪造验证、压缩/clear 恢复、验证后未保存和未完成 Stop。
+- 项目 Hooks 不匹配 `Agent`/`spawn_agent`，standalone Dev Kit 和可选 Plugin 不注册替代代理的 MCP/App，母文件夹和项目配置保持原生 multi-agent 开启并固定 `gpt-5.6-luna/max`。
 - Rules 有 match/not_match 样例并通过 execpolicy 检查。
 - Bootstrap 预览不写入，重复 Apply 幂等且覆盖前有备份。
-- `source.json` 区分 local/Git 来源；local 的 Marketplace identity、真实 HEAD、干净工作树、源码版本、缓存版本和 `plugin list` 激活版本一致，Git 来源使用固定 ref。
+- `source.json` 记录 standalone 本地 checkout、真实 HEAD 和版本；安装与诊断都确认源码存在、Git HEAD 一致、工作树干净且源码版本等于已安装版本。
+- 从旧版迁移时，普通安装必须拒绝叠加；显式迁移会备份并移除旧 custom agents、纯 Dev Kit 全局 Hook 和仍安装的 Plugin，混合用户 Hook 必须停止人工审查。
+- 首个 Git 基线同时检查敏感文件名、忽略规则和高置信度凭据内容，命中时不得暂存或提交。
 - 项目模板没有无限追加式文档。
-- 新项目、旧项目、复杂度热点、长任务和危险命令场景有测试。
+- 新项目、旧项目自动 Git 基线、验证后自动回退点、自然语言回退、复杂度热点、长任务和危险命令场景有测试。
 - Git 仓库只有本地检查点，没有自动 push 或发布。
 
 ## 严重度

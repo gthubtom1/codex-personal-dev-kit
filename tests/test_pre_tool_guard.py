@@ -6,8 +6,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HOOK_ROOT = REPO_ROOT / "plugins/codex-personal-dev-kit/hooks"
-sys.path.insert(0, str(HOOK_ROOT))
+SCRIPT_ROOT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts"
+sys.path.insert(0, str(SCRIPT_ROOT))
 
 import pre_tool_guard  # noqa: E402
 

@@ -13,6 +13,16 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 - 不得使用 `create_thread`、`fork_thread`、`send_message_to_thread`、`handoff_thread` 或任何可见聊天/任务功能模拟子代理。
 - 新 Codex 任务是用户可见的长期上下文，不是子代理。只有用户明确要求创建、分叉、交接或继续另一个任务时，才使用任务管理功能。
 - 不要为了启动子代理而修改 Codex、安装另一套代理系统或创建永久通信文档。可用的角色配置只负责约束原生 subagent 的职责。
+- Dev Kit 及其可选 Plugin 不得注册替代代理的 MCP/App 工具，不得让 Hook 匹配 `Agent` 或 `spawn_agent`，也不得关闭 `agents.enabled` 或 `features.multi_agent`。任务、Worktree、Git 审查面板和 Appshots 保持 Codex 原生语义。
+
+## 强制模型策略
+
+- 每个原生子代理必须使用模型 `gpt-5.6-luna`，推理强度必须为 `max`。
+- 第一次调用 `spawn_agent` 前，检查当前任务暴露的模型目录、原生工具参数以及已加载的 `[agents]` 默认值能否保证这一精确组合。
+- 若当前调用支持精确覆盖，显式传入 `gpt-5.6-luna` 和 `max`；若原生调用依赖项目中已加载的 `default_subagent_model` 与 `default_subagent_reasoning_effort`，不得再传入会覆盖它们的其他值。
+- 不得选择会把模型或推理强度固定成其他值的自定义角色。不要静默换成 Sol、Terra、`high` 或任何“最接近”的配置。
+- 若当前会话不能证明 Luna/max 会生效，停止启动新的子代理，明确报告兼容问题，并由主代理继续；只有用户明确许可后才能采用备用配置。
+- 参数序列化失败表示子代理没有启动。不得反复重试错误参数，也不得把失败调用写成已完成的独立检查。
 
 ## 选择执行形态
 
@@ -37,14 +47,14 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 9. 主代理检查冲突、证据和遗漏后再决定是否实施。子代理建议不自动扩大范围。
 10. 汇总完结果后结束当前内部代理协作，记录真正影响项目的结论到代码、测试或精炼文档；不要创建、归档或转发用户可见任务来清理子代理。
 
-## 推荐角色
+## 推荐职责
 
-- `codex_kit_explorer`：只读定位代码、数据流和影响面。
-- `codex_kit_architect`：只读比较边界、接口和迁移方案。
-- `codex_kit_reviewer`：只读查找正确性、安全和测试风险。
-- `codex_kit_verifier`：运行验证并报告证据，不修改产品源码。
+- Explorer：只读定位代码、数据流和影响面。
+- Architect：只读比较边界、接口和迁移方案。
+- Reviewer：只读查找正确性、安全和测试风险。
+- Verifier：运行验证并报告证据，不修改产品源码。
 
-这些角色未安装时，使用内置 explorer/worker 或普通子代理，并在提示中保留相同边界。
+这些是任务职责，不要求安装或创建自定义 Agent。使用能保持 `gpt-5.6-luna`/`max` 的原生普通子代理，并在提示中写明职责和只读边界。
 
 ## 输出
 

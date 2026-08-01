@@ -106,6 +106,35 @@ class FeatureGuardTests(unittest.TestCase):
         )
         self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
 
+    def test_native_edit_and_write_require_contract_and_cannot_edit_verified_snapshot(self) -> None:
+        for tool_name in ("Edit", "Write"):
+            output = self.hook(
+                {
+                    "cwd": str(self.root),
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": tool_name,
+                    "tool_input": {"file_path": str(self.root / "src/app.js")},
+                }
+            )
+            self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+
+        verified_edit = self.hook(
+            {
+                "cwd": str(self.root),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(self.root / "src/app.js")},
+            }
+        )
+        self.assertEqual(verified_edit["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("reopen", verified_edit["hookSpecificOutput"]["permissionDecisionReason"])
+
     def test_protected_feature_cannot_disappear(self) -> None:
         self.start()
         updated = "\n".join(line for line in FEATURES.splitlines() if "F-001" not in line) + "\n"
@@ -160,12 +189,22 @@ class FeatureGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(feature_guard.GuardError, "installation"):
             feature_guard.run_verification(self.root, ["F-001"], ["pip", "install", "ruff"])
 
-    def test_verified_content_can_be_staged_committed_and_stopped(self) -> None:
+    def test_verified_content_must_be_saved_through_guard_checkpoint(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
         self.stage("src/app.js")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
+
+        stop_before_checkpoint = self.hook(
+            {
+                "cwd": str(self.root),
+                "hook_event_name": "Stop",
+                "stop_hook_active": False,
+            }
+        )
+        self.assertEqual(stop_before_checkpoint["decision"], "block")
+        self.assertIn("local recovery point", stop_before_checkpoint["reason"])
 
         commit_hook = self.hook(
             {
@@ -175,8 +214,14 @@ class FeatureGuardTests(unittest.TestCase):
                 "tool_input": {"command": "git commit -m checkpoint"},
             }
         )
-        self.assertIsNone(commit_hook)
-        self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "checkpoint")
+        self.assertEqual(commit_hook["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("feature_guard.py checkpoint", commit_hook["hookSpecificOutput"]["permissionDecisionReason"])
+
+        checkpoint = feature_guard.create_checkpoint(self.root, "save export improvement")
+        self.assertEqual(checkpoint, self.git("rev-parse", "HEAD").stdout.strip())
+        self.assertEqual(self.git("log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: save export improvement")
+        self.assertEqual(self.git("log", "-1", "--pretty=%an <%ae>").stdout.strip(), "Codex Dev Kit <codex-dev-kit@local.invalid>")
+        self.assertFalse((self.root / ".codex/current-change.json").exists())
 
         stop_hook = self.hook(
             {
@@ -186,8 +231,16 @@ class FeatureGuardTests(unittest.TestCase):
             }
         )
         self.assertIsNone(stop_hook)
-        feature_guard.close_contract(self.root)
-        self.assertFalse((self.root / ".codex/current-change.json").exists())
+
+    def test_new_contract_cannot_replace_verified_uncommitted_work(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+
+        with self.assertRaisesRegex(feature_guard.GuardError, "not been saved as a local recovery point"):
+            self.start()
 
     def test_close_rejects_changes_after_verification(self) -> None:
         self.start()
@@ -199,34 +252,20 @@ class FeatureGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(feature_guard.GuardError, "changed after verification"):
             feature_guard.close_contract(self.root)
 
-    def test_composite_commit_and_arbitrary_new_head_are_rejected(self) -> None:
+    def test_raw_commit_and_arbitrary_new_head_are_rejected(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
         self.stage("src/app.js")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
 
-        output = self.hook(
-            {
-                "cwd": str(self.root),
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": "git commit -m checkpoint && echo changed > src/app.js"},
-            }
-        )
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
-
-        redirected = self.hook(
-            {
-                "cwd": str(self.root),
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": "git commit -m checkpoint > commit.log"},
-            }
-        )
-        self.assertEqual(redirected["hookSpecificOutput"]["permissionDecision"], "deny")
-
-        for unsafe_commit in ("git commit -am checkpoint", "git commit -m checkpoint src/app.js", "git commit --no-verify -m checkpoint"):
+        for unsafe_commit in (
+            "git commit -m checkpoint && echo changed > src/app.js",
+            "git commit -m checkpoint > commit.log",
+            "git commit -am checkpoint",
+            "git commit -m checkpoint src/app.js",
+            "git commit --no-verify -m checkpoint",
+        ):
             with self.subTest(command=unsafe_commit):
                 unsafe = self.hook(
                     {
@@ -243,6 +282,38 @@ class FeatureGuardTests(unittest.TestCase):
         self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "unverified")
         with self.assertRaisesRegex(feature_guard.GuardError, "changed after verification"):
             feature_guard.close_contract(self.root)
+
+    def test_rollback_returns_to_previous_version_with_a_new_commit(self) -> None:
+        baseline_head = self.git("rev-parse", "HEAD").stdout.strip()
+        baseline_tree = self.git("rev-parse", "HEAD^{tree}").stdout.strip()
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        changed_checkpoint = feature_guard.create_checkpoint(self.root, "save export v2")
+
+        rollback_checkpoint = feature_guard.rollback_last_checkpoint(self.root)
+        self.assertNotEqual(rollback_checkpoint, changed_checkpoint)
+        self.assertEqual(self.git("rev-parse", "HEAD^{tree}").stdout.strip(), baseline_tree)
+        self.assertEqual(self.git("log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: return to previous version " + baseline_head[:8])
+        self.assertEqual(self.git("status", "--porcelain").stdout.strip(), "")
+
+    def test_rollback_refuses_unsaved_work_and_raw_git_revert(self) -> None:
+        (self.root / "src/app.js").write_text("unsaved\n", encoding="utf-8")
+        with self.assertRaisesRegex(feature_guard.GuardError, "unsaved changes"):
+            feature_guard.rollback_last_checkpoint(self.root)
+
+        revert_hook = self.hook(
+            {
+                "cwd": str(self.root),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git revert HEAD"},
+            }
+        )
+        self.assertEqual(revert_hook["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("feature_guard.py rollback", revert_hook["hookSpecificOutput"]["permissionDecisionReason"])
 
     def test_raw_git_add_is_blocked(self) -> None:
         self.start()

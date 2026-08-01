@@ -5,9 +5,11 @@ This repository builds a beginner-first Codex development assistant. The user co
 ## Workflow
 
 - Treat `docs/FEATURES.md`, tests, Git, `docs/DESIGN.md`, and short current docs as the source of truth.
-- Use the local `plugin-creator` and `skill-creator` guidance when changing Plugin or Skill structure.
+- Use the local `skill-creator` guidance when changing standalone Skills. Use `plugin-creator` only for the optional Skills-only Plugin package.
 - Preserve the single user entry skill and keep supporting Skills concise with progressive references.
 - Protect accepted Dev Kit features before edits. Keep one source writer per checkout and use read-only subagents for independent exploration, review, and verification.
+- Treat Codex native subagents, user-visible tasks, Worktrees, the review pane, and Appshots as product capabilities to orchestrate, never as surfaces for this Dev Kit or its optional Plugin to replace or intercept.
+- Routine sequential development stays on the current branch. Every verified change must use the bundled guard-managed checkpoint before completion; branches are only for real isolation.
 - Do not modify or install into `~/.codex`, publish, push, release, or deploy unless the user explicitly asks.
 - Do not encode file-line thresholds. Judge structure by responsibility, coupling, testability, and change impact.
 

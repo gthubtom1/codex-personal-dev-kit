@@ -49,7 +49,17 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertEqual(config["projectsDirectory"], "projects")
 
             agents = workspace / "AGENTS.md"
-            self.assertIn("Existing-project development never starts from this mother folder", agents.read_text(encoding="utf-8"))
+            agents_text = agents.read_text(encoding="utf-8")
+            self.assertIn("Existing-project development starts only after the user opens that exact project folder", agents_text)
+            self.assertIn(str(workspace), agents_text)
+            self.assertIn(str(SCRIPT_ROOT.parent / "skills"), agents_text)
+            self.assertNotIn("{{WORKSPACE_ROOT}}", agents_text)
+            self.assertNotIn("{{DEV_KIT_SKILLS_ROOT}}", agents_text)
+            workspace_config = workspace / ".codex/config.toml"
+            self.assertTrue(workspace_config.is_file())
+            config_text = workspace_config.read_text(encoding="utf-8")
+            self.assertIn('default_subagent_model = "gpt-5.6-luna"', config_text)
+            self.assertIn('default_subagent_reasoning_effort = "max"', config_text)
             agents.write_text(agents.read_text(encoding="utf-8") + "\nCUSTOM-WORKSPACE-RULE\n", encoding="utf-8")
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
             self.assertIn("CUSTOM-WORKSPACE-RULE", agents.read_text(encoding="utf-8"))
@@ -73,6 +83,13 @@ class WorkspaceScriptTests(unittest.TestCase):
                 ignored_plan = self.git(project, "check-ignore", ".codex/active-plan.md")
                 self.assertEqual(ignored_plan.returncode, 0)
                 self.assertTrue((project / "docs/adr/INDEX.md").is_file())
+                hooks = (project / ".codex/hooks.json").read_text(encoding="utf-8")
+                self.assertNotIn("{{CODEX_DEV_KIT_ROOT", hooks)
+                self.assertIn("feature_guard.py", hooks)
+                self.assertNotIn("Agent", hooks.replace("never Agent", ""))
+                project_agents = (project / "AGENTS.md").read_text(encoding="utf-8")
+                self.assertIn(str(workspace / "AGENTS.md"), project_agents)
+                self.assertNotIn("D:\\开发\\AGENTS.md", project_agents)
 
             self.assertNotEqual(alpha, beta)
             self.assertNotEqual((alpha / ".git").resolve(), (beta / ".git").resolve())
@@ -97,11 +114,158 @@ class WorkspaceScriptTests(unittest.TestCase):
             readme = project / "README.md"
             readme.write_text("# Existing user project\n", encoding="utf-8")
 
-            self.run_script("bootstrap-project.ps1", "-ProjectRoot", str(project), "-Apply", "-InitializeGit")
+            self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(project),
+                "-WorkspaceRoot",
+                str(Path(directory)),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+            )
             self.assertEqual(readme.read_text(encoding="utf-8"), "# Existing user project\n")
             self.assertTrue((project / "AGENTS.md").is_file())
             self.assertTrue((project / "docs/FEATURES.md").is_file())
+            self.assertTrue((project / ".codex/hooks.json").is_file())
             self.assertEqual(self.git(project, "rev-parse", "--show-toplevel").returncode, 0)
+            self.assertEqual(self.git(project, "log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: initialize project")
+            self.assertEqual(self.git(project, "status", "--porcelain").stdout.strip(), "")
+            tracked = self.git(project, "ls-files", "README.md")
+            self.assertEqual(tracked.stdout.strip(), "README.md")
+
+    def test_bootstrap_project_prefers_installed_central_runtime_for_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "existing"
+            project.mkdir()
+            codex_home = root / "codex-home"
+            runtime = codex_home / "codex-dev-kit"
+            (runtime / "scripts").mkdir(parents=True)
+            (runtime / "scripts/feature_guard.py").write_text("# installed guard\n", encoding="utf-8")
+            (runtime / "scripts/pre_tool_guard.py").write_text("# installed guard\n", encoding="utf-8")
+            (runtime / "source.json").write_text(json.dumps({"schemaVersion": 2, "mode": "standalone"}), encoding="utf-8")
+
+            self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(project),
+                "-WorkspaceRoot",
+                str(root),
+                "-CodexHome",
+                str(codex_home),
+                "-Apply",
+            )
+
+            hooks = (project / ".codex/hooks.json").read_text(encoding="utf-8")
+            self.assertIn(str(runtime).replace("\\", "\\\\"), hooks)
+            self.assertNotIn(str(SCRIPT_ROOT.parent).replace("\\", "\\\\"), hooks)
+
+    def test_existing_project_baseline_stops_before_generated_or_sensitive_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "unsafe-existing"
+            (project / "node_modules/pkg").mkdir(parents=True)
+            (project / "node_modules/pkg/index.js").write_text("generated\n", encoding="utf-8")
+            (project / ".gitignore").write_text("# Existing project intentionally missing dependency ignores\n", encoding="utf-8")
+
+            result = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(project),
+                "-WorkspaceRoot",
+                str(Path(directory)),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+                expected=1,
+            )
+            self.assertIn("Baseline checkpoint stopped", result.stdout)
+            self.assertIn("node_modules/pkg/index.js", result.stdout)
+            self.assertNotEqual(self.git(project, "rev-parse", "--verify", "HEAD").returncode, 0)
+
+    def test_existing_project_baseline_excludes_secret_names_and_stops_on_secret_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            named_secret = root / "named-secret"
+            named_secret.mkdir()
+            (named_secret / ".npmrc").write_text("//registry.npmjs.org/:_authToken=real-looking-token-value-123456\n", encoding="utf-8")
+            (named_secret / ".env.sample").write_text("API_KEY=replace-me\n", encoding="utf-8")
+            self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(named_secret),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+            )
+            self.assertEqual(self.git(named_secret, "rev-parse", "--verify", "HEAD").returncode, 0)
+            self.assertEqual(self.git(named_secret, "check-ignore", ".npmrc").returncode, 0)
+            self.assertEqual(self.git(named_secret, "ls-files", ".npmrc").stdout.strip(), "")
+            self.assertNotEqual(self.git(named_secret, "check-ignore", ".env.sample").returncode, 0)
+            self.assertEqual(self.git(named_secret, "ls-files", ".env.sample").stdout.strip(), ".env.sample")
+
+            content_secret = root / "content-secret"
+            content_secret.mkdir()
+            (content_secret / "settings.txt").write_text(
+                "client_secret = this-is-a-real-looking-secret-value-123456\n",
+                encoding="utf-8",
+            )
+            content_result = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(content_secret),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+                expected=1,
+            )
+            self.assertIn("appear to contain credentials", content_result.stdout)
+            self.assertIn("settings.txt", content_result.stdout)
+            self.assertNotEqual(self.git(content_secret, "rev-parse", "--verify", "HEAD").returncode, 0)
+
+            json_secret = root / "json-secret"
+            json_secret.mkdir()
+            (json_secret / "config.json").write_text(
+                '{"clientSecret":"this-is-a-real-looking-json-secret-123456"}\n',
+                encoding="utf-8",
+            )
+            json_result = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(json_secret),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+                expected=1,
+            )
+            self.assertIn("config.json", json_result.stdout)
+            self.assertNotEqual(self.git(json_secret, "rev-parse", "--verify", "HEAD").returncode, 0)
+
+            large_secret = root / "large-secret"
+            large_secret.mkdir()
+            (large_secret / "large.json").write_text(
+                (" " * (3 * 1024 * 1024)) + '\n{"password":"this-is-a-real-looking-large-secret-123456"}\n',
+                encoding="utf-8",
+            )
+            large_result = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(large_secret),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                "-InitializeGit",
+                "-CreateBaselineCheckpoint",
+                expected=1,
+            )
+            self.assertIn("large.json", large_result.stdout)
+            self.assertNotEqual(self.git(large_secret, "rev-parse", "--verify", "HEAD").returncode, 0)
 
 
 if __name__ == "__main__":

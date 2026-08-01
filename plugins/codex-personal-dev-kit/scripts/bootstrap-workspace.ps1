@@ -16,12 +16,21 @@ $templateRoot = Join-Path $pluginRoot "assets\workspace-template"
 if (-not (Test-Path -LiteralPath $templateRoot -PathType Container)) {
     throw "Workspace template not found: $templateRoot"
 }
+$skillsRoot = Join-Path $pluginRoot "skills"
+if (-not (Test-Path -LiteralPath $skillsRoot -PathType Container)) {
+    $installedSkillsRoot = Join-Path (Split-Path -Parent $pluginRoot) "skills"
+    if (Test-Path -LiteralPath $installedSkillsRoot -PathType Container) {
+        $skillsRoot = $installedSkillsRoot
+    }
+}
 
 $workspaceName = Split-Path -Leaf $workspacePath
 $targets = @(
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "projects") },
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "archives") },
+    [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath ".codex") },
     [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "AGENTS.md"); Source = (Join-Path $templateRoot "AGENTS.md") },
+    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath ".codex\config.toml"); Source = (Join-Path $templateRoot ".codex\config.toml") },
     [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "workspace.json"); Source = (Join-Path $templateRoot "workspace.json") }
 )
 
@@ -48,7 +57,10 @@ foreach ($target in $targets) {
         New-Item -ItemType Directory -Path $target.Path -Force | Out-Null
         continue
     }
-    $content = [System.IO.File]::ReadAllText($target.Source).Replace("{{WORKSPACE_NAME}}", $workspaceName)
+    $content = [System.IO.File]::ReadAllText($target.Source)
+    $content = $content.Replace("{{WORKSPACE_NAME}}", $workspaceName)
+    $content = $content.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
+    $content = $content.Replace("{{DEV_KIT_SKILLS_ROOT}}", $skillsRoot)
     [System.IO.File]::WriteAllText($target.Path, $content, $utf8NoBom)
 }
 

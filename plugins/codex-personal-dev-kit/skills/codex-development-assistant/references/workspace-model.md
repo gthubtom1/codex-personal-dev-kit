@@ -15,7 +15,7 @@
 
 - 母文件夹不是所有源码的单一 Git 仓库。
 - 每个 `projects/<name>/` 是独立 Git 仓库，也是该项目在 Codex Desktop 中的主工作文件夹。
-- `codex-dev-kit/` 是框架源码；安装成 Plugin 后所有项目复用，不复制到项目中。
+- `codex-dev-kit/` 是框架源码；安装为 standalone Skills 和中央运行时后由所有项目复用，不复制到项目中。可选 Plugin 只用于 Skills 分发。
 - `archives/` 存放不活跃项目；移动或删除前必须确认恢复方式。
 - `workspace.json` 只记录目录约定和版本，不维护容易漂移的 `projects.json`。项目列表由扫描 `projects/` 得到。
 

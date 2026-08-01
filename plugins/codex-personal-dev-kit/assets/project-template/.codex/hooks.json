@@ -1,0 +1,65 @@
+{
+  "description": "Project-local Dev Kit safeguards. These hooks match only shell/file edits and never Agent or spawn_agent.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"{{CODEX_DEV_KIT_ROOT_POSIX}}/scripts/feature_guard.py\" hook",
+            "commandWindows": "python \"{{CODEX_DEV_KIT_ROOT_JSON}}\\scripts\\feature_guard.py\" hook",
+            "timeout": 10,
+            "statusMessage": "Restoring current change safeguards"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"{{CODEX_DEV_KIT_ROOT_POSIX}}/scripts/pre_tool_guard.py\"",
+            "commandWindows": "python \"{{CODEX_DEV_KIT_ROOT_JSON}}\\scripts\\pre_tool_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking command safety"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"{{CODEX_DEV_KIT_ROOT_POSIX}}/scripts/feature_guard.py\" hook",
+            "commandWindows": "python \"{{CODEX_DEV_KIT_ROOT_JSON}}\\scripts\\feature_guard.py\" hook",
+            "timeout": 10,
+            "statusMessage": "Checking feature protection"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"{{CODEX_DEV_KIT_ROOT_POSIX}}/scripts/feature_guard.py\" hook",
+            "commandWindows": "python \"{{CODEX_DEV_KIT_ROOT_JSON}}\\scripts\\feature_guard.py\" hook",
+            "timeout": 10,
+            "statusMessage": "Checking completion evidence"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"{{CODEX_DEV_KIT_ROOT_POSIX}}/scripts/feature_guard.py\" hook",
+            "commandWindows": "python \"{{CODEX_DEV_KIT_ROOT_JSON}}\\scripts\\feature_guard.py\" hook",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
