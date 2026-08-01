@@ -38,6 +38,10 @@ class FeatureGuardTests(unittest.TestCase):
         (self.root / ".codex/config.toml").write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
         (self.root / ".gitignore").write_text(".codex/current-change.json\n", encoding="utf-8")
         (self.root / "docs/FEATURES.md").write_text(FEATURES, encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nKeep existing behavior.\n\n## Next Action\n\nVerify the export change.\n",
+            encoding="utf-8",
+        )
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = true;\n", encoding="utf-8")
         self.git("init", "-b", "main")
         self.git("add", ".")
@@ -165,6 +169,28 @@ class FeatureGuardTests(unittest.TestCase):
         context = resume_hook["hookSpecificOutput"]["additionalContext"]
         self.assertIn("Improve export", context)
         self.assertIn("F-002", context)
+        self.assertIn("Verify the export change", context)
+        self.assertIn("Latest checkpoint", context)
+
+    def test_session_start_without_contract_returns_bounded_current_facts(self) -> None:
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nReady.\n\n## Verified\n\n"
+            + ("- old detail that should be capped\n" * 300)
+            + "\n## Next Action\n\nBuild the next accepted slice.\n",
+            encoding="utf-8",
+        )
+        output = self.hook(
+            {
+                "cwd": str(self.root),
+                "hook_event_name": "SessionStart",
+                "source": "startup",
+            }
+        )
+        context = output["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("No current change contract", context)
+        self.assertIn("Build the next accepted slice", context)
+        self.assertIn("branch main", context)
+        self.assertLessEqual(len(context), feature_guard.RECOVERY_PACKET_MAX_CHARS)
 
 
 if __name__ == "__main__":

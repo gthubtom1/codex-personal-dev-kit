@@ -99,11 +99,11 @@ Mother Folder
 
 ### Context Loss
 
-一个任务只负责一个连贯成果。新任务恢复顺序为：AGENTS、PROJECT、FEATURES、STATUS、相关 ARCHITECTURE、Git 和必要测试。旧聊天和 Memories 是辅助召回，不是事实来源。
+一个任务只负责一个连贯成果。SessionStart Hook 在启动、恢复和压缩后注入有上限的当前事实包：当前变更契约、精简 STATUS、分支/脏状态和最近检查点。随后始终读取 AGENTS、PROJECT、FEATURES、STATUS，只按任务读取相关 ARCHITECTURE/ADR 和必要测试。旧聊天和 Memories 是辅助召回，不是事实来源。
 
 ### Document Bloat
 
-不创建 `.ai/history/`、每日会话日志、永久 checkpoint 报告或每个小功能一份规格。当前文档覆盖更新，历史交给 Git。
+不创建 `.ai/history/`、每日会话日志、永久 checkpoint 报告或每个小功能一份规格。复杂任务最多使用一个 Git 忽略的 `.codex/active-plan.md`，完成即删除。审计会提示超大开发/聊天日志、过期计划、缺少下一步的 STATUS 和失去索引的 ADR。当前文档覆盖更新，历史交给 Git。
 
 ## 7. Durable Project Documents
 
@@ -114,9 +114,11 @@ Mother Folder
 | `docs/PROJECT.md` | 用户、结果、范围和非目标 | 小于 200 行 |
 | `docs/FEATURES.md` | 用户能力、关键规则和验证入口 | 主索引小于 250 行，按领域拆分 |
 | `.codex/current-change.json` | 当前任务的功能保全范围和验证证据 | 单个临时忽略文件，任务间覆盖或清理 |
+| `.codex/active-plan.md` | 当前复杂任务尚未完成的步骤 | 单个临时忽略文件，完成即删除 |
 | `docs/ROADMAP.md` | 当前和接下来 2 到 3 个里程碑 | 小于 150 行 |
 | `docs/ARCHITECTURE.md` | 当前模块、接口、依赖和数据流 | 主索引小于 300 行 |
 | `docs/STATUS.md` | 当前里程碑、验证、问题和下一步 | 100 到 150 行 |
+| `docs/adr/INDEX.md` | 当前 ADR 的状态、领域和替代关系 | 小型索引 |
 | `docs/adr/` | 重大且难逆转的决定 | 一项一个文件 |
 | `docs/RUNBOOK.md` | 部署、备份、恢复和故障处理 | 仅按项目实际需要 |
 

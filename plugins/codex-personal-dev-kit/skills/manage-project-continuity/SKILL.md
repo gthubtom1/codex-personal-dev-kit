@@ -9,10 +9,11 @@ description: 在 Codex 长期项目的任务开始、上下文变长、对话切
 
 ## 开始任务
 
-1. 读取适用的 `AGENTS.md`、`docs/PROJECT.md`、`docs/FEATURES.md`、`docs/STATUS.md` 和本任务相关的架构部分。若 `.codex/current-change.json` 存在，先恢复其中的目标、允许改变的功能和待验证项，不另起冲突任务。
+1. 始终读取适用的 `AGENTS.md`、`docs/PROJECT.md`、`docs/FEATURES.md` 和 `docs/STATUS.md`；只在本任务相关时读取架构、ADR、路线图或运行手册。若 `.codex/current-change.json` 存在，先恢复其中的目标、允许改变的功能和待验证项，不另起冲突任务。
 2. 查看 `git status -sb`、当前分支、最近少量提交和必要的 Worktree 信息。
 3. 从这些事实重建当前 Goal、已验证状态、风险和下一步。记忆和旧聊天只能帮助召回，不能替代项目事实。
 4. 读取 [context-and-task-boundaries.md](references/context-and-task-boundaries.md)，判断应继续当前任务、压缩当前对话，还是为新成果开启新任务。
+5. 复杂任务可以使用一个 Git 忽略的 `.codex/active-plan.md` 保存尚未完成的执行步骤；它只属于当前任务，完成后删除，不保留版本历史。
 
 ## 结束任务
 
@@ -23,8 +24,10 @@ description: 在 Codex 长期项目的任务开始、上下文变长、对话切
    - `ROADMAP.md` 只保留当前及接下来 2 到 3 个里程碑。
    - `ARCHITECTURE.md` 只在真实边界或数据流改变时更新。
    - 重大且难逆转的决定写入单独 ADR。
+   - `FEATURES.md` 或 `ARCHITECTURE.md` 变大时保留主索引，并按稳定业务领域拆分。
 4. 不复制聊天全文、完整 diff、原始日志或每日流水账。历史由 Git 保存。
-5. 使用 [handoff-template.md](references/handoff-template.md) 输出下一任务可直接使用的交接提示。
+5. 删除已完成任务的 `.codex/active-plan.md`，不创建 `plan-v2`、会话报告或永久 checkpoint 文档。
+6. 使用 [handoff-template.md](references/handoff-template.md) 输出下一任务可直接使用的交接提示。
 
 ## 任务边界
 

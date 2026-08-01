@@ -6,6 +6,7 @@ This repository is a long-term project managed with Codex Personal Dev Kit. Trea
 
 ## Workflow
 
+- At every task start, read this file plus `docs/PROJECT.md`, `docs/FEATURES.md`, and `docs/STATUS.md`. Read architecture, ADRs, roadmap, and runbook only when the request touches them.
 - Use `$prepare-codex-goal` for fuzzy, multi-step, architectural, or high-risk requests.
 - Use `$orchestrate-codex-team` only when independent work benefits from subagents or Worktrees.
 - Use `$codex-safe-development` for implementation and `$manage-project-continuity` at task boundaries.
@@ -13,6 +14,7 @@ This repository is a long-term project managed with Codex Personal Dev Kit. Trea
 - Before changing an existing project, open the bundled current change guard with the intended feature IDs and adjacent behaviors to verify. Do not edit or checkpoint code while the guard is missing or unverified.
 - Keep one writer per checkout. Parallel writers require separate Git Worktrees and branches.
 - Preserve existing user changes. Stage only files owned by the current task.
+- For complex work, keep at most one ignored `.codex/active-plan.md`; delete it when the task ends. Never accumulate plan versions, chat transcripts, or chronological development logs.
 - Local branches and verified checkpoint commits are allowed automatically.
 - Never automatically push, pull, merge, rebase, tag, release, deploy, publish, run production migrations, rewrite history, or discard unconfirmed work.
 

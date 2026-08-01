@@ -7,14 +7,15 @@
 ```text
 开发工作区/
 ├── codex-dev-kit/
-├── project-a/
-├── project-b/
-├── shared-assets/
+├── projects/
+│   ├── project-a/
+│   └── project-b/
 └── archives/
 ```
 
+- 母文件夹不建立 Git 仓库，只负责创建、总览和归档项目。
+- 每个 `projects/<name>/` 是独立 Git 仓库，也是用户在 Codex 中直接打开的主工作文件夹。
 - 不把 `project-a` 和 `project-b` 放进同一个仓库，除非它们本来就是需要统一发布的 monorepo。
-- `shared-assets` 只放真正跨项目复用且有明确版本策略的内容。
 - 归档项目保留 Git 历史和恢复说明，不与活跃项目混放。
 - Codex Desktop 中一个长期项目对应一个 Local Project；不相关目录使用不同 Project。
 
@@ -36,6 +37,7 @@ project/
 │   ├── STATUS.md
 │   ├── RUNBOOK.md
 │   └── adr/
+│       └── INDEX.md
 ├── src/
 ├── tests/
 ├── scripts/
@@ -48,4 +50,5 @@ project/
 - 一个模块有明确入口、依赖方向和测试位置。
 - 生成物、依赖和缓存不进入源码目录。
 - 只有当前范围需要特殊指令时才添加嵌套 `AGENTS.md`。
+- 复杂任务最多使用一个 Git 忽略的 `.codex/active-plan.md`，完成后删除。
 - 项目文档保存当前事实，历史保存到 Git；重大架构决定保存到 ADR。

@@ -22,3 +22,4 @@ __pycache__/
 Thumbs.db
 *.log
 .codex/current-change.json
+.codex/active-plan.md

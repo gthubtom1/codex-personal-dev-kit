@@ -18,7 +18,10 @@ from typing import Iterable, Sequence
 
 CONTRACT_RELATIVE = Path(".codex/current-change.json")
 FEATURE_MAP_RELATIVE = Path("docs/FEATURES.md")
+STATUS_RELATIVE = Path("docs/STATUS.md")
 PROJECT_CONFIG_RELATIVE = Path(".codex/config.toml")
+RECOVERY_STATUS_MAX_CHARS = 1600
+RECOVERY_PACKET_MAX_CHARS = 3600
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
     ".js", ".jsx", ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts",
@@ -470,6 +473,88 @@ def _contract_summary(contract: dict) -> str:
     )
 
 
+def _clip_text(value: str, limit: int) -> str:
+    value = value.strip()
+    if len(value) <= limit:
+        return value
+    return value[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _status_recovery_summary(root: Path) -> str:
+    path = root / STATUS_RELATIVE
+    if not path.is_file():
+        return "docs/STATUS.md is missing. Rebuild it from code, tests, Git, and the current request."
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if line.startswith("## "):
+            current = _normalize_text(line[3:])
+            sections.setdefault(current, [line])
+        elif current is not None:
+            sections[current].append(line)
+
+    preferred = (
+        "milestone", "current milestone", "里程碑", "当前里程碑",
+        "working state", "工作状态",
+        "current risks", "risks", "当前风险",
+        "current limitations", "limitations", "当前限制",
+        "blockers", "阻塞",
+        "next action", "next actions", "下一步",
+        "verified", "已验证",
+    )
+    selected: list[str] = []
+    seen: set[str] = set()
+    for name in preferred:
+        normalized = _normalize_text(name)
+        if normalized in sections and normalized not in seen:
+            content = "\n".join(sections[normalized]).strip()
+            if content:
+                selected.append(_clip_text(content, 600))
+                seen.add(normalized)
+
+    if selected:
+        return _clip_text("\n\n".join(selected), RECOVERY_STATUS_MAX_CHARS)
+
+    compact = "\n".join(line for line in text.splitlines() if line.strip())
+    return _clip_text(compact, RECOVERY_STATUS_MAX_CHARS)
+
+
+def _git_recovery_summary(root: Path) -> tuple[str, str]:
+    branch_result = _run_git(root, "branch", "--show-current")
+    branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ""
+    if not branch:
+        head_result = _run_git(root, "rev-parse", "--short", "HEAD")
+        branch = "detached at " + head_result.stdout.strip() if head_result.returncode == 0 else "unknown"
+
+    status_result = _run_git(root, "status", "--short")
+    if status_result.returncode == 0:
+        changed_count = len([line for line in status_result.stdout.splitlines() if line.strip()])
+        working_tree = "clean" if changed_count == 0 else f"{changed_count} changed entr{'y' if changed_count == 1 else 'ies'}"
+    else:
+        working_tree = "unknown"
+
+    checkpoint_result = _run_git(root, "log", "-1", "--pretty=format:%h %s")
+    checkpoint = checkpoint_result.stdout.strip() if checkpoint_result.returncode == 0 else "none"
+    return f"branch {branch}; working tree {working_tree}", checkpoint
+
+
+def _recovery_packet(root: Path, contract: dict | None) -> str:
+    contract_context = _contract_summary(contract) if contract else "No current change contract is open. Start one before editing accepted project behavior."
+    git_state, checkpoint = _git_recovery_summary(root)
+    packet = (
+        "Codex Dev Kit recovery packet (current facts only; do not search old chats first):\n"
+        f"Change guard: {contract_context}\n"
+        f"Git: {git_state}. Latest checkpoint: {checkpoint}.\n"
+        f"STATUS (capped):\n{_status_recovery_summary(root)}\n"
+        "Always read AGENTS.md, docs/PROJECT.md, and docs/FEATURES.md before changing behavior. "
+        "Read architecture, ADRs, roadmap, or runbook only when relevant. Do not create permanent chat or development logs."
+    )
+    return _clip_text(packet, RECOVERY_PACKET_MAX_CHARS)
+
+
 def _deny(reason: str) -> None:
     json.dump(
         {
@@ -525,12 +610,11 @@ def hook_main() -> int:
 
     event = payload.get("hook_event_name")
     if event == "SessionStart":
-        if contract:
-            json.dump(
-                {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": _contract_summary(contract)}},
-                sys.stdout,
-                ensure_ascii=False,
-            )
+        json.dump(
+            {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": _recovery_packet(root, contract)}},
+            sys.stdout,
+            ensure_ascii=False,
+        )
         return 0
 
     if event == "PreToolUse":

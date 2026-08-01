@@ -1,6 +1,6 @@
 {
   "name": "codex-personal-dev-kit",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260801151424",
   "description": "A beginner-friendly Codex development assistant that turns plain-language ideas into reliable long-term software.",
   "author": {
     "name": "Codex Personal Dev Kit"

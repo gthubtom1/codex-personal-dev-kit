@@ -19,7 +19,7 @@
 - <only durable files changed>
 
 ## Next task
-Use $manage-project-continuity, read AGENTS.md and docs/STATUS.md, then <one coherent next outcome>. Preserve <important constraints>. Done when <verification>.
+Use $manage-project-continuity, read AGENTS.md plus docs/PROJECT.md, docs/FEATURES.md, and docs/STATUS.md, then <one coherent next outcome>. Read architecture/ADRs only if relevant. Preserve <important constraints>. Done when <verification>.
 ```
 
 保持交接可在几分钟内读完。不要粘贴日志或重复全部项目背景。

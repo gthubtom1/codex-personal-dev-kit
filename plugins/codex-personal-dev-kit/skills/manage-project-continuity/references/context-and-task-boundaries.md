@@ -21,8 +21,8 @@
 
 ## 恢复顺序
 
-1. `AGENTS.md`、当前 Goal 和未完成的 `.codex/current-change.json`。
-2. `PROJECT.md`、`FEATURES.md`、`STATUS.md` 和相关架构章节。
+1. SessionStart Hook 注入的小型恢复包、`AGENTS.md`、当前 Goal 和未完成的 `.codex/current-change.json`。
+2. 始终读取 `PROJECT.md`、`FEATURES.md`、`STATUS.md`；只读取相关架构章节和 ADR。
 3. Git 状态、当前分支和最近少量提交。
 4. 必要代码、测试和运行结果。
 5. 旧任务或本地 memory 只在仍有缺口时使用。
@@ -32,4 +32,5 @@
 - 原始日志保存在工具输出或临时文件，只向主任务返回摘要。
 - 大文件先搜索符号和局部读取。
 - 完成的探索结论进入代码、测试或当前文档，不重复粘贴。
+- 复杂任务只允许一个临时 `.codex/active-plan.md`；完成后删除，不把计划或聊天变成长久档案。
 - 同一错误连续重复时停下来重审假设和环境。

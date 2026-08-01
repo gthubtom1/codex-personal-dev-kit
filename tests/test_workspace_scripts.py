@@ -70,6 +70,9 @@ class WorkspaceScriptTests(unittest.TestCase):
                 self.assertEqual(log.stdout.strip(), "checkpoint: initialize project")
                 ignored = self.git(project, "check-ignore", ".codex/current-change.json")
                 self.assertEqual(ignored.returncode, 0)
+                ignored_plan = self.git(project, "check-ignore", ".codex/active-plan.md")
+                self.assertEqual(ignored_plan.returncode, 0)
+                self.assertTrue((project / "docs/adr/INDEX.md").is_file())
 
             self.assertNotEqual(alpha, beta)
             self.assertNotEqual((alpha / ".git").resolve(), (beta / ".git").resolve())

@@ -7,13 +7,14 @@
 - 当前分支、远程跟踪和 Worktree 是否可解释。
 - `AGENTS.md`、PROJECT、FEATURES、STATUS、ROADMAP、ARCHITECTURE 是否存在且当前。
 - FEATURES 是否使用稳定 ID，并记录 active 功能的完整接线链路、验证入口、重要性和状态。
-- `.codex/current-change.json` 是否被 Git 忽略；残留 open 契约是否需要恢复。
+- `.codex/current-change.json` 和 `.codex/active-plan.md` 是否被 Git 忽略；残留 open 契约或过期临时计划是否需要恢复或清理。
 - 启动、测试、lint、类型和构建命令是否可复现。
 - 是否有职责混杂、难以局部验证的复杂度热点、循环依赖或跨层访问；不要只按行数判定。
 - 清单与锁文件是否一致，是否出现多个包管理器。
 - `.env`、密钥、数据库副本和用户数据是否被跟踪。
 - 高风险模块是否缺少测试、迁移或回滚说明。
-- 文档是否超过预算或把聊天历史当作事实来源。
+- STATUS 是否有一个具体下一步；FEATURES/ARCHITECTURE 是否需要按领域拆分并保留主索引。
+- 是否存在超大的开发/聊天日志、累计计划版本，或缺少索引和替代状态的 ADR 集合。
 
 ## Dev Kit 审计
 
