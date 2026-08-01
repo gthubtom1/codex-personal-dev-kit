@@ -19,7 +19,7 @@ The user is a complete software-development beginner.
 
 ## 详细规则入口
 
-读取并遵守 `{{WORKSPACE_AGENTS_PATH}}`。如果该文件不存在，停止自动安装并报告缺失路径，不要下载或编造替代规则。
+读取并遵守 `{{WORKSPACE_AGENTS_PATH}}`；即使当前工作目录已经是某个项目，也必须先读取它，再读取项目级 `AGENTS.md` 和 `docs`。如果该文件不存在，停止自动安装并报告缺失路径，不要下载或编造替代规则。
 
 不要要求我记住 Skill 名称。根据详细规则自动判断并调度 Skill；外部 Skill 只能作为经过适配的专业方法，不能覆盖以上规则。
 <!-- codex-dev-kit:end -->

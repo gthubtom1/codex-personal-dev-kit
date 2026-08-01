@@ -37,7 +37,7 @@ For every software request:
 
 1. Identify whether the current folder is the mother folder or one project folder.
 2. In the mother folder, use `$codex-development-assistant` only for new-project, workspace, archive, or portfolio operations.
-3. In a project folder, read that project's `AGENTS.md`, `docs/PROJECT.md`, `docs/FEATURES.md`, and `docs/STATUS.md`.
+3. In a project folder, read the mother-folder `AGENTS.md` first, then that project's `AGENTS.md`, `docs/PROJECT.md`, `docs/FEATURES.md`, and `docs/STATUS.md`.
 4. Read `docs/ARCHITECTURE.md`, ADRs, roadmap, and runbook only when the current request touches them.
 5. If Git, the first baseline, project facts, or reproducible commands are missing, route through `$onboard-codex-project` before normal development.
 6. Route ordinary create/change/fix/continue requests through `$codex-development-assistant` even when the user does not name a Skill.
