@@ -449,6 +449,17 @@ def cancel_contract(root: Path) -> None:
     _contract_path(root).unlink(missing_ok=True)
 
 
+def close_contract(root: Path) -> None:
+    contract = _read_contract(root)
+    if not contract:
+        return
+    if contract.get("state") != "verified":
+        raise GuardError("Cannot close an open change contract. Complete its regression verification first.")
+    if not _verification_still_matches(root, contract):
+        raise GuardError("Cannot close because the project changed after verification. Reopen, recheck, and complete it again.")
+    _contract_path(root).unlink(missing_ok=True)
+
+
 def _contract_summary(contract: dict) -> str:
     changed = ", ".join(contract.get("changedFeatureIds", [])) or "none declared"
     required = ", ".join(contract.get("explicitVerificationIds", [])) or "risk-derived at completion"
@@ -474,7 +485,7 @@ def _deny(reason: str) -> None:
 
 
 def _is_guard_command(command: str) -> bool:
-    return "feature_guard.py" in command and re.search(r"\b(start|status|complete|reopen|allow-delete|cancel)\b", command) is not None
+    return "feature_guard.py" in command and re.search(r"\b(start|status|complete|reopen|allow-delete|cancel|close)\b", command) is not None
 
 
 def _is_git_commit(command: str) -> bool:
@@ -631,6 +642,9 @@ def main() -> int:
     cancel = subparsers.add_parser("cancel", help="Remove a contract only when its baseline is untouched")
     cancel.add_argument("--root", default=".")
 
+    close = subparsers.add_parser("close", help="Remove a verified contract only when verification still matches")
+    close.add_argument("--root", default=".")
+
     subparsers.add_parser("hook", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.command == "hook":
@@ -654,6 +668,9 @@ def main() -> int:
         elif args.command == "cancel":
             cancel_contract(root)
             print("Current change contract removed.")
+        elif args.command == "close":
+            close_contract(root)
+            print("Verified current change contract closed.")
     except GuardError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

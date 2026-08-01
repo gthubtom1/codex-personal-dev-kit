@@ -8,7 +8,7 @@ Beginner-first local baseline and regression protection are implemented. Indepen
 
 - Seven Skills pass the official Skill validator.
 - The Plugin passes the official Plugin validator.
-- Fourteen automated tests cover command safety, feature-loss gates, Hook recovery/Stop behavior, project creation, independent Git repositories, idempotence, preservation, backups, and fixed install refs.
+- Fifteen automated tests cover command safety, feature-loss gates, verified-contract cleanup, Hook recovery/Stop behavior, project creation, independent Git repositories, idempotence, preservation, backups, and fixed install refs.
 - Python, JSON, TOML, and PowerShell syntax checks pass.
 - The real `D:\开发` mother folder was initialized without a Git repository.
 - This Dev Kit is an independent local Git repository on `main`; baseline checkpoint `3711210` contains the validated implementation.

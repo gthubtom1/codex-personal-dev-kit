@@ -134,15 +134,16 @@ class FeatureGuardTests(unittest.TestCase):
             }
         )
         self.assertIsNone(stop_hook)
-
-        self.hook(
-            {
-                "cwd": str(self.root),
-                "hook_event_name": "SessionEnd",
-                "reason": "other",
-            }
-        )
+        feature_guard.close_contract(self.root)
         self.assertFalse((self.root / ".codex/current-change.json").exists())
+
+    def test_close_rejects_changes_after_verification(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        feature_guard.complete_contract(self.root, ["F-001", "F-002"], ["settings and export tests pass"])
+        (self.root / "src/app.js").write_text("export const acceleration = false;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        with self.assertRaisesRegex(feature_guard.GuardError, "changed after verification"):
+            feature_guard.close_contract(self.root)
 
     def test_open_contract_blocks_stop_and_restores_after_resume(self) -> None:
         self.start()

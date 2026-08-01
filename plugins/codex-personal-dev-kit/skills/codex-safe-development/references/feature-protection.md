@@ -31,4 +31,6 @@ python <plugin>/scripts/feature_guard.py complete --root . --verified F-012 --ve
 
 门禁会拒绝：受保护功能条目消失或被改写、变更功能没有成为 active、未声明的已跟踪文件删除、critical/指定功能未记录验证、没有任何验证证据。
 
-`complete` 后若还需编辑，先运行 `reopen` 并在完成后重新验证。契约是 `.codex/current-change.json` 中的单个临时文件，Git 忽略它；新契约覆盖旧契约，不形成历史文档。
+`complete` 后若还需编辑，先运行 `reopen` 并在完成后重新验证。检查点提交或最终确认后运行 `close`；它只会在验证仍与当前内容匹配时删除契约，验证后有新改动会拒绝。SessionEnd Hook 也会清理仍匹配的已验证契约。
+
+契约是 `.codex/current-change.json` 中的单个临时文件，Git 忽略它；新契约覆盖旧契约，不形成历史文档。
