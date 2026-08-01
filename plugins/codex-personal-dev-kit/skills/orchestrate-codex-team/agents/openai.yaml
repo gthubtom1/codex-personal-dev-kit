@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate Codex Team"
+  short_description: "Route complex work across agents and worktrees"
+  default_prompt: "Use $orchestrate-codex-team to divide this complex task into safe, evidence-based agent work."

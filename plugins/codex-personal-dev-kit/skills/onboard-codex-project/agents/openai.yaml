@@ -1,0 +1,4 @@
+interface:
+  display_name: "Onboard Codex Project"
+  short_description: "Prepare a project for safe long-term Codex work"
+  default_prompt: "Use $onboard-codex-project to assess and prepare this project for long-term development."

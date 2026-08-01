@@ -1,0 +1,42 @@
+---
+name: codex-safe-development
+description: 在 Git、测试、审查和权限保护下实施功能、修复、重构或配置变更，并创建本地分支和检查点提交。用户要求写代码、修 bug、重构、添加测试、修改依赖、数据库迁移、发布准备，或希望 AI 自动开发但可回滚时使用。
+---
+
+# Codex Safe Development
+
+完成用户要求的最小完整改动，并留下可验证、可回滚的本地历史。
+
+## 开发循环
+
+1. 读取当前范围内的 `AGENTS.md`、Goal、项目状态和相关源码。确认工作目录、Git 状态、分支或 Worktree，以及已有用户修改。
+2. 对中大型任务先调用 `$prepare-codex-goal`。存在独立并行工作时再调用 `$orchestrate-codex-team`。
+3. 读取 [git-policy.md](references/git-policy.md)。默认沿当前本地开发线工作并创建检查点；只有隔离实验、后台任务或并行写入确实能降低冲突时才自动创建分支或 Worktree。不得把用户未提交的无关修改混入检查点。
+4. 读取 [feature-protection.md](references/feature-protection.md)。在已有 Dev Kit 项目第一次编辑前，用 bundled `scripts/feature_guard.py` 建立当前变更契约，声明本次改变的功能 ID、需要额外验证的邻接功能和有意删除的文件。没有契约不得直接修改源码。
+5. 在编辑前确定最小影响面、回归风险和验证计划。遵循项目现有架构与工具，不顺手重构无关代码。
+6. 分成可验证的小切片实现。新增抽象必须真实减少复杂度或匹配项目现有模式。
+7. 先核对 `docs/FEATURES.md` 中受影响的现有能力，再按 [quality-gates.md](references/quality-gates.md) 运行风险相称的测试、静态检查、构建和必要的人工行为验证。
+8. 审查最终 diff：行为、边界条件、安全、兼容性、错误处理、可维护性和遗漏测试。运行 feature guard `complete`，记录已验证功能 ID 和简短证据；检查失败时不得提交或宣告完成。
+9. 每个独立且验证通过的切片可自动创建本地检查点提交，消息使用 `checkpoint: <outcome>` 或项目既有约定。只暂存本任务文件。
+10. 更新真正发生变化的架构、状态或运行说明，然后调用 `$manage-project-continuity` 完成交接。
+
+## 高风险路由
+
+遇到以下情况必须读取对应参考：
+
+- 新增或升级依赖：[dependency-and-supply-chain.md](references/dependency-and-supply-chain.md)
+- 身份、权限、密钥、上传或外部输入：[security.md](references/security.md)
+- 数据库、结构或历史数据变化：[data-migrations.md](references/data-migrations.md)
+- 准备上线、打包或交付：[release-readiness.md](references/release-readiness.md)
+
+## 权限边界
+
+可自动执行：项目内编辑、已有测试和构建、本地分支、本地 Worktree、本地检查点提交。
+
+先询问：生产依赖、付费服务、重大架构替换、数据库结构迁移、访问项目外数据、安装全局工具或修改全局 Codex 配置。
+
+禁止自动执行：push、pull、merge、rebase、tag、release、deploy、包发布、生产迁移、基础设施 apply/destroy、强制 clean、`reset --hard` 和不可恢复数据操作。
+
+## 完成标准
+
+只有在请求行为已实现、feature guard 已验证、相关验证已运行、diff 已审查、风险和未验证项已说明、项目状态已更新时才声明完成。Stop Hook 会在契约仍打开或验证后又发生改动时要求继续工作。

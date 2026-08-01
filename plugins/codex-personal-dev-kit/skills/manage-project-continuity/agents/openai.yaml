@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Project Continuity"
+  short_description: "Keep long projects recoverable across Codex tasks"
+  default_prompt: "Use $manage-project-continuity to restore or hand off this project without bloating its context."

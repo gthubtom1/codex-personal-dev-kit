@@ -1,0 +1,10 @@
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+.pytest_cache/
+__pycache__/
+artifacts/
+test-output/
+.codex/current-change.json

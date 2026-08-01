@@ -1,0 +1,3 @@
+# List only ignored local files that a Codex-managed Worktree truly needs.
+# Do not add secrets by default. Review every entry before enabling it.
+# .env.local

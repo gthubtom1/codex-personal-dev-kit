@@ -1,0 +1,65 @@
+{
+  "description": "Block destructive commands and keep accepted project features protected across edits, compaction, verification, and task completion.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${PLUGIN_ROOT}/scripts/feature_guard.py hook",
+            "commandWindows": "python \"$env:PLUGIN_ROOT\\scripts\\feature_guard.py\" hook",
+            "timeout": 10,
+            "statusMessage": "Restoring current change safeguards"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${PLUGIN_ROOT}/hooks/pre_tool_guard.py",
+            "commandWindows": "python \"$env:PLUGIN_ROOT\\hooks\\pre_tool_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking command safety"
+          },
+          {
+            "type": "command",
+            "command": "python3 ${PLUGIN_ROOT}/scripts/feature_guard.py hook",
+            "commandWindows": "python \"$env:PLUGIN_ROOT\\scripts\\feature_guard.py\" hook",
+            "timeout": 10,
+            "statusMessage": "Checking feature protection"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${PLUGIN_ROOT}/scripts/feature_guard.py hook",
+            "commandWindows": "python \"$env:PLUGIN_ROOT\\scripts\\feature_guard.py\" hook",
+            "timeout": 10,
+            "statusMessage": "Checking completion evidence"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${PLUGIN_ROOT}/scripts/feature_guard.py hook",
+            "commandWindows": "python \"$env:PLUGIN_ROOT\\scripts\\feature_guard.py\" hook",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

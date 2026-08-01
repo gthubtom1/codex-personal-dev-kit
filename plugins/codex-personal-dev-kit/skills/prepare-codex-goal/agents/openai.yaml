@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prepare Codex Goal"
+  short_description: "Turn an idea into a scoped and verifiable goal"
+  default_prompt: "Use $prepare-codex-goal to refine this request into a safe, verifiable development goal."

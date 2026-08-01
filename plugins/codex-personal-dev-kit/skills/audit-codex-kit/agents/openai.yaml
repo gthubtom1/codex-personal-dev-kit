@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit Codex Kit"
+  short_description: "Audit project health and Codex workflow drift"
+  default_prompt: "Use $audit-codex-kit to inspect this project or development kit for drift and safety gaps."

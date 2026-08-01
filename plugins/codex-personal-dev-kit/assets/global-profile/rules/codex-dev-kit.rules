@@ -1,0 +1,146 @@
+# Commands that Codex must never execute automatically.
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Keep changes local. Ask the user to review and push manually.",
+    match = ["git push", "git push origin main"],
+    not_match = ["git status", "git commit -m checkpoint"],
+)
+
+prefix_rule(
+    pattern = ["git", ["pull", "merge", "rebase", "tag", "clean", "restore"]],
+    decision = "forbidden",
+    justification = "This can combine, publish, rewrite, or discard work. Prepare local commits and let the user perform it manually.",
+    match = ["git pull", "git merge feature", "git rebase main", "git tag v1.0.0", "git clean -fd", "git restore app.js"],
+    not_match = ["git fetch origin", "git switch -c codex/feature"],
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Hard reset can discard work. Use a new branch or a reversible commit instead.",
+    match = ["git reset --hard", "git reset --hard HEAD~1"],
+    not_match = ["git reset HEAD file.txt"],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", "--amend"],
+    decision = "forbidden",
+    justification = "Amending rewrites history. Create a new checkpoint commit instead.",
+    match = ["git commit --amend", "git commit --amend --no-edit"],
+    not_match = ["git commit -m checkpoint"],
+)
+
+prefix_rule(
+    pattern = ["git", "branch", "-D"],
+    decision = "forbidden",
+    justification = "Forced branch deletion can remove recovery points. Let the user delete branches manually.",
+    match = ["git branch -D feature"],
+    not_match = ["git branch --list"],
+)
+
+prefix_rule(
+    pattern = ["git", "worktree", "remove"],
+    decision = "forbidden",
+    justification = "Worktree removal can discard isolated work. Archive or remove it manually after review.",
+    match = ["git worktree remove ../feature"],
+    not_match = ["git worktree list"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "Remote merge is a user-controlled release action.",
+    match = ["gh pr merge 42"],
+    not_match = ["gh pr view 42"],
+)
+
+prefix_rule(
+    pattern = ["gh", "release"],
+    decision = "forbidden",
+    justification = "Prepare release notes locally; the user publishes the release.",
+    match = ["gh release create v1.0.0", "gh release delete v1.0.0"],
+    not_match = ["gh repo view"],
+)
+
+prefix_rule(
+    pattern = [["npm", "pnpm"], "publish"],
+    decision = "forbidden",
+    justification = "Package publishing is a user-controlled external action.",
+    match = ["npm publish", "pnpm publish"],
+    not_match = ["npm test", "pnpm build"],
+)
+
+prefix_rule(
+    pattern = ["yarn", "npm", "publish"],
+    decision = "forbidden",
+    justification = "Package publishing is a user-controlled external action.",
+    match = ["yarn npm publish"],
+    not_match = ["yarn test"],
+)
+
+prefix_rule(
+    pattern = [["twine", "cargo", "gem", "docker"], ["upload", "publish", "push"]],
+    decision = "forbidden",
+    justification = "Publishing artifacts or images is a user-controlled external action.",
+    match = ["twine upload dist/*", "cargo publish", "gem push app.gem", "docker push example/app"],
+    not_match = ["cargo test", "docker build ."],
+)
+
+prefix_rule(
+    pattern = ["kubectl", ["apply", "delete", "replace", "patch", "rollout"]],
+    decision = "forbidden",
+    justification = "Cluster changes must be reviewed and run manually by the user.",
+    match = ["kubectl apply -f deploy.yaml", "kubectl delete deployment app"],
+    not_match = ["kubectl diff -f deploy.yaml", "kubectl get pods"],
+)
+
+prefix_rule(
+    pattern = ["helm", ["install", "upgrade", "uninstall", "rollback"]],
+    decision = "forbidden",
+    justification = "Cluster release changes must be run manually by the user.",
+    match = ["helm upgrade app chart", "helm uninstall app"],
+    not_match = ["helm lint chart", "helm template app chart"],
+)
+
+prefix_rule(
+    pattern = ["terraform", ["apply", "destroy", "import"]],
+    decision = "forbidden",
+    justification = "Infrastructure mutations are never automatic. Produce a plan for user review.",
+    match = ["terraform apply", "terraform destroy"],
+    not_match = ["terraform plan", "terraform validate"],
+)
+
+prefix_rule(
+    pattern = ["pulumi", ["up", "destroy", "import"]],
+    decision = "forbidden",
+    justification = "Infrastructure mutations are never automatic. Produce a preview for user review.",
+    match = ["pulumi up", "pulumi destroy"],
+    not_match = ["pulumi preview"],
+)
+
+prefix_rule(
+    pattern = [["vercel", "netlify", "firebase"], "deploy"],
+    decision = "forbidden",
+    justification = "Deployment is a user-controlled action. Prepare and verify locally instead.",
+    match = ["vercel deploy", "netlify deploy", "firebase deploy"],
+    not_match = ["vercel --version", "firebase emulators:start"],
+)
+
+# Global software installation requires an interactive decision.
+prefix_rule(
+    pattern = [["winget", "choco", "scoop"], "install"],
+    decision = "prompt",
+    justification = "Installing global software changes the machine. Confirm the exact package and source first.",
+    match = ["winget install Git.Git", "choco install nodejs", "scoop install python"],
+    not_match = ["winget list", "scoop status"],
+)
+
+prefix_rule(
+    pattern = ["npm", ["install", "i"], ["--global", "-g"]],
+    decision = "prompt",
+    justification = "Global package installation changes the machine. Prefer project-local tools.",
+    match = ["npm install --global typescript", "npm i -g pnpm"],
+    not_match = ["npm install", "npm test"],
+)

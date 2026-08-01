@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Safe Development"
+  short_description: "Implement scoped changes with Git and quality gates"
+  default_prompt: "Use $codex-safe-development to implement this change with tests, review, and local checkpoints."

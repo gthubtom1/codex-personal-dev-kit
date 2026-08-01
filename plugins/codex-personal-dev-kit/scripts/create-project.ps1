@@ -1,0 +1,63 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$ProjectName,
+    [string]$WorkspaceRoot = (Get-Location).Path,
+    [switch]$Apply
+)
+
+$ErrorActionPreference = "Stop"
+$workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
+$workspaceConfigPath = Join-Path $workspacePath "workspace.json"
+if (-not (Test-Path -LiteralPath $workspaceConfigPath -PathType Leaf)) {
+    throw "workspace.json was not found. Run scripts/bootstrap-workspace.ps1 first."
+}
+
+$workspaceConfig = Get-Content -Raw -LiteralPath $workspaceConfigPath | ConvertFrom-Json
+$projectsDirectory = [string]$workspaceConfig.projectsDirectory
+if ([string]::IsNullOrWhiteSpace($projectsDirectory)) {
+    throw "workspace.json does not define projectsDirectory."
+}
+
+$slug = $ProjectName.Trim()
+$slug = [regex]::Replace($slug, '[<>:"/\\|?*]', '-')
+$slug = [regex]::Replace($slug, '\s+', '-')
+$slug = [regex]::Replace($slug, '-{2,}', '-')
+$slug = $slug.Trim(' ', '.', '-')
+if ([string]::IsNullOrWhiteSpace($slug)) {
+    throw "ProjectName does not contain a safe folder name."
+}
+if ($slug.ToUpperInvariant() -in @("CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "LPT1", "LPT2", "LPT3")) {
+    throw "ProjectName resolves to a reserved Windows folder name: $slug"
+}
+
+$projectsRoot = [System.IO.Path]::GetFullPath((Join-Path $workspacePath $projectsDirectory))
+$projectPath = [System.IO.Path]::GetFullPath((Join-Path $projectsRoot $slug))
+$prefix = $projectsRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+if (-not $projectPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Resolved project path escaped the projects directory: $projectPath"
+}
+if (Test-Path -LiteralPath $projectPath) {
+    throw "Project folder already exists: $projectPath"
+}
+
+Write-Host "Project folder: $projectPath"
+if (-not $Apply) {
+    Write-Host "Preview only. Re-run with -Apply to create templates, initialize Git, and make a local baseline checkpoint."
+    exit 0
+}
+
+New-Item -ItemType Directory -Path $projectsRoot -Force | Out-Null
+$bootstrapProject = Join-Path $PSScriptRoot "bootstrap-project.ps1"
+& $bootstrapProject -ProjectRoot $projectPath -Apply -InitializeGit
+if ($LASTEXITCODE -ne 0) {
+    throw "Project bootstrap failed."
+}
+
+$git = Get-Command git -ErrorAction Stop
+& $git.Source -C $projectPath add -- AGENTS.md README.md .gitignore .worktreeinclude .codex docs
+if ($LASTEXITCODE -ne 0) { throw "Unable to stage the initial project template." }
+& $git.Source -c user.name="Codex Dev Kit" -c user.email="codex-dev-kit@local.invalid" -C $projectPath commit -m "checkpoint: initialize project"
+if ($LASTEXITCODE -ne 0) { throw "Unable to create the initial local checkpoint." }
+
+Write-Host "Project created with a local recovery point."
+Write-Host "Next: open '$projectPath' as the Codex working folder and start a new task."
