@@ -69,6 +69,8 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertIn("Existing-project development starts only after the user opens that exact project folder", agents_text)
             self.assertIn(str(workspace), agents_text)
             self.assertIn(str(SCRIPT_ROOT.parent / "skills"), agents_text)
+            self.assertIn("<CodexHome>\\codex-dev-kit\\scripts\\bootstrap-project.ps1", agents_text)
+            self.assertIn("never guess from the Skill directory", agents_text)
             self.assertNotIn("{{WORKSPACE_ROOT}}", agents_text)
             self.assertNotIn("{{DEV_KIT_SKILLS_ROOT}}", agents_text)
             workspace_config = workspace / ".codex/config.toml"

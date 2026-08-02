@@ -213,6 +213,14 @@ class InstallScriptTests(unittest.TestCase):
             )
             self.assertIn("do not prepend '.system'", missing.stdout)
 
+    def test_onboarding_skill_resolves_bootstrap_runtime_without_searching(self) -> None:
+        skill = (REPO_ROOT / "plugins/codex-personal-dev-kit/skills/onboard-codex-project/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("<CodexHome>\\codex-dev-kit\\scripts\\bootstrap-project.ps1", skill)
+        self.assertIn("source.json", skill)
+        self.assertIn("<WorkspaceRoot>\\codex-dev-kit\\plugins\\codex-personal-dev-kit\\scripts\\bootstrap-project.ps1", skill)
+        self.assertIn("不得递归搜索整个磁盘", skill)
+        self.assertIn("不要联网下载", skill)
+
     def test_rejects_nonlocal_standalone_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_install(
