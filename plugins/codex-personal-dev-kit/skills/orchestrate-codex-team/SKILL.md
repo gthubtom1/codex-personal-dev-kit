@@ -19,10 +19,10 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 
 - 主对话模型由用户在 Codex 中选择，本 Skill 不锁定主对话模型。
 - 原生解析顺序是：本次 spawn 的明确模型/推理（包括用户本次 roster）> 项目 `[agents]` 默认 > 当前父任务模型/推理。模板把默认值设为 `gpt-5.6-luna` 和 `max`，但默认值只是路由请求，不能单独证明调用已成功。
-- 显式模型目录是覆盖模型的参考，不是当前父任务继承模型的完整清单。若当前任务运行时已确认父模型为 Luna，spawn 不传 `model` 时应记录为 `inherited-current-model` Luna；不能因为目录没列 Luna 就拦截这条原生继承路径。父模型无法确认时记录 `runtime-unconfirmed`，不猜测。
+- 显式模型目录是覆盖模型的参考，不是当前父任务继承模型的完整清单。若当前任务运行时已确认父模型为 Luna，spawn 不传 `model` 时先记录请求来源为 `inherited-current-model`；只有原生调用接受并启动后，才把有效模型记为 Luna。目录没列 Luna 不能单独拦截这条路径；父模型无法确认、调用被拒绝或没有启动结果时，记录有效模型 `unconfirmed` 和失败状态，不猜测。
 - 子代理不是固定 1 个；按任务拆分多个有界并行工作。有效并发上限取配置的 `max_concurrent_threads_per_session` 与当前原生可用槽位的较小值（模板默认 6，不含主线程）；请求总数超过有效上限时分波次完成，保持用户指定的总数量和模型比例，不得静默减少。
 - 用户明确指定组合时，例如“2 个 Sol、3 个 Luna”，按指定数量分别调用 `gpt-5.6-sol` 和 `gpt-5.6-luna`，每个都使用 `max`。
-- 用户明确指定 Sol/Luna 时，使用原生 `spawn_agent` 的显式模型参数和 `max`；以原生参数接受、启动结果和返回状态确认该分配。若原生运行时拒绝或未确认，报告对应代理的精确失败，不得静默换模型或减少数量。模型目录缺少某名称本身不构成失败证据。
+- 用户明确指定 Sol/Luna 时，使用原生 `spawn_agent` 的显式模型参数和 `max`；以原生参数接受、启动结果和返回状态确认该分配。若原生运行时拒绝或未确认，报告对应代理的精确失败，保持有效模型 `unconfirmed`，不得静默换模型或减少数量。模型目录缺少某名称本身不构成失败证据，但原生 Unknown model/拒绝结果是失败证据。
 - 第一次调用前同时检查有效配置的能力闸门：`[agents].enabled = false` 或 `[features].multi_agent = false` 时，明确报告被关闭的闸门并停止子代理路由，询问用户是否要显式启用；不通过可见任务、自定义 Agent、Plugin 或 Hook 绕过。配置合并只补缺失键，不静默修改用户的关闭选择。
 - 未指定模型时依赖 Codex 原生的 `[agents]` 默认或当前父任务继承值；显式指定 Sol/Luna 时，使用原生 `spawn_agent` 的单次调用参数，并同时传入 `fork_turns="none"` 或明确的正整数 fork 深度，因为模型/推理覆盖不能与默认的完整历史 fork 混用。除非用户明确要求持久命名代理，不创建自定义 Agent 文件。
 - 参数序列化失败表示子代理没有启动。不得反复重试错误参数，也不得把失败调用写成已完成的独立检查。
@@ -30,7 +30,7 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 
 ## 无人值守账本和超时
 
-主代理在内存中维护一份临时 roster ledger，不写入项目长期文档。每条记录至少包含：代理编号、请求模型、有效模型、模型来源（`explicit-spawn`、`config-default`、`inherited-current-model` 或 `runtime-unconfirmed`）、推理强度、任务、波次、状态（`queued`、`running`、`completed`、`failed`、`interrupted` 或 `timeout`）和精炼结果。只有 `running` 的原生子代理占用并发槽位；启动失败、超时或中断都必须保留原状态，不能悄悄换模型或补一个未声明的代理。
+主代理在内存中维护一份临时 roster ledger，不写入项目长期文档。每条记录至少包含：代理编号、请求模型、有效模型、模型来源（`explicit-spawn`、`config-default`、`inherited-current-model` 或 `runtime-unconfirmed`）、推理强度、任务、波次、状态（`queued`、`running`、`completed`、`failed`、`interrupted` 或 `timeout`）和精炼结果。有效模型只能在原生调用接受并启动后填写；Unknown model、参数拒绝、超时或中断必须保留失败/未确认状态。只有 `running` 的原生子代理占用并发槽位，不能悄悄换模型或补一个未声明的代理。
 
 - 启动前先读取原生 agent 列表，按 `max_concurrent_threads_per_session - running` 计算空槽，结果不低于 0；列表不可用或状态有歧义时保守地不启动新代理并报告，不能猜测容量。波次大小取这个空槽数；一波全部结束后才启动下一波。
 - 每个代理启动时声明阶段目标和心跳点。默认每 5 分钟应有一次心跳；连续 10 分钟没有有效进展时只发送一次简短 `followup_task`，再等 5 分钟仍无进展就 `interrupt_agent`，标记为 `timeout` 或 `interrupted`，主代理继续处理其他独立结果。若代理事先声明长测试、构建或官方研究，主代理可在 ledger 中记录一次延长，硬上限 30 分钟，仍最多一次 follow-up；不得无限延期。

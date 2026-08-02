@@ -163,6 +163,9 @@ class OrchestrationRoutingTests(unittest.TestCase):
         for text in (orchestration_skill, routing, workspace_agents):
             self.assertIn("inherited-current-model", text)
             self.assertIn("runtime-unconfirmed", text)
+            self.assertTrue("effective model" in text.lower() or "有效模型" in text)
+        self.assertIn("unknown model", orchestration_skill.lower())
+        self.assertIn("only", workspace_agents.lower())
         self.assertIn("目录没列 Luna", orchestration_skill)
         self.assertIn("model catalog", workspace_agents)
         self.assertIn("not a complete list", workspace_agents)
