@@ -8,16 +8,23 @@ param(
 $ErrorActionPreference = "Stop"
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $workspaceConfigPath = Join-Path $workspacePath "workspace.json"
-if (-not (Test-Path -LiteralPath $workspaceConfigPath -PathType Leaf)) {
+$requiredWorkspacePaths = @(
+    $workspaceConfigPath,
+    (Join-Path $workspacePath "AGENTS.md"),
+    (Join-Path $workspacePath ".codex\config.toml")
+)
+$workspaceNeedsRepair = @($requiredWorkspacePaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -gt 0
+if ($workspaceNeedsRepair) {
     if (-not $Apply) {
-        Write-Host "workspace.json was not found. Apply mode will initialize this mother folder automatically before creating the project."
+        Write-Host "The mother-folder contract is incomplete. Apply mode will initialize or repair it before creating the project."
         Write-Host "Preview only. Re-run with -Apply to initialize the workspace, create templates, initialize Git, and make a local baseline checkpoint."
         exit 0
     }
     $bootstrapWorkspace = Join-Path $PSScriptRoot "bootstrap-workspace.ps1"
     & $bootstrapWorkspace -WorkspaceRoot $workspacePath -Apply
-    if (-not (Test-Path -LiteralPath $workspaceConfigPath -PathType Leaf)) {
-        throw "Mother-folder initialization completed without creating workspace.json."
+    $missingAfterRepair = @($requiredWorkspacePaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+    if ($missingAfterRepair.Count -gt 0) {
+        throw "Mother-folder initialization completed with required files still missing: $($missingAfterRepair -join ', ')"
     }
 }
 

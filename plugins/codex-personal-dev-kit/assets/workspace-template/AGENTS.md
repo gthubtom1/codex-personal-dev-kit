@@ -128,31 +128,20 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 - Keep one writer per checkout. Parallel writers require separate Worktrees, branches, file ownership, and an explicit integration order.
 - Do not send the expected answer to an independent reviewer.
 
-### Subagent Model Policy
+### Official Subagent Defaults
 
-- The main conversation model is user-selected and is not locked by this system.
-- Managed templates do not set `default_subagent_model`; an unpinned child inherits an explicit project default when one exists, otherwise the current parent task model.
-- Every system-requested subagent reasoning effort: `max`.
-- Codex resolves each child model as: an explicit model on this spawn (including the user's roster) > an explicit `[agents].default_subagent_model` already owned by the user/project > the current parent task model.
-- Multiple subagents are allowed up to the smaller of `max_concurrent_threads_per_session` and the currently available native slots (the template default is 6, excluding the primary thread). If a requested roster is larger, run it in waves while preserving the exact total and model mix.
-- If the user specifies a model roster, compare every explicit model with the model enum exposed by this task's `spawn_agent` tool. That task-local enum is authoritative for explicit overrides.
-- When explicitly overriding a subagent model or reasoning effort, pass `fork_turns = "none"` or a positive fork depth; the default full-history fork cannot be combined with per-call overrides.
-- A model absent from this task's `spawn_agent` enum must not be called explicitly, retried, or silently replaced. Record that allocation as `task-tool-unsupported` and explain that a compatible main task or a currently allowed model is required. A global/UI catalog, another task's catalog, a TOML string, or a historical success cannot override the current task capability surface.
-- For an unpinned route, omit `model`. If the project has an explicit `default_subagent_model`, record `config-default` after the native spawn starts; otherwise record `inherited-current-model`. A rejected or unconfirmed call remains `runtime-unconfirmed`.
-- Before claiming that subagents are available, inspect the effective native configuration. If `[agents].enabled = false` or `[features].multi_agent = false`, report the exact disabled gate and stop the subagent route; ask the user before changing global/project configuration. Never work around a disabled gate with visible tasks, custom agents, Plugins, or Hooks.
-- For an explicit roster, start only allocations supported by this task's enum, with `max`, and keep unsupported allocations as reported failures. Preserve the requested count in the ledger; do not silently substitute a model or reduce the total.
-- Prefer native per-call model selection; do not create custom Agent files unless the user explicitly asks for persistent named agents.
-- A tool-argument serialization failure means the subagent did not start. Never report it as completed work.
-- Explicit user/project configuration wins over managed defaults: the merge script only fills missing `[agents]` keys and never silently changes `enabled`, model, or reasoning effort. Existing model defaults are reported and checked against the current task capability surface. The in-memory ledger records requested/effective model and provenance (`explicit-spawn`, `config-default`, `inherited-current-model`, `task-tool-unsupported`, or `runtime-unconfirmed`).
+- The Dev Kit does not write, merge, migrate, or recommend any subagent model, reasoning-effort, concurrency, enablement, or interruption setting.
+- Call the current task's native `spawn_agent` without model, reasoning, or concurrency overrides. Use Codex's official native defaults; Codex and the user's existing configuration own those choices.
+- If the native tool is unavailable, rejects the call, or fails to start, report that result. Never change configuration or substitute a visible task, custom Agent, Plugin, Hook, or MCP.
+- A started subagent must confirm that its task text is readable and its scope is correct. Supplement once if needed; stop and report if confirmation still fails.
 
 ### Unattended roster ledger and timeouts
 
-- Keep a temporary in-memory ledger for every roster: ID, requested model, reasoning effort, task, wave, and status (`queued`, `running`, `completed`, `failed`, `interrupted`, or `timeout`). Do not write agent transcripts or raw logs into the project.
-- `spawn_agent` is the required launch capability; `list_agents` is optional capacity information. When `list_agents` exists, effective free slots are `max_concurrent_threads_per_session - running native subagents`, never below zero. When it does not exist, use a conservative degraded wave of at most 2 children and never exceed the configured limit, counting only children this task successfully started and has not finished.
-- Wait for a wave to finish before starting the next. Preserve the exact requested count and model mix in the ledger, recording unsupported or failed starts instead of silently replacing them. Missing native agent-list support alone must not be reported as total subagent unavailability.
+- Keep a temporary in-memory ledger containing only ID, task, task-receipt confirmation, status (`queued`, `running`, `completed`, `failed`, `interrupted`, or `timeout`), and result. Do not write agent transcripts or raw logs into the project.
+- `spawn_agent` is the launch capability and `list_agents` is optional status information. Native tool acceptance controls capacity and queuing; the Dev Kit sets no limits.
 - If wait, follow-up, or interrupt controls are missing, launch only short bounded read-only tasks and report that unattended supervision is limited.
-- Default heartbeat is every 5 minutes. If an agent gives no meaningful progress for 10 minutes, send one concise follow-up; if there is still no meaningful progress after 5 more minutes, interrupt it and mark `timeout`/`interrupted`. If the agent declares a long test, build, or official research phase before starting it, the main agent may record one extension in the ledger, with a hard 30-minute cap and still at most one follow-up. Allow no silent or unlimited extensions.
-- Independent review and blind testing use `fork_turns="none"` by default (or a small explicit fork depth), receive only necessary facts, and must not receive the main agent's expected conclusion.
+- Waiting, follow-up, timeout, and interruption use the native tools' official behavior. The Dev Kit sets no heartbeat, retry, timeout, or forced-interruption policy.
+- Independent review and blind testing receive only necessary facts and must not receive the main agent's expected conclusion. Context transfer uses the native default unless the user explicitly asks for a different isolation mode.
 - Final orchestration reporting must distinguish planned, started, completed, failed, interrupted, and timed-out agents. A timed-out agent is never counted as completed.
 
 ## Context And Documents

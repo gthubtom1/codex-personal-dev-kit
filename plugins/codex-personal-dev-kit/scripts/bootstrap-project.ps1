@@ -5,8 +5,7 @@ param(
     [string]$CodexHome,
     [switch]$Apply,
     [switch]$InitializeGit,
-    [switch]$CreateBaselineCheckpoint,
-    [switch]$RemoveLegacyLunaDefault
+    [switch]$CreateBaselineCheckpoint
 )
 
 $ErrorActionPreference = "Stop"
@@ -164,6 +163,9 @@ if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) {
 }
 $workspacePath = Get-SafeFullPath -Path $WorkspaceRoot
 $workspaceAgentsPath = Join-Path $workspacePath "AGENTS.md"
+if (-not (Test-Path -LiteralPath $workspaceAgentsPath -PathType Leaf)) {
+    throw "Detailed mother-folder AGENTS.md is required before project onboarding: $workspaceAgentsPath"
+}
 
 $templateFiles = Get-ChildItem -LiteralPath $templateRoot -Recurse -Force -File
 $actions = foreach ($source in $templateFiles) {
@@ -202,10 +204,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($action in $actions) {
     if ($action.Action -eq "merge") {
         $existing = [System.IO.File]::ReadAllText($action.Path)
-        if ((Test-CodexLegacyLunaDefault -Content $existing) -and -not $RemoveLegacyLunaDefault) {
-            Write-Warning "Legacy Luna child-model default detected and preserved in $($action.Path). Re-run with -Apply -RemoveLegacyLunaDefault only after confirming it came from the old Dev Kit."
-        }
-        $merged = Merge-CodexNativeAgentDefaults -Content $existing -RemoveLegacyLunaDefault:$RemoveLegacyLunaDefault
+        $merged = Merge-CodexProjectDefaults -Content $existing
         if ($merged -ne $existing) {
             [System.IO.File]::WriteAllText($action.Path, $merged, $utf8NoBom)
         }

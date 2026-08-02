@@ -32,18 +32,6 @@ $workspaceAgents = Join-Path $workspacePath "AGENTS.md"
 if (-not (Test-Path -LiteralPath $workspaceAgents -PathType Leaf)) {
     throw "Detailed workspace AGENTS.md was not found: $workspaceAgents"
 }
-$workspaceConfig = Join-Path $workspacePath ".codex\config.toml"
-$legacyLunaDefaultDetected = $false
-if (Test-Path -LiteralPath $workspaceConfig -PathType Leaf) {
-    $workspaceConfigText = [System.IO.File]::ReadAllText($workspaceConfig)
-    $legacyLunaDefaultDetected = [bool]($workspaceConfigText -match '(?m)^\s*default_subagent_model\s*=\s*["'']gpt-5\.6-luna["'']\s*(?:#.*)?$')
-}
-$workspaceAgentsText = [System.IO.File]::ReadAllText($workspaceAgents)
-$legacyRoutingTextDetected = [bool](
-    $workspaceAgentsText -match '(?i)(default|默认|请求).{0,40}(gpt-5\.6-luna|Luna/max)' -or
-    $workspaceAgentsText -match '(?i)(agent list|代理列表).{0,80}(unavailable|不可用|不启动)'
-)
-
 $bootstrapKitRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $bootstrapRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $bootstrapKitRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($Source)) {
@@ -61,7 +49,7 @@ if (Test-Path -LiteralPath (Join-Path $repoLayoutKitRoot "assets\standalone\AGEN
     $kitSourceRoot = $repoLayoutKitRoot
 }
 elseif (Test-Path -LiteralPath (Join-Path $resolvedSource "assets\standalone\AGENTS.md") -PathType Leaf) {
-    $kitSourceRoot = $resolvedSource
+    throw "Pass the Dev Kit repository root, not the nested kit directory: $resolvedSource"
 }
 else {
     throw "Local standalone Dev Kit checkout is missing the standalone AGENTS template: $resolvedSource"
@@ -110,6 +98,36 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $backupRoot = Join-Path $codexHomePath "backups\codex-dev-kit\$timestamp"
 $planned = New-Object System.Collections.Generic.List[object]
+$managedFileRecords = New-Object System.Collections.Generic.List[object]
+$oldManifestPath = Join-Path $codexHomePath "codex-dev-kit\managed-files.json"
+$oldManifest = $null
+if (Test-Path -LiteralPath $oldManifestPath -PathType Leaf) {
+    try {
+        $oldManifest = Get-Content -Raw -LiteralPath $oldManifestPath | ConvertFrom-Json
+    }
+    catch {
+        throw "Installed managed-files.json is invalid. Restore or remove it before updating: $oldManifestPath"
+    }
+}
+
+function Get-TextSha256 {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content)
+
+    $bytes = $utf8NoBom.GetBytes($Content)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
 
 function Backup-ExistingFile {
     param([Parameter(Mandatory = $true)][string]$Target)
@@ -126,12 +144,17 @@ function Backup-ExistingFile {
 function Set-ManagedTextFile {
     param(
         [Parameter(Mandatory = $true)][string]$Target,
-        [Parameter(Mandatory = $true)][string]$Content
+        [Parameter(Mandatory = $true)][string]$Content,
+        [switch]$Track
     )
 
     $existing = if (Test-Path -LiteralPath $Target -PathType Leaf) { [System.IO.File]::ReadAllText($Target) } else { $null }
     $action = if ($null -eq $existing) { "create" } elseif ($existing -eq $Content) { "unchanged" } else { "update" }
     $planned.Add([pscustomobject]@{ Action = $action; Path = $Target })
+    if ($Track) {
+        $relative = $Target.Substring($codexHomePath.Length).TrimStart('\', '/').Replace('\', '/')
+        $managedFileRecords.Add([pscustomobject]@{ path = $relative; sha256 = (Get-TextSha256 -Content $Content) })
+    }
     if (-not $Apply -or $action -eq "unchanged") {
         return
     }
@@ -154,7 +177,7 @@ function Copy-ManagedTree {
             continue
         }
         $relative = $file.FullName.Substring($SourceRoot.Length).TrimStart('\', '/')
-        Set-ManagedTextFile -Target (Join-Path $TargetRoot $relative) -Content ([System.IO.File]::ReadAllText($file.FullName))
+        Set-ManagedTextFile -Target (Join-Path $TargetRoot $relative) -Content ([System.IO.File]::ReadAllText($file.FullName)) -Track
     }
 }
 
@@ -311,7 +334,16 @@ if ($startMarkerCount -eq 1 -and $endIndex -le $startIndex) {
 }
 if ($startIndex -ge 0 -and $endIndex -gt $startIndex) {
     $afterEnd = $endIndex + $endMarker.Length
-    $mergedAgents = $currentAgents.Substring(0, $startIndex) + $agentsBlock + $currentAgents.Substring($afterEnd)
+    $newline = if ($currentAgents.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $prefix = $currentAgents.Substring(0, $startIndex)
+    $suffix = $currentAgents.Substring($afterEnd).TrimStart("`r", "`n")
+    $managedBlock = $agentsBlock.TrimEnd("`r", "`n")
+    $mergedAgents = if ([string]::IsNullOrWhiteSpace($suffix)) {
+        $prefix + $managedBlock + $newline
+    }
+    else {
+        $prefix + $managedBlock + $newline + $newline + $suffix
+    }
 }
 elseif ([string]::IsNullOrWhiteSpace($currentAgents)) {
     $mergedAgents = $agentsBlock
@@ -322,8 +354,8 @@ else {
 Set-ManagedTextFile -Target $agentsTarget -Content $mergedAgents
 
 $kitTargetRoot = Join-Path $codexHomePath "codex-dev-kit"
-Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "VERSION") -Content ($version + [Environment]::NewLine)
-Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "config.fragment.toml") -Content ([System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "assets\global-profile\config.fragment.toml")))
+Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "VERSION") -Content ($version + [Environment]::NewLine) -Track
+Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "config.fragment.toml") -Content ([System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "assets\global-profile\config.fragment.toml"))) -Track
 
 $sourceConfig = [ordered]@{
     schemaVersion = 2
@@ -334,12 +366,46 @@ $sourceConfig = [ordered]@{
     version = $version
     workspaceRoot = $workspacePath
 } | ConvertTo-Json
-Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "source.json") -Content ($sourceConfig + [Environment]::NewLine)
+Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "source.json") -Content ($sourceConfig + [Environment]::NewLine) -Track
 
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "scripts") -TargetRoot (Join-Path $kitTargetRoot "scripts") -Extensions @(".py", ".ps1")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\project-template") -TargetRoot (Join-Path $kitTargetRoot "assets\project-template")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\workspace-template") -TargetRoot (Join-Path $kitTargetRoot "assets\workspace-template")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "skills") -TargetRoot (Join-Path $codexHomePath "skills")
+
+$desiredManagedPaths = @{}
+foreach ($record in $managedFileRecords) {
+    $desiredManagedPaths[[string]$record.path] = $true
+}
+if ($oldManifest -and $oldManifest.files) {
+    foreach ($oldRecord in @($oldManifest.files)) {
+        $relative = ([string]$oldRecord.path).Replace('\', '/')
+        if ([string]::IsNullOrWhiteSpace($relative) -or $desiredManagedPaths.ContainsKey($relative)) {
+            continue
+        }
+        $target = Join-Path $codexHomePath ($relative.Replace('/', '\'))
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+            continue
+        }
+        $currentHash = Get-FileSha256 -Path $target
+        if ($currentHash -eq ([string]$oldRecord.sha256).ToLowerInvariant()) {
+            $planned.Add([pscustomobject]@{ Action = "remove-stale"; Path = $target })
+            if ($Apply) {
+                Backup-ExistingFile -Target $target
+                Remove-Item -LiteralPath $target -Force
+            }
+        }
+        else {
+            $planned.Add([pscustomobject]@{ Action = "preserve-modified-stale"; Path = $target })
+        }
+    }
+}
+
+$manifest = [ordered]@{
+    schemaVersion = 1
+    files = @($managedFileRecords | Sort-Object path)
+} | ConvertTo-Json -Depth 5
+Set-ManagedTextFile -Target $oldManifestPath -Content ($manifest + [Environment]::NewLine)
 
 $planned | Format-Table -AutoSize
 if (-not $Apply) {
@@ -351,6 +417,7 @@ $requiredInstalledPaths = @(
     $agentsTarget,
     (Join-Path $kitTargetRoot "VERSION"),
     (Join-Path $kitTargetRoot "source.json"),
+    (Join-Path $kitTargetRoot "managed-files.json"),
     (Join-Path $kitTargetRoot "scripts\feature_guard.py"),
     (Join-Path $kitTargetRoot "scripts\pre_tool_guard.py"),
     (Join-Path $kitTargetRoot "scripts\resolve-skill.ps1"),
@@ -421,12 +488,6 @@ if ($MigrateLegacy) {
 Write-Host "Standalone Codex Dev Kit installed at $kitTargetRoot"
 Write-Host "No Plugin, global Hook, custom agent file, or config.toml change was installed."
 Write-Host "Backups of changed managed files, if any, are under $backupRoot"
-Write-Host "Review codex-dev-kit\config.fragment.toml before applying native subagent concurrency/reasoning settings; the fragment does not pin a child model."
-if ($legacyLunaDefaultDetected) {
-    Write-Warning "Legacy Luna child-model default remains in $workspaceConfig. It was not removed because it may be a deliberate user choice. Use bootstrap-workspace.ps1 -Apply -RemoveLegacyLunaDefault only after confirming its origin."
-}
-if ($legacyRoutingTextDetected) {
-    Write-Warning "Legacy subagent-routing text remains in $workspaceAgents. Update the detailed workspace rules before claiming task-local model routing or list_agents degradation is active."
-}
+Write-Host "The Dev Kit does not install or merge any native subagent model, reasoning, concurrency, or enablement setting."
 Write-Host "Fully exit Codex Desktop and reopen it, then create a new task so the short global instructions and standalone Skills reload."
 Write-Host "Creating a task inside an already-running app-server may keep an older Skill catalog; disk files alone do not prove that the task discovered the Skill."

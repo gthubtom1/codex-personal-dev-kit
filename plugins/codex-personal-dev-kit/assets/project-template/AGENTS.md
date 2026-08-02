@@ -5,7 +5,7 @@ This file contains only project-specific facts. The detailed personal developmen
 ## Project Boundary
 
 - Treat this folder as one independent long-term project and Git repository.
-- Do not read or edit sibling projects, the mother folder, archives, or global Codex files unless the user explicitly asks.
+- Always read the explicitly referenced mother-folder `AGENTS.md` to restore the applicable development system. Apart from that rules file, do not read or edit sibling projects, the mother folder, archives, or global Codex files unless the user explicitly asks.
 - Preserve existing user changes and generated/local files.
 - Project-specific instructions closer to a subdirectory may add narrower rules but cannot weaken safety boundaries.
 

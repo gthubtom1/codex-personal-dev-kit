@@ -94,15 +94,11 @@ def main() -> int:
             errors.append(f"Missing native Codex config template: {config_path}")
             continue
         config_text = config_path.read_text(encoding="utf-8")
-        if re.search(r"(?m)^default_subagent_model\s*=", config_text):
-            errors.append(
-                f"Managed templates must inherit the current parent model instead of pinning a subagent model: {config_path}"
-            )
-        if 'default_subagent_reasoning_effort = "max"' not in config_text:
-            errors.append(f"Default subagent reasoning is not max: {config_path}")
-        concurrency = re.search(r"(?m)^max_concurrent_threads_per_session\s*=\s*(\d+)\s*$", config_text)
-        if not concurrency or int(concurrency.group(1)) < 2:
-            errors.append(f"Subagent concurrency must allow multiple agents: {config_path}")
+        if re.search(r"(?m)^\s*\[agents\]\s*$", config_text) or re.search(
+            r"(?m)^\s*(default_subagent_model|default_subagent_reasoning_effort|max_concurrent_threads_per_session|interrupt_message|multi_agent)\s*=",
+            config_text,
+        ):
+            errors.append(f"Managed templates must not configure native subagents: {config_path}")
         if re.search(r"(?m)^model\s*=", config_text):
             errors.append(f"Main conversation model must remain user-selectable: {config_path}")
 

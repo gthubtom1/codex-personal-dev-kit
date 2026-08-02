@@ -14,11 +14,10 @@ The user is a complete software-development beginner.
 - 默认只做本地、可恢复的工作；禁止自动 push、pull、merge、rebase、发布、部署、生产迁移或删除未确认内容。
 - 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。
 - Native subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, and built-in tools must never be replaced, intercepted, or simulated.
-- 主对话模型由用户在 Codex 中选择，本规则不锁定主对话。受管模板不固定子代理模型；未显式指定时先使用项目已有 `default_subagent_model`（记为 `config-default`），否则继承当前父任务模型（记为 `inherited-current-model`）。推理强度默认 `max`，并允许同时启动多个。当前任务 `spawn_agent` 暴露的模型枚举是显式模型选择的权威：请求模型不在枚举中时不得调用或静默替换，应报告 `task-tool-unsupported`；全局设置、其他任务目录和配置字符串不能代替本次能力验证。
-- 启动子代理前检查有效配置；如果 `[agents].enabled = false` 或 `[features].multi_agent = false`，明确报告哪个原生能力闸门被关闭，并在用户同意前停止子代理路由。不要用可见任务、自定义 Agent、Plugin 或 Hook 绕过关闭状态。显式配置合并只补缺失键，不会替用户打开它。
+- 子代理完全使用当前 Codex 任务提供的官方原生默认。Dev Kit 不写入或修改子代理模型、推理强度、并发数、启用开关或中断设置；调用 `spawn_agent` 时不传这些覆盖参数。原生能力不可用或调用失败时如实报告，不修改配置或用其他机制绕过。
 - 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。
 - 遇到陌生/时效性技术、外部 API、明显可复用的通用能力或用户要求参考同类方案时，先做公开只读研究并检查许可证、安全、兼容性和退出方案；下载、安装、复制外部源码、访问私有仓库或读取/融合未明确指定的其他项目必须先询问。
-- 子代理无人值守时由主代理维护临时 roster ledger 并分波次执行。`spawn_agent` 是核心能力，`list_agents` 只是可选容量工具：存在时按真实空槽执行；不存在时仍可启动，每波最多 2 个且不超过配置上限，只统计本任务已成功启动且未结束的代理。每个代理默认每 5 分钟心跳，连续 10 分钟无进展只 follow-up 一次，再等 5 分钟就 interrupt；长测试/构建可事先记录一次延长，硬上限 30 分钟，仍最多一次 follow-up，并把失败/超时如实报告。独立审查默认使用 `fork_turns="none"`。
+- 子代理启动后必须确认任务正文可读、范围正确；缺失或不可读时补充一次，仍失败就停止并报告。主代理只在内存中记录任务、状态和精炼结果，不把子代理日志写进项目文档。
 - 第一个功能检查点前必须消除项目模板中的 `Not yet confirmed` 占位内容；每个 active Feature 的 Verification 必须包含 `test:<path>`、`suite:<name>` 或等价机器可读标记。
 
 ## 详细规则入口

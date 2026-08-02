@@ -35,9 +35,9 @@ Mother Folder
 | Standalone Skills | 一个普通语言入口和八个按需加载的专业能力，包括外部研究复用与多项目融合 |
 | Central runtime | `~/.codex/codex-dev-kit/` 下的脚本、模板、索引、版本和来源信息 |
 | Explicit safety scripts | 通过当前任务显式运行功能保全、危险命令和 Git 检查，不定义或替代智能体 |
-| Mother-folder files | 新建项目、项目隔离、归档和原生 subagent 默认配置 |
+| Mother-folder files | 新建项目、项目隔离和归档；不管理原生 subagent 配置 |
 | Project `AGENTS.md` | 当前项目命令、验证、边界和文档路由 |
-| Project `.codex/config.toml` | workspace-write、Goal、多代理并发上限和 max 子代理推理默认值；不固定子代理模型 |
+| Project `.codex/config.toml` | workspace-write 和 Goal；不写入任何子代理设置 |
 | Code/tests/Git/docs | 长期项目事实和恢复来源 |
 | Current Codex task | 一个连贯成果的临时上下文和持久 Goal |
 
@@ -46,8 +46,8 @@ Mother Folder
 ### Verified Codex Runtime Facts
 
 - Codex automatically loads one global instruction file from `~/.codex`, then discovers project instructions from the selected project root down to the working directory. When an individual project under `D:\开发\projects\` is the Git/project root, the parent `D:\开发\AGENTS.md` is not automatically discovered; the short global file must explicitly require reading it.
-- Native subagent settings live under `[agents]`. Managed templates set `default_subagent_reasoning_effort = "max"` and allow six concurrent child threads, but deliberately omit `default_subagent_model`; existing user/project model defaults are preserved. Codex resolves a child as explicit per-spawn values > an existing project `[agents]` default > current parent-task values. The model enum exposed by the current task's `spawn_agent` tool is authoritative for explicit overrides; unpinned calls inherit. `list_agents` is optional capacity information, so its absence activates conservative two-at-a-time waves instead of disabling `spawn_agent`.
-- Before routing to native subagents, the explicit diagnostic checks the effective `[agents].enabled` and `[features].multi_agent` gates. If either is explicitly `false`, the workflow reports the exact disabled gate and stops that route until the user enables it; it never works around the setting with visible tasks, custom Agents, Plugins, or Hooks. The diagnostic also flags known plaintext sensitive keys without printing their values.
+- Native subagent behavior belongs to Codex and the user's own configuration. Managed templates and scripts do not write, merge, migrate, diagnose, or override model, reasoning, concurrency, enablement, or interruption settings. The orchestration Skill calls the native tool without those overrides and reports the actual result.
+- A started subagent confirms its task payload is readable before doing work. Missing native tools, rejected calls and unreadable payloads are reported without changing configuration or substituting visible tasks, custom Agents, Plugins or Hooks. The diagnostic still flags known plaintext sensitive keys without printing their values.
 - 本 Dev Kit 不安装生命周期 Hook，避免任何工具匹配器改变 Codex 原生 subagent、任务、浏览器或文件编辑语义；需要保护时由 Skill 调用显式脚本。
 - `AGENTS.md` should stay small and route to focused Skills or references. Project state is split across concise current documents instead of expanding one permanent transcript.
 

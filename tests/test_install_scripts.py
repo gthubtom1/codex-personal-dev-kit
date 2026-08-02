@@ -105,7 +105,7 @@ class InstallScriptTests(unittest.TestCase):
 
             installed = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
             self.assertIn("Fully exit Codex Desktop", installed.stdout)
-            self.assertIn("does not pin a child model", installed.stdout)
+            self.assertIn("does not install or merge any native subagent", installed.stdout)
             agents = codex_home / "AGENTS.md"
             self.assertIn("<!-- codex-dev-kit:start -->", agents.read_text(encoding="utf-8"))
             self.assertIn(str(workspace / "AGENTS.md"), agents.read_text(encoding="utf-8"))
@@ -123,6 +123,10 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(source["ref"], head)
             self.assertEqual(source["version"], (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip())
 
+            second = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            agent_lines = [line for line in second.stdout.splitlines() if str(agents) in line]
+            self.assertTrue(any("unchanged" in line for line in agent_lines), second.stdout)
+
             content = agents.read_text(encoding="utf-8")
             customized = "# My personal rule\n\n" + content.replace(
                 "The user is a complete software-development beginner.",
@@ -139,7 +143,7 @@ class InstallScriptTests(unittest.TestCase):
             self.assertTrue(backups)
             self.assertIn("OUTDATED MANAGED CONTENT", backups[-1].read_text(encoding="utf-8"))
 
-    def test_install_reports_legacy_workspace_subagent_routing_without_mutating_it(self) -> None:
+    def test_install_never_inspects_or_mutates_existing_subagent_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source_root, head = self.make_clean_source(root)
@@ -159,6 +163,8 @@ class InstallScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            before_agents = (workspace / "AGENTS.md").read_text(encoding="utf-8")
+            before_config = config_path.read_text(encoding="utf-8")
             result = self.run_install(
                 codex_home,
                 workspace,
@@ -169,9 +175,9 @@ class InstallScriptTests(unittest.TestCase):
                 "-Apply",
             )
 
-            self.assertIn("Legacy Luna child-model default remains", result.stdout)
-            self.assertIn("Legacy subagent-routing text remains", result.stdout)
-            self.assertIn('default_subagent_model = "gpt-5.6-luna"', config_path.read_text(encoding="utf-8"))
+            self.assertNotIn("Legacy Luna", result.stdout)
+            self.assertEqual(before_agents, (workspace / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertEqual(before_config, config_path.read_text(encoding="utf-8"))
 
     def test_validation_script_supports_standalone_runtime_layout(self) -> None:
         text = VALIDATE_SCRIPT.read_text(encoding="utf-8")
@@ -218,6 +224,106 @@ class InstallScriptTests(unittest.TestCase):
             )
             self.assertIn("requires a local Git checkout", result.stdout)
 
+    def test_rejects_nested_kit_directory_as_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, _ = self.make_clean_source(root)
+            result = self.run_install(
+                root / "codex-home",
+                root / "workspace",
+                "-Source",
+                str(source_root / "plugins/codex-personal-dev-kit"),
+                expected=1,
+            )
+            self.assertIn("repository root, not the nested kit directory", result.stdout)
+
+    def test_manifest_detects_tampered_managed_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, head = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "workspace"
+            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            manifest = json.loads((codex_home / "codex-dev-kit/managed-files.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["files"])
+
+            skill = codex_home / "skills/codex-development-assistant/SKILL.md"
+            skill.write_text(skill.read_text(encoding="utf-8") + "\nTAMPERED\n", encoding="utf-8")
+            diagnosis = self.run_script(
+                DIAGNOSE_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                expected=1,
+            )
+            self.assertIn("Managed files match installed hashes", diagnosis.stdout)
+            self.assertIn("codex-development-assistant/SKILL.md", diagnosis.stdout)
+
+    def test_update_removes_unchanged_stale_managed_file_but_preserves_modified_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, _ = self.make_clean_source(root)
+            source_scripts = source_root / "plugins/codex-personal-dev-kit/scripts"
+            stale_source = source_scripts / "obsolete-test.ps1"
+            stale_source.write_text("Write-Host 'obsolete'\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source_root), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "add stale"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            first_head = subprocess.run(
+                ["git", "-C", str(source_root), "rev-parse", "HEAD"], check=True, text=True, stdout=subprocess.PIPE
+            ).stdout.strip()
+            codex_home = root / "codex-home"
+            workspace = root / "workspace"
+            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", first_head, "-Apply")
+            installed_stale = codex_home / "codex-dev-kit/scripts/obsolete-test.ps1"
+            self.assertTrue(installed_stale.is_file())
+
+            stale_source.unlink()
+            subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source_root), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "remove stale"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            second_head = subprocess.run(
+                ["git", "-C", str(source_root), "rev-parse", "HEAD"], check=True, text=True, stdout=subprocess.PIPE
+            ).stdout.strip()
+            removed = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", second_head, "-Apply")
+            self.assertIn("remove-stale", removed.stdout)
+            self.assertFalse(installed_stale.exists())
+            self.assertTrue(list((codex_home / "backups/codex-dev-kit").rglob("obsolete-test.ps1")))
+
+            # Recreate an old-manifest scenario and prove a user-modified stale file is retained.
+            stale_source.write_text("Write-Host 'obsolete-again'\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source_root), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "restore stale"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            third_head = subprocess.run(["git", "-C", str(source_root), "rev-parse", "HEAD"], check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", third_head, "-Apply")
+            installed_stale.write_text("user customization\n", encoding="utf-8")
+            stale_source.unlink()
+            subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source_root), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "remove stale again"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            fourth_head = subprocess.run(["git", "-C", str(source_root), "rev-parse", "HEAD"], check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+            preserved = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", fourth_head, "-Apply")
+            self.assertIn("preserve-modified-stale", preserved.stdout)
+            self.assertEqual(installed_stale.read_text(encoding="utf-8"), "user customization\n")
+
     def test_diagnose_detects_local_head_dirty_state_and_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -256,7 +362,7 @@ class InstallScriptTests(unittest.TestCase):
             )
             self.assertIn("uncommitted changes", dirty.stdout)
 
-    def test_diagnose_reports_disabled_native_agent_gates_and_hides_sensitive_values(self) -> None:
+    def test_diagnose_ignores_subagent_settings_and_hides_sensitive_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source_root, _ = self.make_clean_source(root)
@@ -290,8 +396,8 @@ class InstallScriptTests(unittest.TestCase):
                 expected=1,
                 env={"CODEX_CLI": str(fake_codex)},
             )
-            self.assertRegex(diagnosis.stdout, r"Native agents gate\s+False")
-            self.assertRegex(diagnosis.stdout, r"Native multi-agent feature gate\s+False")
+            self.assertNotIn("Native agents gate", diagnosis.stdout)
+            self.assertNotIn("Native multi-agent feature gate", diagnosis.stdout)
             self.assertRegex(diagnosis.stdout, r"No plaintext sensitive Codex key\s+False")
             self.assertIn("Main model remains user-selectable", diagnosis.stdout)
             self.assertNotIn("do-not-print-this-value", diagnosis.stdout)
@@ -317,8 +423,8 @@ class InstallScriptTests(unittest.TestCase):
                 expected=1,
                 env={"CODEX_CLI": str(fake_codex)},
             )
-            self.assertRegex(project_diagnosis.stdout, r"Project Native agents gate\s+False")
-            self.assertRegex(project_diagnosis.stdout, r"Project Native multi-agent feature gate\s+False")
+            self.assertNotIn("Native agents gate", project_diagnosis.stdout)
+            self.assertNotIn("Native multi-agent feature gate", project_diagnosis.stdout)
 
     def test_diagnose_detects_plugin_only_legacy_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

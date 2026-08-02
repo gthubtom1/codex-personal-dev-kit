@@ -49,7 +49,7 @@
 - 详细的母文件夹 `D:\开发\AGENTS.md`：保存完整工作流、目录模型、需求拓展、架构、Git、文档、任务和原生 subagent 规则。
 - 九个 Codex standalone Skills：一个普通语言入口和八个专业能力，包括受控外部研究/源码复用与多项目能力融合，不依赖 Plugin 才能使用。
 - 中央运行时 `~/.codex/codex-dev-kit/`：Git 检查、诊断、模板和脚本；项目只引用已验证的中央运行时，不复制整套框架。
-- 母文件夹和项目 `.codex/config.toml`：模板启用原生 multi-agent、保留 `max` 推理强度和并发上限，但不固定子代理模型；未显式指定时先使用项目已有子代理默认模型，否则继承当前父任务模型。显式模型必须属于当前任务 `spawn_agent` 暴露的模型枚举，不支持时报告而不静默替换。合并脚本保留已有 `enabled`、模型、推理强度和主对话模型；旧 Dev Kit 写入的 Luna 值只会被诊断，必须通过明确迁移开关移除。若用户配置显式关闭原生 agent 闸门，诊断会报告并停止子代理路由，不会偷偷打开。
+- 母文件夹和项目 `.codex/config.toml`：模板只设置通用审批、sandbox 和 Goal，不写入任何子代理模型、推理强度、并发数、启用开关或中断设置。原生 `spawn_agent` 使用当前 Codex 任务和用户已有配置的官方默认行为。
 - 不使用 Dev Kit Plugin、项目生命周期 Hook 或自定义 Agent；Codex 原生能力和 standalone Skills 是唯一运行入口。
 
 ## 本地开发
@@ -72,8 +72,11 @@ powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\script
 # 确认后真正创建项目、Git 和首个本地回退点
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\create-project.ps1 -WorkspaceRoot D:\开发 -ProjectName my-app -Apply
 
-# 验证 Dev Kit
+# 完整验证（结构、Skill、脚本解析与单元测试）
 powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\scripts\validate-kit.ps1
+
+# 也可单独运行完整回归测试
+python -m unittest discover -s tests -p test_*.py -v
 ```
 
 ## GitHub 分发

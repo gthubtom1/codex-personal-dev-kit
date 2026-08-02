@@ -1,8 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkspaceRoot = (Get-Location).Path,
-    [switch]$Apply,
-    [switch]$RemoveLegacyLunaDefault
+    [switch]$Apply
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,18 +52,6 @@ $preview = foreach ($target in $targets) {
     }
 }
 $preview | Format-Table -AutoSize
-$workspaceConfigPath = Join-Path $workspacePath ".codex\config.toml"
-if (Test-Path -LiteralPath $workspaceConfigPath -PathType Leaf) {
-    $previewConfig = [System.IO.File]::ReadAllText($workspaceConfigPath)
-    if (Test-CodexLegacyLunaDefault -Content $previewConfig) {
-        if ($RemoveLegacyLunaDefault) {
-            Write-Host "Legacy Luna child-model default will be removed from the workspace config by explicit request."
-        }
-        else {
-            Write-Warning "Legacy Luna child-model default detected and preserved. Re-run with -Apply -RemoveLegacyLunaDefault only after confirming it came from the old Dev Kit rather than a deliberate user choice."
-        }
-    }
-}
 if (-not $Apply) {
     Write-Host "Preview only. Re-run with -Apply after checking the mother-folder path."
     exit 0
@@ -75,7 +62,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($target in $targets) {
     if ($target.Type -eq "file" -and $target.Path -eq (Join-Path $workspacePath ".codex\config.toml") -and (Test-Path -LiteralPath $target.Path)) {
         $existing = [System.IO.File]::ReadAllText($target.Path)
-        $merged = Merge-CodexNativeAgentDefaults -Content $existing -RemoveLegacyLunaDefault:$RemoveLegacyLunaDefault
+        $merged = Merge-CodexProjectDefaults -Content $existing
         if ($merged -ne $existing) {
             [System.IO.File]::WriteAllText($target.Path, $merged, $utf8NoBom)
         }

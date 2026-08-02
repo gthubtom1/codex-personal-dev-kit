@@ -35,6 +35,10 @@ class WorkspaceScriptTests(unittest.TestCase):
             check=False,
         )
 
+    def prepare_mother(self, root: Path) -> None:
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "AGENTS.md").write_text("# Test mother rules\n", encoding="utf-8")
+
     def test_workspace_preview_apply_idempotence_and_independent_projects(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             legacy_workspace = Path(directory) / "legacy-mother"
@@ -46,9 +50,8 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(legacy_workspace), "-Apply")
             legacy_config = (legacy_workspace / ".codex/config.toml").read_text(encoding="utf-8")
             self.assertIn('model = "gpt-5.5"', legacy_config)
-            self.assertNotIn("default_subagent_model", legacy_config)
-            self.assertIn('default_subagent_reasoning_effort = "max"', legacy_config)
-            self.assertIn("max_concurrent_threads_per_session = 6", legacy_config)
+            self.assertNotIn("[agents]", legacy_config)
+            self.assertNotIn("multi_agent", legacy_config)
 
             workspace = Path(directory) / "mother"
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace))
@@ -71,8 +74,9 @@ class WorkspaceScriptTests(unittest.TestCase):
             workspace_config = workspace / ".codex/config.toml"
             self.assertTrue(workspace_config.is_file())
             config_text = workspace_config.read_text(encoding="utf-8")
-            self.assertNotIn("default_subagent_model", config_text)
-            self.assertIn('default_subagent_reasoning_effort = "max"', config_text)
+            self.assertNotIn("[agents]", config_text)
+            self.assertNotIn("multi_agent", config_text)
+            self.assertIn("goals = true", config_text)
             agents.write_text(agents.read_text(encoding="utf-8") + "\nCUSTOM-WORKSPACE-RULE\n", encoding="utf-8")
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
             self.assertIn("CUSTOM-WORKSPACE-RULE", agents.read_text(encoding="utf-8"))
@@ -136,7 +140,45 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertEqual(Path(self.git(project, "rev-parse", "--show-toplevel").stdout.strip()).resolve(), project.resolve())
             self.assertEqual(self.git(project, "log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: initialize project")
 
-    def test_existing_agent_defaults_are_preserved_when_merging_config(self) -> None:
+    def test_create_project_repairs_partially_initialized_mother_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "partial-mother"
+            workspace.mkdir(parents=True)
+            (workspace / "workspace.json").write_text('{"projectsDirectory":"projects"}\n', encoding="utf-8")
+
+            self.run_script("create-project.ps1", "-WorkspaceRoot", str(workspace), "-ProjectName", "preview")
+            self.assertFalse((workspace / "projects/preview").exists())
+            self.assertFalse((workspace / "AGENTS.md").exists())
+
+            self.run_script(
+                "create-project.ps1",
+                "-WorkspaceRoot",
+                str(workspace),
+                "-ProjectName",
+                "first-app",
+                "-Apply",
+            )
+            self.assertTrue((workspace / "AGENTS.md").is_file())
+            self.assertTrue((workspace / ".codex/config.toml").is_file())
+            self.assertTrue((workspace / "projects/first-app").is_dir())
+
+    def test_bootstrap_project_stops_when_mother_agents_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "existing"
+            project.mkdir()
+            result = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(project),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                expected=1,
+            )
+            self.assertIn(str(root / "AGENTS.md"), result.stdout)
+
+    def test_existing_agent_settings_are_untouched_when_merging_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory) / "custom"
             (workspace / ".codex").mkdir(parents=True)
@@ -152,9 +194,10 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertIn("enabled = false", config)
             self.assertIn('default_subagent_model = "gpt-5.6-sol"', config)
             self.assertIn('default_subagent_reasoning_effort = "high"', config)
-            self.assertIn("max_concurrent_threads_per_session = 6", config)
+            self.assertNotIn("max_concurrent_threads_per_session", config)
+            self.assertIn("goals = true", config)
 
-    def test_legacy_luna_default_requires_explicit_migration(self) -> None:
+    def test_existing_subagent_model_is_never_migrated_by_workspace_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory) / "legacy-luna"
             (workspace / ".codex").mkdir(parents=True)
@@ -165,27 +208,13 @@ class WorkspaceScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            preserved = self.run_script(
-                "bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply"
-            )
-            self.assertIn("Legacy Luna child-model default detected and preserved", preserved.stdout)
+            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
             self.assertIn('default_subagent_model = "gpt-5.6-luna"', config_path.read_text(encoding="utf-8"))
 
-            migrated = self.run_script(
-                "bootstrap-workspace.ps1",
-                "-WorkspaceRoot",
-                str(workspace),
-                "-Apply",
-                "-RemoveLegacyLunaDefault",
-            )
-            self.assertIn("will be removed", migrated.stdout)
-            migrated_config = config_path.read_text(encoding="utf-8")
-            self.assertNotIn("default_subagent_model", migrated_config)
-            self.assertIn('default_subagent_reasoning_effort = "max"', migrated_config)
-
-    def test_existing_project_legacy_luna_default_requires_explicit_migration(self) -> None:
+    def test_existing_project_subagent_model_is_never_migrated(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.prepare_mother(root)
             project = root / "existing"
             (project / ".codex").mkdir(parents=True)
             config_path = project / ".codex/config.toml"
@@ -195,17 +224,6 @@ class WorkspaceScriptTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            preserved = self.run_script(
-                "bootstrap-project.ps1",
-                "-ProjectRoot",
-                str(project),
-                "-WorkspaceRoot",
-                str(root),
-                "-Apply",
-            )
-            self.assertIn("Legacy Luna child-model default detected and preserved", preserved.stdout)
-            self.assertIn("default_subagent_model", config_path.read_text(encoding="utf-8"))
-
             self.run_script(
                 "bootstrap-project.ps1",
                 "-ProjectRoot",
@@ -213,13 +231,14 @@ class WorkspaceScriptTests(unittest.TestCase):
                 "-WorkspaceRoot",
                 str(root),
                 "-Apply",
-                "-RemoveLegacyLunaDefault",
             )
-            self.assertNotIn("default_subagent_model", config_path.read_text(encoding="utf-8"))
+            self.assertIn("default_subagent_model", config_path.read_text(encoding="utf-8"))
 
     def test_bootstrap_existing_project_preserves_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            project = Path(directory) / "existing"
+            mother = Path(directory)
+            self.prepare_mother(mother)
+            project = mother / "existing"
             project.mkdir()
             readme = project / "README.md"
             readme.write_text("# Existing user project\n", encoding="utf-8")
@@ -234,7 +253,7 @@ class WorkspaceScriptTests(unittest.TestCase):
                 "-ProjectRoot",
                 str(project),
                 "-WorkspaceRoot",
-                str(Path(directory)),
+                str(mother),
                 "-Apply",
                 "-InitializeGit",
                 "-CreateBaselineCheckpoint",
@@ -246,8 +265,9 @@ class WorkspaceScriptTests(unittest.TestCase):
             project_config = (project / ".codex/config.toml").read_text(encoding="utf-8")
             self.assertIn('model = "gpt-5.5"', project_config)
             self.assertNotIn("default_subagent_model", project_config)
-            self.assertIn('default_subagent_reasoning_effort = "max"', project_config)
-            self.assertIn("max_concurrent_threads_per_session = 6", project_config)
+            self.assertNotIn("default_subagent_reasoning_effort", project_config)
+            self.assertNotIn("max_concurrent_threads_per_session", project_config)
+            self.assertIn("goals = true", project_config)
             self.assertEqual(self.git(project, "rev-parse", "--show-toplevel").returncode, 0)
             self.assertEqual(self.git(project, "log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: initialize project")
             self.assertEqual(self.git(project, "status", "--porcelain").stdout.strip(), "")
@@ -257,6 +277,7 @@ class WorkspaceScriptTests(unittest.TestCase):
     def test_bootstrap_project_does_not_install_lifecycle_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.prepare_mother(root)
             project = root / "existing"
             project.mkdir()
             codex_home = root / "codex-home"
@@ -281,7 +302,9 @@ class WorkspaceScriptTests(unittest.TestCase):
 
     def test_existing_project_baseline_stops_before_generated_or_sensitive_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            project = Path(directory) / "unsafe-existing"
+            root = Path(directory)
+            self.prepare_mother(root)
+            project = root / "unsafe-existing"
             (project / "node_modules/pkg").mkdir(parents=True)
             (project / "node_modules/pkg/index.js").write_text("generated\n", encoding="utf-8")
             (project / ".gitignore").write_text("# Existing project intentionally missing dependency ignores\n", encoding="utf-8")
@@ -291,7 +314,7 @@ class WorkspaceScriptTests(unittest.TestCase):
                 "-ProjectRoot",
                 str(project),
                 "-WorkspaceRoot",
-                str(Path(directory)),
+                str(root),
                 "-Apply",
                 "-InitializeGit",
                 "-CreateBaselineCheckpoint",
@@ -304,6 +327,7 @@ class WorkspaceScriptTests(unittest.TestCase):
     def test_existing_project_baseline_excludes_secret_names_and_stops_on_secret_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.prepare_mother(root)
             named_secret = root / "named-secret"
             named_secret.mkdir()
             (named_secret / ".npmrc").write_text("//registry.npmjs.org/:_authToken=real-looking-token-value-123456\n", encoding="utf-8")

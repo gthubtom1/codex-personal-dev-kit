@@ -84,34 +84,44 @@ foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py",
     $path = Join-Path $kitRoot $relative
     Add-Check "Standalone runtime $relative" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }
+$manifestPath = Join-Path $kitRoot "managed-files.json"
+if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    try {
+        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+        $manifestFormatPassed = $manifest.schemaVersion -eq 1 -and $null -ne $manifest.files
+        Add-Check "Managed file manifest" $manifestFormatPassed $manifestPath
+        if ($manifestFormatPassed) {
+            $missing = New-Object System.Collections.Generic.List[string]
+            $changed = New-Object System.Collections.Generic.List[string]
+            foreach ($record in @($manifest.files)) {
+                $relative = ([string]$record.path).Replace('/', '\')
+                $path = Join-Path $codexHomePath $relative
+                if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                    $missing.Add([string]$record.path)
+                    continue
+                }
+                $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actual -ne ([string]$record.sha256).ToLowerInvariant()) {
+                    $changed.Add([string]$record.path)
+                }
+            }
+            Add-Check "Managed files present" ($missing.Count -eq 0) $(if ($missing.Count -eq 0) { "all manifest files exist" } else { $missing -join ", " })
+            Add-Check "Managed files match installed hashes" ($changed.Count -eq 0) $(if ($changed.Count -eq 0) { "all manifest hashes match" } else { $changed -join ", " })
+        }
+    }
+    catch {
+        Add-Check "Managed file manifest" $false $_.Exception.Message
+    }
+}
+else {
+    Add-Check "Managed file manifest" $false $manifestPath
+}
 Add-Check "Codex Skill catalog refresh" $true "Disk Skill files are verified; fully exit and reopen Codex Desktop, then create a new task. This standalone diagnostic cannot prove the app-server skills/list catalog."
 
 $configPath = Join-Path $codexHomePath "config.toml"
 $configContent = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw $configPath } else { "" }
 
-function Get-TomlBoolean {
-    param(
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
-        [Parameter(Mandatory = $true)][string]$Section,
-        [Parameter(Mandatory = $true)][string]$Key
-    )
-
-    $currentSection = ""
-    $keyPattern = '^\s*' + [regex]::Escape($Key) + '\s*=\s*(true|false)\b'
-    foreach ($line in ($Content -split "`r?`n")) {
-        $trimmed = $line.Trim()
-        if ($trimmed -match '^\s*\[([^\]]+)\]\s*$') {
-            $currentSection = $Matches[1].Trim()
-            continue
-        }
-        if ($currentSection -eq $Section -and $trimmed -match $keyPattern) {
-            return $Matches[1].ToLowerInvariant()
-        }
-    }
-    return $null
-}
-
-function Add-NativeConfigChecks {
+function Add-ConfigSafetyChecks {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Label,
@@ -119,21 +129,6 @@ function Add-NativeConfigChecks {
     )
 
     $prefix = if ([string]::IsNullOrWhiteSpace($Label)) { "" } else { "$Label " }
-    $agentsEnabled = Get-TomlBoolean -Content $Content -Section "agents" -Key "enabled"
-    $multiAgentEnabled = Get-TomlBoolean -Content $Content -Section "features" -Key "multi_agent"
-    if ($agentsEnabled -eq "false") {
-        Add-Check "${prefix}Native agents gate" $false "$ConfigPath explicitly sets [agents].enabled=false; enable it before requesting subagents."
-    }
-    else {
-        Add-Check "${prefix}Native agents gate" $true $(if ($agentsEnabled -eq "true") { "enabled" } else { "not explicitly disabled" })
-    }
-    if ($multiAgentEnabled -eq "false") {
-        Add-Check "${prefix}Native multi-agent feature gate" $false "$ConfigPath explicitly sets [features].multi_agent=false; enable it before requesting subagents."
-    }
-    else {
-        Add-Check "${prefix}Native multi-agent feature gate" $true $(if ($multiAgentEnabled -eq "true") { "enabled" } else { "not explicitly disabled" })
-    }
-
     $sensitiveConfigKey = [regex]::Match(
         $Content,
         '(?im)^\s*(experimental_bearer_token|bearer_token|access_token|api_key|client_secret)\s*='
@@ -154,12 +149,12 @@ function Add-NativeConfigChecks {
     }
 }
 
-Add-NativeConfigChecks -Content $configContent -Label "" -ConfigPath $configPath
+Add-ConfigSafetyChecks -Content $configContent -Label "" -ConfigPath $configPath
 if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $projectPath = [System.IO.Path]::GetFullPath($ProjectRoot)
     $projectConfigPath = Join-Path $projectPath ".codex/config.toml"
     if (Test-Path -LiteralPath $projectConfigPath -PathType Leaf) {
-        Add-NativeConfigChecks -Content (Get-Content -Raw -LiteralPath $projectConfigPath) -Label "Project" -ConfigPath $projectConfigPath
+        Add-ConfigSafetyChecks -Content (Get-Content -Raw -LiteralPath $projectConfigPath) -Label "Project" -ConfigPath $projectConfigPath
     }
     else {
         Add-Check "Project config" $true "No project .codex/config.toml found at $projectPath"
