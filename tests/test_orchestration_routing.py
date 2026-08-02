@@ -76,6 +76,23 @@ class OrchestrationRoutingTests(unittest.TestCase):
         self.assertIn("does not intercept `Agent`", design)
         self.assertIn("does not create a replacement agent protocol", design)
 
+    def test_disabled_native_agent_gates_stop_subagent_routing(self):
+        orchestration_skill = (PLUGIN / "skills/orchestrate-codex-team/SKILL.md").read_text(encoding="utf-8")
+        routing = (PLUGIN / "skills/orchestrate-codex-team/references/agent-routing.md").read_text(encoding="utf-8")
+        workspace_agents = (PLUGIN / "assets/workspace-template/AGENTS.md").read_text(encoding="utf-8")
+        standalone_agents = (PLUGIN / "assets/standalone/AGENTS.md").read_text(encoding="utf-8")
+
+        for text in (orchestration_skill, routing, workspace_agents, standalone_agents):
+            self.assertIn("[agents].enabled = false", text)
+            self.assertIn("[features].multi_agent = false", text)
+            self.assertTrue("visible" in text.lower() or "可见" in text)
+            self.assertIn("hook", text.lower())
+
+    def test_feature_guard_imports_sibling_script_without_removed_hook_path(self):
+        source = (PLUGIN / "scripts/feature_guard.py").read_text(encoding="utf-8")
+        self.assertIn("scripts_root = Path(__file__).resolve().parent", source)
+        self.assertNotIn('parents[1] / "hooks"', source)
+
     def test_selectable_max_effort_subagent_policy_is_declared_without_custom_agent_dependency(self):
         orchestration_skill = (PLUGIN / "skills/orchestrate-codex-team/SKILL.md").read_text(encoding="utf-8")
         routing = (PLUGIN / "skills/orchestrate-codex-team/references/agent-routing.md").read_text(encoding="utf-8")

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$CodexHome,
-    [string]$WorkspaceRoot = "D:\开发"
+    [string]$WorkspaceRoot = "D:\开发",
+    [string]$ProjectRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -84,6 +85,83 @@ foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py",
 
 $configPath = Join-Path $codexHomePath "config.toml"
 $configContent = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw $configPath } else { "" }
+
+function Get-TomlBoolean {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
+        [Parameter(Mandatory = $true)][string]$Section,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+
+    $currentSection = ""
+    $keyPattern = '^\s*' + [regex]::Escape($Key) + '\s*=\s*(true|false)\b'
+    foreach ($line in ($Content -split "`r?`n")) {
+        $trimmed = $line.Trim()
+        if ($trimmed -match '^\s*\[([^\]]+)\]\s*$') {
+            $currentSection = $Matches[1].Trim()
+            continue
+        }
+        if ($currentSection -eq $Section -and $trimmed -match $keyPattern) {
+            return $Matches[1].ToLowerInvariant()
+        }
+    }
+    return $null
+}
+
+function Add-NativeConfigChecks {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ConfigPath
+    )
+
+    $prefix = if ([string]::IsNullOrWhiteSpace($Label)) { "" } else { "$Label " }
+    $agentsEnabled = Get-TomlBoolean -Content $Content -Section "agents" -Key "enabled"
+    $multiAgentEnabled = Get-TomlBoolean -Content $Content -Section "features" -Key "multi_agent"
+    if ($agentsEnabled -eq "false") {
+        Add-Check "${prefix}Native agents gate" $false "$ConfigPath explicitly sets [agents].enabled=false; enable it before requesting subagents."
+    }
+    else {
+        Add-Check "${prefix}Native agents gate" $true $(if ($agentsEnabled -eq "true") { "enabled" } else { "not explicitly disabled" })
+    }
+    if ($multiAgentEnabled -eq "false") {
+        Add-Check "${prefix}Native multi-agent feature gate" $false "$ConfigPath explicitly sets [features].multi_agent=false; enable it before requesting subagents."
+    }
+    else {
+        Add-Check "${prefix}Native multi-agent feature gate" $true $(if ($multiAgentEnabled -eq "true") { "enabled" } else { "not explicitly disabled" })
+    }
+
+    $sensitiveConfigKey = [regex]::Match(
+        $Content,
+        '(?im)^\s*(experimental_bearer_token|bearer_token|access_token|api_key|client_secret)\s*='
+    )
+    if ($sensitiveConfigKey.Success) {
+        Add-Check "${prefix}No plaintext sensitive Codex key" $false "$ConfigPath contains a sensitive key; value is intentionally hidden. Remove or rotate it before backup or sharing."
+    }
+    else {
+        Add-Check "${prefix}No plaintext sensitive Codex key" $true "no known sensitive key assignment detected"
+    }
+
+    $topLevelModel = [regex]::Match($Content, '(?m)^\s*model\s*=\s*')
+    if ($topLevelModel.Success) {
+        Add-Check "${prefix}Main model remains user-selectable" $true "$ConfigPath has an explicit default model; the Dev Kit does not overwrite it, and Codex UI selection remains the user's choice."
+    }
+    else {
+        Add-Check "${prefix}Main model remains user-selectable" $true "no Dev Kit main-model lock detected"
+    }
+}
+
+Add-NativeConfigChecks -Content $configContent -Label "" -ConfigPath $configPath
+if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $projectPath = [System.IO.Path]::GetFullPath($ProjectRoot)
+    $projectConfigPath = Join-Path $projectPath ".codex/config.toml"
+    if (Test-Path -LiteralPath $projectConfigPath -PathType Leaf) {
+        Add-NativeConfigChecks -Content (Get-Content -Raw -LiteralPath $projectConfigPath) -Label "Project" -ConfigPath $projectConfigPath
+    }
+    else {
+        Add-Check "Project config" $true "No project .codex/config.toml found at $projectPath"
+    }
+}
 $legacyPluginEnabled = $configContent -match '(?m)^\[plugins\."codex-personal-dev-kit@'
 Add-Check "Legacy Dev Kit Plugin disabled" (-not $legacyPluginEnabled) $(if ($legacyPluginEnabled) { "The old Plugin is still enabled in config.toml; disable it before testing standalone mode." } else { "not configured" })
 . (Join-Path $PSScriptRoot "resolve-codex-cli.ps1")

@@ -47,6 +47,7 @@ Mother Folder
 
 - Codex automatically loads one global instruction file from `~/.codex`, then discovers project instructions from the selected project root down to the working directory. When an individual project under `D:\开发\projects\` is the Git/project root, the parent `D:\开发\AGENTS.md` is not automatically discovered; the short global file must explicitly require reading it.
 - Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. The Dev Kit repository and generated templates default to Luna/max and allow six concurrent subagent threads; existing project/workspace configs are merged in place without changing a top-level main-model choice. Precedence is current user roster > explicit project config > system default. System-requested per-call work uses `max` with the required fork override rule; explicit project settings are reported and honored.
+- Before routing to native subagents, the explicit diagnostic checks the effective `[agents].enabled` and `[features].multi_agent` gates. If either is explicitly `false`, the workflow reports the exact disabled gate and stops that route until the user enables it; it never works around the setting with visible tasks, custom Agents, Plugins, or Hooks. The diagnostic also flags known plaintext sensitive keys without printing their values.
 - 本 Dev Kit 不安装生命周期 Hook，避免任何工具匹配器改变 Codex 原生 subagent、任务、浏览器或文件编辑语义；需要保护时由 Skill 调用显式脚本。
 - `AGENTS.md` should stay small and route to focused Skills or references. Project state is split across concise current documents instead of expanding one permanent transcript.
 
@@ -148,6 +149,8 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 | `docs/RUNBOOK.md` | 部署、备份、恢复和故障处理 | 仅按项目实际需要 |
 
 禁止把聊天全文、模型推理、完整 diff、原始日志和每日流水账复制进长期文档。
+
+`docs/features/**/*.md` 领域文件超过 1000 行或 128 KiB、单个 ADR 超过 800 行或 64 KiB 时，项目审计会提示拆分或压缩；这些是可定位性提示，不是对业务代码的硬性文件行数规则。
 
 ## 8. Git And Recovery
 

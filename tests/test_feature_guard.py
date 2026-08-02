@@ -233,6 +233,27 @@ class FeatureGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(feature_guard.GuardError, "formatting-only"):
             feature_guard.complete_contract(self.root, [], [])
 
+    def test_template_placeholders_cannot_enter_first_feature_checkpoint(self) -> None:
+        (self.root / "docs/PROJECT.md").write_text(
+            "# Project\n\nNot yet confirmed. Describe the primary user and outcome.\n",
+            encoding="utf-8",
+        )
+        (self.root / "docs/ARCHITECTURE.md").write_text(
+            "# Architecture\n\nThe current system has not been mapped yet. Record the runtime path.\n",
+            encoding="utf-8",
+        )
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        status = self.root / "docs/STATUS.md"
+        status.write_text(
+            "# Current Status\n\n## Milestone\n\nExport slice verified.\n\n## Working State\n\nGuarded change is staged.\n\n## Verified\n\nExecutable feature check passed.\n\n## Current Risks\n\nKeep both behaviors covered.\n\n## Next Action\n\nReview the next accepted slice.\n",
+            encoding="utf-8",
+        )
+        self.stage("src/app.js", "docs/STATUS.md")
+        self.verify("F-001", "F-002")
+        with self.assertRaisesRegex(feature_guard.GuardError, "Template placeholder remains"):
+            feature_guard.complete_contract(self.root, [], [])
+
     def test_source_change_requires_all_active_features_in_a_large_catalog(self) -> None:
         rows = [
             "| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |",

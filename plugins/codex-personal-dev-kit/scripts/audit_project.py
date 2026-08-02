@@ -19,7 +19,8 @@ SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 SKIP_DIRS = {".git", "node_modules", "vendor", "dist", "build", "coverage", ".next", ".cache", "target", "__pycache__"}
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java", ".js", ".jsx",
-    ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts", ".tsx", ".vue",
+    ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts", ".tsx", ".vue", ".mjs", ".cjs",
+    ".svelte", ".astro", ".sql", ".graphql", ".gql", ".json", ".yaml", ".yml", ".toml", ".xml",
 }
 DOC_BUDGETS = {
     "AGENTS.md": ("bytes", 8192),
@@ -30,6 +31,10 @@ DOC_BUDGETS = {
     "docs/DESIGN.md": ("lines", 300),
     "docs/STATUS.md": ("lines", 150),
 }
+DOMAIN_DOCUMENT_MAX_LINES = 1000
+DOMAIN_DOCUMENT_MAX_BYTES = 128 * 1024
+ADR_DOCUMENT_MAX_LINES = 800
+ADR_DOCUMENT_MAX_BYTES = 64 * 1024
 ACTIVE_PLAN_RELATIVE = Path(".codex/active-plan.md")
 ACTIVE_PLAN_STALE_DAYS = 14
 OVERSIZED_HISTORY_BYTES = 64 * 1024
@@ -106,6 +111,22 @@ def audit(root: Path) -> dict:
             split_hint = " Keep the main file as a domain index and split stable details by domain." if relative in {"docs/FEATURES.md", "docs/ARCHITECTURE.md", "docs/DESIGN.md"} else ""
             findings.append(finding("P2", "document-budget", f"Current-state document exceeds its {budget} {kind} budget ({value}). Remove stale or duplicate content before appending.{split_hint}", relative))
 
+    domain_root = root / "docs/features"
+    if domain_root.is_dir():
+        for path in sorted(domain_root.rglob("*.md")):
+            relative = path.relative_to(root).as_posix()
+            lines = len(path.read_text(encoding="utf-8", errors="replace").splitlines())
+            size = path.stat().st_size
+            if lines > DOMAIN_DOCUMENT_MAX_LINES or size > DOMAIN_DOCUMENT_MAX_BYTES:
+                findings.append(
+                    finding(
+                        "P2",
+                        "domain-document-budget",
+                        f"Domain document exceeds its {DOMAIN_DOCUMENT_MAX_LINES} line/{DOMAIN_DOCUMENT_MAX_BYTES} byte budget ({lines} lines, {size} bytes). Split stable details by smaller domain or keep an index here.",
+                        relative,
+                    )
+                )
+
     status_path = root / "docs/STATUS.md"
     if status_path.is_file():
         status_text = status_path.read_text(encoding="utf-8", errors="replace")
@@ -161,7 +182,13 @@ def audit(root: Path) -> dict:
         history_match = HISTORY_NAME_PATTERN.search(relative)
         if size > OVERSIZED_HISTORY_BYTES and history_match:
             findings.append(finding("P2", "oversized-history-log", f"This {size}-byte development/chat history is too large for project memory. Keep current facts in STATUS/features/architecture and let Git retain history.", relative))
-        elif relative.startswith("docs/") and path.suffix.lower() in TEXT_DOCUMENT_SUFFIXES and size > OVERSIZED_DOCUMENT_BYTES:
+        elif (
+            relative.startswith("docs/")
+            and not relative.startswith("docs/features/")
+            and not relative.startswith("docs/adr/")
+            and path.suffix.lower() in TEXT_DOCUMENT_SUFFIXES
+            and size > OVERSIZED_DOCUMENT_BYTES
+        ):
             findings.append(finding("P2", "oversized-document", f"This {size}-byte text document is too large for fast project recovery. Keep a concise index/current-state file and split durable details by stable domain.", relative))
         if path.suffix.lower() in SOURCE_EXTENSIONS:
             try:
@@ -194,6 +221,19 @@ def audit(root: Path) -> dict:
             findings.append(finding("P3", "adr-index-missing", "Add docs/adr/INDEX.md so current decisions can be found without scanning every ADR.", "docs/adr/INDEX.md"))
         if len(decisions) > 30:
             findings.append(finding("P2", "adr-index-large", "The ADR collection is large. Group the index by stable domain and mark superseded decisions; do not merge ADR history into one giant file.", "docs/adr/INDEX.md"))
+        for path in decisions:
+            relative = path.relative_to(root).as_posix()
+            lines = len(path.read_text(encoding="utf-8", errors="replace").splitlines())
+            size = path.stat().st_size
+            if lines > ADR_DOCUMENT_MAX_LINES or size > ADR_DOCUMENT_MAX_BYTES:
+                findings.append(
+                    finding(
+                        "P2",
+                        "adr-document-budget",
+                        f"ADR exceeds its {ADR_DOCUMENT_MAX_LINES} line/{ADR_DOCUMENT_MAX_BYTES} byte budget ({lines} lines, {size} bytes). Split the decision or replace it with a concise current record; let Git retain history.",
+                        relative,
+                    )
+                )
 
     git_code, git_root = git(root, "rev-parse", "--show-toplevel")
     metrics["is_git_repository"] = git_code == 0

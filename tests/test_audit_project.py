@@ -85,6 +85,37 @@ class AuditProjectTests(unittest.TestCase):
             self.assertIn("oversized-document", codes)
             self.assertIn("adr-index-missing", codes)
 
+    def test_reports_oversized_domain_and_adr_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs/features").mkdir(parents=True)
+            (root / "docs/adr").mkdir(parents=True)
+            (root / ".codex").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/PROJECT.md").write_text("# Project\n", encoding="utf-8")
+            (root / "docs/ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+            (root / "docs/ARCHITECTURE.md").write_text("# Architecture\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text("# Current Status\n\n## Next Action\n\nContinue.\n", encoding="utf-8")
+            (root / "docs/FEATURES.md").write_text(
+                """# Features
+
+| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-001 | Keep setting | Settings -> save | Setting remains available. | test:tests/check.py | critical | active |
+""",
+                encoding="utf-8",
+            )
+            (root / ".codex/config.toml").write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
+            (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
+            (root / "docs/features/settings.md").write_text("# Settings\n" + ("detail\n" * 1001), encoding="utf-8")
+            (root / "docs/adr/0001-large.md").write_text("# ADR\n" + ("detail\n" * 801), encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            report = audit_project.audit(root)
+            codes = {item["code"] for item in report["findings"]}
+            self.assertIn("domain-document-budget", codes)
+            self.assertIn("adr-document-budget", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

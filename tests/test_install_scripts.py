@@ -182,6 +182,70 @@ class InstallScriptTests(unittest.TestCase):
             )
             self.assertIn("uncommitted changes", dirty.stdout)
 
+    def test_diagnose_reports_disabled_native_agent_gates_and_hides_sensitive_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, _ = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "workspace"
+            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Apply")
+            (codex_home / "config.toml").write_text(
+                '[agents]\n'
+                'enabled = false\n'
+                '\n'
+                '[features]\n'
+                'multi_agent = false\n'
+                '\n'
+                'experimental_bearer_token = "do-not-print-this-value"\n'
+                'model = "gpt-5.5"\n',
+                encoding="utf-8",
+            )
+            fake_codex = root / "codex.cmd"
+            fake_codex.write_text(
+                '@if "%1 %2"=="plugin list" echo no legacy plugins\r\n'
+                '@exit /b 0\r\n',
+                encoding="ascii",
+            )
+
+            diagnosis = self.run_script(
+                DIAGNOSE_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                expected=1,
+                env={"CODEX_CLI": str(fake_codex)},
+            )
+            self.assertRegex(diagnosis.stdout, r"Native agents gate\s+False")
+            self.assertRegex(diagnosis.stdout, r"Native multi-agent feature gate\s+False")
+            self.assertRegex(diagnosis.stdout, r"No plaintext sensitive Codex key\s+False")
+            self.assertIn("Main model remains user-selectable", diagnosis.stdout)
+            self.assertNotIn("do-not-print-this-value", diagnosis.stdout)
+
+            project = workspace / "projects" / "budget"
+            (project / ".codex").mkdir(parents=True)
+            (project / ".codex/config.toml").write_text(
+                '[agents]\n'
+                'enabled = false\n'
+                '\n'
+                '[features]\n'
+                'multi_agent = false\n',
+                encoding="utf-8",
+            )
+            project_diagnosis = self.run_script(
+                DIAGNOSE_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                "-ProjectRoot",
+                str(project),
+                expected=1,
+                env={"CODEX_CLI": str(fake_codex)},
+            )
+            self.assertRegex(project_diagnosis.stdout, r"Project Native agents gate\s+False")
+            self.assertRegex(project_diagnosis.stdout, r"Project Native multi-agent feature gate\s+False")
+
     def test_diagnose_detects_plugin_only_legacy_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

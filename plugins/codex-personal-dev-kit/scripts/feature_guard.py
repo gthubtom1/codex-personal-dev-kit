@@ -36,6 +36,31 @@ SOURCE_EXTENSIONS = {
     ".tsx", ".vue", ".mjs", ".cjs", ".svelte", ".astro", ".sql", ".graphql", ".gql",
     ".json", ".yaml", ".yml", ".toml", ".xml",
 }
+TEMPLATE_PLACEHOLDER_PATTERNS = {
+    "AGENTS.md": (
+        r"(?im)^\s*-\s*(?:Install|Start|Test|Lint/type/build):\s*not confirmed\.\s*$",
+    ),
+    "docs/PROJECT.md": (
+        r"(?im)^\s*Not yet confirmed\.",
+        r"(?im)^\s*-\s*Current scope is not yet confirmed\.",
+        r"(?im)^\s*Describe the primary user, their skill level, and the problem this project solves\.",
+        r"(?im)^\s*State the user-visible result, not only the technology to build\.",
+    ),
+    "docs/FEATURES.md": (
+        r"(?im)^\s*\|[^\n]*\|\s*Not yet confirmed\s*\|",
+        r"(?im)^\s*\|[^\n]*\|\s*Not yet confirmed\s*$",
+    ),
+    "docs/ARCHITECTURE.md": (
+        r"(?im)^\s*The current system has not been mapped yet\.",
+        r"(?im)^\s*List modules by responsibility, their public interfaces, and allowed dependency direction\.",
+        r"(?im)^\s*Describe the important path from user input to storage or output\.",
+    ),
+    "docs/STATUS.md": (
+        r"(?im)^\s*Project onboarding is in progress\.\s*$",
+        r"(?im)^\s*-\s*(?:Branch/worktree|Last checkpoint|Working tree):\s*not yet (?:recorded|inspected)\.\s*$",
+        r"(?im)^\s*-\s*No project commands have been verified yet\.\s*$",
+    ),
+}
 INACTIVE_STATUSES = {"planned", "retired", "removed", "deprecated", "not yet confirmed", "待确认", "规划中", "已停用"}
 ACTIVE_STATUSES = {"active", "accepted", "stable", "verified", "当前", "已验收", "稳定"}
 CRITICAL_VALUES = {"critical", "core", "high", "关键", "核心"}
@@ -371,6 +396,21 @@ def _status_quality_errors(root: Path) -> list[str]:
         normalized = _normalize_text(" ".join(content))
         if normalized in {"not yet confirmed", "none", "unknown", "tbd", "待确认", "无", "未知"}:
             errors.append(f"docs/STATUS.md {label} section is still a placeholder.")
+    return errors
+
+
+def _template_placeholder_errors(root: Path) -> list[str]:
+    """Reject untouched project-template facts before a feature checkpoint."""
+    errors: list[str] = []
+    for relative, patterns in TEMPLATE_PLACEHOLDER_PATTERNS.items():
+        path = root / relative
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if any(re.search(pattern, text) for pattern in patterns):
+            errors.append(
+                f"Template placeholder remains in {relative}. Replace it with verified project facts before creating a feature checkpoint."
+            )
     return errors
 
 
@@ -917,9 +957,14 @@ def _verification_command_error(command: Sequence[str]) -> str | None:
     if base in {"python", "python3", "py"} and len(args) >= 2 and args[0] == "-m" and args[1] == "pip" and any(item in {"install", "uninstall"} for item in args[2:4]):
         return "Python package installation cannot be hidden inside a verification command."
 
-    hook_root = Path(__file__).resolve().parents[1] / "hooks"
-    if str(hook_root) not in sys.path:
-        sys.path.insert(0, str(hook_root))
+    # Keep this import inside the standalone scripts directory.  The Dev Kit
+    # deliberately ships no lifecycle Hook package; importing from a removed
+    # ``plugins/.../hooks`` path made the no-Hook boundary misleading even
+    # though the CLI happened to work because this file's directory was already
+    # on ``sys.path``.
+    scripts_root = Path(__file__).resolve().parent
+    if str(scripts_root) not in sys.path:
+        sys.path.insert(0, str(scripts_root))
     from pre_tool_guard import classify_command  # type: ignore
 
     decision = classify_command(rendered)
@@ -1013,6 +1058,8 @@ def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[st
         elif _status_content_fingerprint(root) == contract.get("baselineStatusContentFingerprint", ""):
             errors.append("Source behavior changed but docs/STATUS.md only received formatting-only edits. Update meaningful milestone, verified result, risk, and next-action content before creating a checkpoint.")
         errors.extend(_status_quality_errors(root))
+    if contract.get("changedFeatureIds") or _source_changed(root, contract):
+        errors.extend(_template_placeholder_errors(root))
     if errors:
         raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
     index_tree, content_fingerprint = _require_staged_snapshot(root, contract)

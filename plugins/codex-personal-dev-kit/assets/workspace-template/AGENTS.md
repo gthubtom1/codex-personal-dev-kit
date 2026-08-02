@@ -126,6 +126,7 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 - If the user specifies a roster such as “2 Sol and 3 Luna”, spawn that exact mix with `gpt-5.6-sol` or `gpt-5.6-luna`, each at `max`.
 - When explicitly overriding a subagent model or reasoning effort, pass `fork_turns = "none"` or a positive fork depth; the default full-history fork cannot be combined with per-call overrides.
 - Before the first call in a task, verify that the current Codex tool/model catalog supports every requested model and `max` effort.
+- Before claiming that subagents are available, inspect the effective native configuration. If `[agents].enabled = false` or `[features].multi_agent = false`, report the exact disabled gate and stop the subagent route; ask the user before changing global/project configuration. Never work around a disabled gate with visible tasks, custom agents, Plugins, or Hooks.
 - If a requested model is unavailable in the current tool catalog, do not pass an unsupported value, silently substitute, or reduce the requested count. Report that this runtime has not confirmed the model and continue only with unaffected work unless the user authorizes a fallback.
 - Prefer native per-call model selection; do not create custom Agent files unless the user explicitly asks for persistent named agents.
 - A tool-argument serialization failure means the subagent did not start. Never report it as completed work.

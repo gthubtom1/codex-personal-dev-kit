@@ -15,6 +15,7 @@ The user is a complete software-development beginner.
 - 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。
 - Native subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, and built-in tools must never be replaced, intercepted, or simulated.
 - 主对话模型由用户在 Codex 中选择，本规则不锁定主对话。模型优先级为“本次用户明确 roster > 项目显式配置 > 系统默认 Luna/max”；子代理默认使用 `gpt-5.6-luna`、推理强度为 `max`，允许同时启动多个。模型不在当前工具目录时只能报告未确认可用，不能用配置字符串冒充成功或静默降级。
+- 启动子代理前检查有效配置；如果 `[agents].enabled = false` 或 `[features].multi_agent = false`，明确报告哪个原生能力闸门被关闭，并在用户同意前停止子代理路由。不要用可见任务、自定义 Agent、Plugin 或 Hook 绕过关闭状态。显式配置合并只补缺失键，不会替用户打开它。
 - 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。
 - 子代理无人值守时由主代理维护临时 roster ledger，按有效槽位分波次执行；启动前读取原生 agent 列表，空槽不足或状态不明时不启动新代理。每个代理默认每 5 分钟心跳，连续 10 分钟无进展只 follow-up 一次，再等 5 分钟就 interrupt；长测试/构建可事先记录一次延长，硬上限 30 分钟，仍最多一次 follow-up，并把失败/超时如实报告。独立审查默认使用 `fork_turns="none"`。
 - 第一个功能检查点前必须消除项目模板中的 `Not yet confirmed` 占位内容；每个 active Feature 的 Verification 必须包含 `test:<path>`、`suite:<name>` 或等价机器可读标记。

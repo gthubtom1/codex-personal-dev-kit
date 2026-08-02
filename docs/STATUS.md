@@ -14,15 +14,16 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 ## Verified
 
 - Seven standalone Skills pass the official Skill validator.
-- 59 unit tests cover feature contracts, meaningful STATUS freshness, all-active regression coverage, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, legacy-state detection, project creation, secret-aware first baselines, and native-subagent boundaries.
+- 64 unit tests cover feature contracts, meaningful STATUS freshness, all-active regression coverage, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, legacy-state detection, project creation, secret-aware first baselines, template-placeholder gates, domain/ADR document budgets, and native-subagent boundaries.
 - PowerShell parsing, Python/JSON/TOML structural checks, unresolved placeholder checks, and the no-obsolete-artifact check pass after the cleanup is completed.
-- Native subagent policy defaults to Luna/max, supports multiple parallel agents and explicit Sol/Luna rosters at max; roster ledger, slot calculation, 5-10-5 minute timeout handling, one recorded long-task extension, explicit user > project > system precedence, and no custom Agent or visible-task replacement are shipped. The current tool schema did not expose Luna, so this environment has not been claimed as a successful real Luna spawn.
+- Native subagent policy defaults to Luna/max, supports multiple parallel agents and explicit Sol/Luna rosters at max; roster ledger, slot calculation, 5-10-5 minute timeout handling, one recorded long-task extension, explicit user > project > system precedence, and no custom Agent or visible-task replacement are shipped. Disabled `[agents].enabled` or `[features].multi_agent` gates are now diagnosed and reported without being overridden. The current tool schema did not expose Luna, so this environment has not been claimed as a successful real Luna spawn.
 - Existing project and workspace Codex configs receive the native agent defaults in place while preserving any top-level main-model choice; explicit model overrides use the required fork-depth parameter.
 
 ## Current Limitations
 
 - Explicit safety scripts depend on the Skills following the workflow; there is intentionally no lifecycle Hook that can alter Codex native tool behavior.
 - Local Git recovery protects work on this machine but is not an off-device backup.
+- Explicit global Codex settings are outside Dev Kit ownership. The diagnostic now warns about known plaintext bearer/API/secret keys without printing values; the current host still requires user-led credential rotation/removal and review of any global main-model default.
 - Secret detection covers common named files, provider tokens, assignment-style keys, and bounded large-text handling. It is not a dedicated release security scanner.
 - The current Codex task began before any global installation. A new task is required after an approved standalone install so Codex reloads the short global instructions and Skills. A real Luna/max spawn remains an environment-dependent runtime check, not something this repository can fake.
 
