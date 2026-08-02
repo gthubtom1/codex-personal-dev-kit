@@ -11,6 +11,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from feature_guard import GuardError, is_active_feature, is_critical_feature, read_feature_catalog
 
@@ -24,6 +25,7 @@ SOURCE_EXTENSIONS = {
 }
 DOC_BUDGETS = {
     "AGENTS.md": ("bytes", 8192),
+    "docs/INDEX.md": ("lines", 120),
     "docs/PROJECT.md": ("lines", 200),
     "docs/FEATURES.md": ("lines", 250),
     "docs/ROADMAP.md": ("lines", 150),
@@ -45,6 +47,17 @@ HISTORY_NAME_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 NEXT_ACTION_PATTERN = re.compile(r"(?im)^##\s+(?:next actions?|下一步)\s*$")
+MARKDOWN_LINK_PATTERN = re.compile(
+    r"(?<!\!)\[[^\]]*\]\(\s*(?P<target><[^>]+>|[^)\s]+)(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?\s*\)"
+)
+MARKDOWN_HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+HTML_ANCHOR_PATTERN = re.compile(r"(?i)(?:id|name)\s*=\s*[\"']([^\"']+)[\"']")
+MARKDOWN_DOCUMENT_SUFFIXES = {".md", ".markdown"}
+ORPHAN_DOCUMENT_EXCLUSIONS = {
+    "docs/INDEX.md",
+    "docs/adr/INDEX.md",
+    "docs/adr/0000-decision-template.md",
+}
 
 
 def git(root: Path, *args: str) -> tuple[int, str]:
@@ -84,11 +97,183 @@ def status_has_next_action(text: str) -> bool:
     return bool(meaningful) and meaningful.lower() not in {"not yet confirmed", "none", "n/a", "待确认", "无"}
 
 
+def _markdown_anchor_slug(text: str) -> str:
+    """Approximate GitHub-style heading anchors without requiring a renderer."""
+
+    text = re.sub(r"`([^`]*)`", r"\1", text)
+    text = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\{#([^\s}]+)\}", "", text)
+    text = text.strip().lower()
+    text = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE)
+    return re.sub(r"\s+", "-", text)
+
+
+def _markdown_anchors(text: str) -> set[str]:
+    anchors: set[str] = set()
+    counts: dict[str, int] = {}
+    for line in text.splitlines():
+        for explicit in HTML_ANCHOR_PATTERN.findall(line):
+            anchors.add(unquote(explicit))
+        heading = MARKDOWN_HEADING_PATTERN.match(line)
+        if not heading:
+            continue
+        raw = heading.group(1)
+        explicit = re.search(r"\{#([^\s}]+)\}", raw)
+        if explicit:
+            anchors.add(unquote(explicit.group(1)))
+        slug = _markdown_anchor_slug(raw)
+        if not slug:
+            continue
+        occurrence = counts.get(slug, 0)
+        anchors.add(slug if occurrence == 0 else f"{slug}-{occurrence}")
+        counts[slug] = occurrence + 1
+    return anchors
+
+
+def _markdown_links(text: str) -> list[tuple[int, str]]:
+    """Return (line number, target) pairs while ignoring fenced/inline code."""
+
+    links: list[tuple[int, str]] = []
+    in_fence = False
+    fence_pattern = re.compile(r"^\s*(`{3,}|~{3,})")
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        fence = fence_pattern.match(line)
+        if fence:
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        visible = re.sub(r"`[^`]*`", "", line)
+        for match in MARKDOWN_LINK_PATTERN.finditer(visible):
+            target = match.group("target").strip()
+            if target.startswith("<") and target.endswith(">"):
+                target = target[1:-1]
+            links.append((line_number, unquote(target)))
+    return links
+
+
+def _is_external_link(target: str) -> bool:
+    parsed = urlparse(target)
+    return bool(parsed.scheme) or target.startswith("//")
+
+
+def _markdown_files(root: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in iter_files(root)
+        if path.suffix.lower() in MARKDOWN_DOCUMENT_SUFFIXES
+        and ("docs" in path.relative_to(root).parts or path.name in {"AGENTS.md", "README.md"})
+    )
+
+
+def _audit_markdown_navigation(root: Path) -> tuple[list[dict], dict]:
+    """Check local Markdown links and report docs that have no incoming link."""
+
+    findings: list[dict] = []
+    markdown_files = _markdown_files(root)
+    incoming: dict[Path, list[str]] = {}
+    anchors_cache: dict[Path, set[str]] = {}
+    local_link_count = 0
+    broken_link_count = 0
+    broken_anchor_count = 0
+
+    for source in markdown_files:
+        source_relative = source.relative_to(root).as_posix()
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line_number, target in _markdown_links(text):
+            if _is_external_link(target) or target.startswith("#") and not target[1:]:
+                continue
+            path_part, separator, fragment = target.partition("#")
+            if not path_part:
+                candidate = source
+            else:
+                candidate = (source.parent / path_part.replace("/", os.sep)).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                findings.append(
+                    finding(
+                        "P2",
+                        "document-link-outside-root",
+                        f"Local Markdown link points outside the audited project: {target}.",
+                        f"{source_relative}:{line_number}",
+                    )
+                )
+                broken_link_count += 1
+                continue
+            if not candidate.is_file():
+                findings.append(
+                    finding(
+                        "P2",
+                        "broken-document-link",
+                        f"Markdown link target does not exist: {target}.",
+                        f"{source_relative}:{line_number}",
+                    )
+                )
+                broken_link_count += 1
+                continue
+            local_link_count += 1
+            incoming.setdefault(candidate, []).append(source_relative)
+            if separator and fragment:
+                if candidate not in anchors_cache:
+                    try:
+                        anchors_cache[candidate] = _markdown_anchors(
+                            candidate.read_text(encoding="utf-8", errors="replace")
+                        )
+                    except OSError:
+                        anchors_cache[candidate] = set()
+                if fragment not in anchors_cache[candidate]:
+                    findings.append(
+                        finding(
+                            "P2",
+                            "broken-document-anchor",
+                            f"Markdown link anchor does not exist: {target}.",
+                            f"{source_relative}:{line_number}",
+                        )
+                    )
+                    broken_anchor_count += 1
+
+    docs_root = root / "docs"
+    index_path = docs_root / "INDEX.md"
+    orphan_count = 0
+    if docs_root.is_dir() and index_path.is_file():
+        for document in sorted(docs_root.rglob("*.md")):
+            relative = document.relative_to(root).as_posix()
+            if relative in ORPHAN_DOCUMENT_EXCLUSIONS or any(
+                part in {"history", "archive", "archives"} for part in document.relative_to(docs_root).parts
+            ):
+                continue
+            if document not in incoming:
+                findings.append(
+                    finding(
+                        "P3",
+                        "orphan-document",
+                        "Markdown document is not reachable from another Markdown document. Add it to the relevant index or remove it if it is not durable project knowledge.",
+                        relative,
+                    )
+                )
+                orphan_count += 1
+
+    return findings, {
+        "markdown_document_count": len(markdown_files),
+        "local_document_link_count": local_link_count,
+        "broken_document_link_count": broken_link_count,
+        "broken_document_anchor_count": broken_anchor_count,
+        "orphan_document_count": orphan_count,
+    }
+
+
 def audit(root: Path) -> dict:
     findings: list[dict] = []
     metrics: dict = {}
     required_docs = [
         ("AGENTS.md",),
+        ("docs/INDEX.md",),
         ("docs/PROJECT.md",),
         ("docs/FEATURES.md",),
         ("docs/ROADMAP.md",),
@@ -234,6 +419,10 @@ def audit(root: Path) -> dict:
                         relative,
                     )
                 )
+
+    navigation_findings, navigation_metrics = _audit_markdown_navigation(root)
+    findings.extend(navigation_findings)
+    metrics.update(navigation_metrics)
 
     git_code, git_root = git(root, "rev-parse", "--show-toplevel")
     metrics["is_git_repository"] = git_code == 0

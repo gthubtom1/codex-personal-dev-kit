@@ -50,9 +50,14 @@ def main() -> int:
         "scripts/audit_project.py",
         "scripts/merge-codex-config.ps1",
         "scripts/bootstrap/resolve-codex-cli.ps1",
+        "assets/project-template/docs/INDEX.md",
+        "assets/project-template/docs/adr/INDEX.md",
+        "assets/workspace-template/.codex/config.toml",
     ):
         if not (kit_root / relative).is_file():
             errors.append(f"Missing required runtime file: {relative}")
+    if not (repo_root / "docs/INDEX.md").is_file():
+        errors.append(f"Missing Dev Kit documentation index: {repo_root / 'docs/INDEX.md'}")
     legacy_agents = list((kit_root / "assets/global-profile/agents").glob("codex-kit-*.toml"))
     if legacy_agents:
         errors.append("Standalone mode must not ship required custom agent files: " + ", ".join(path.name for path in legacy_agents))

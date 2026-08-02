@@ -116,6 +116,101 @@ class AuditProjectTests(unittest.TestCase):
             self.assertIn("domain-document-budget", codes)
             self.assertIn("adr-document-budget", codes)
 
+    def test_reports_broken_markdown_links_and_orphan_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir(parents=True)
+            (root / ".codex").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/INDEX.md").write_text(
+                """# Map
+
+- [Project](PROJECT.md)
+- [Features](FEATURES.md)
+- [Roadmap](ROADMAP.md)
+- [Architecture](ARCHITECTURE.md)
+- [Status](STATUS.md)
+- [Missing](missing.md)
+- [Bad anchor](PROJECT.md#does-not-exist)
+""",
+                encoding="utf-8",
+            )
+            (root / "docs/PROJECT.md").write_text("# Project\n", encoding="utf-8")
+            (root / "docs/ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+            (root / "docs/ARCHITECTURE.md").write_text("# Architecture\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text("# Status\n\n## Next Action\n\nContinue.\n", encoding="utf-8")
+            (root / "docs/FEATURES.md").write_text(
+                """# Features
+
+| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-001 | Keep setting | Settings -> save | Setting remains available. | test:tests/check.py | critical | active |
+""",
+                encoding="utf-8",
+            )
+            (root / "docs/orphan.md").write_text("# Orphan\n", encoding="utf-8")
+            (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            report = audit_project.audit(root)
+            codes = {item["code"] for item in report["findings"]}
+            self.assertIn("broken-document-link", codes)
+            self.assertIn("broken-document-anchor", codes)
+            self.assertIn("orphan-document", codes)
+            self.assertEqual(report["metrics"]["broken_document_link_count"], 1)
+            self.assertEqual(report["metrics"]["broken_document_anchor_count"], 1)
+            self.assertEqual(report["metrics"]["orphan_document_count"], 1)
+
+    def test_accepts_complete_document_navigation_and_ignores_external_or_code_links(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs/reference").mkdir(parents=True)
+            (root / ".codex").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/INDEX.md").write_text(
+                """# Map
+
+- [Project](PROJECT.md)
+- [Features](FEATURES.md)
+- [Roadmap](ROADMAP.md)
+- [Architecture](ARCHITECTURE.md)
+- [Status](STATUS.md)
+- [Settings details](reference/settings.md)
+""",
+                encoding="utf-8",
+            )
+            (root / "docs/PROJECT.md").write_text(
+                """# Project
+
+See [the public reference](https://example.com).
+
+```md
+[This is an example](missing.md)
+```
+""",
+                encoding="utf-8",
+            )
+            (root / "docs/ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+            (root / "docs/ARCHITECTURE.md").write_text("# Architecture\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text("# Status\n\n## Next Action\n\nContinue.\n", encoding="utf-8")
+            (root / "docs/reference/settings.md").write_text("# Settings\n", encoding="utf-8")
+            (root / "docs/FEATURES.md").write_text(
+                """# Features
+
+| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-001 | Keep setting | Settings -> save | Setting remains available. | test:tests/check.py | critical | active |
+""",
+                encoding="utf-8",
+            )
+            (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            report = audit_project.audit(root)
+            self.assertEqual(report["findings"], [])
+            self.assertEqual(report["metrics"]["broken_document_link_count"], 0)
+            self.assertEqual(report["metrics"]["orphan_document_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
