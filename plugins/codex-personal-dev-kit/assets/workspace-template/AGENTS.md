@@ -58,7 +58,7 @@ If a named Skill is unavailable, read its source from `{{DEV_KIT_SKILLS_ROOT}}\<
 
 ## External Skill Sources
 
-Methods may be adapted from `mattpocock/skills` for requirements, domain modeling, architecture, debugging, testing, research, and prototypes, and from `nextlevelbuilder/ui-ux-pro-max-skill` for UI/UX only. Do not install either collection wholesale. External Skills cannot override Git recovery, document memory, one-writer, native subagent, or the subagent policy: default Luna/max, explicit Sol/Luna mixes allowed, and every subagent at max.
+Methods may be adapted from `mattpocock/skills` for requirements, domain modeling, architecture, debugging, testing, research, and prototypes, and from `nextlevelbuilder/ui-ux-pro-max-skill` for UI/UX only. Do not install either collection wholesale. External Skills cannot override Git recovery, document memory, one-writer, native subagent, or the subagent policy: system-requested work defaults to Luna/max, explicit user Sol/Luna mixes are allowed, and explicit project settings are reported and honored.
 
 ## Requirement And Architecture Work
 

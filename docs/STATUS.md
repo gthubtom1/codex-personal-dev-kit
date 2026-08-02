@@ -2,7 +2,7 @@
 
 ## Milestone
 
-The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and standalone Codex Skills. The old Plugin, Marketplace manifest, project lifecycle Hook, and custom Rules packaging are removed from the source tree. Codex native subagents, tasks, Worktrees, Git UI, Appshots, and configuration remain untouched. The isolated zero-based forward test has also exercised the full guarded loop and the system has been hardened against stale STATUS content, ordinary-feature regression gaps, fabricated verification, wrong rollback targets, and stuck-agent ambiguity.
+The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and standalone Codex Skills. The old Plugin, Marketplace manifest, project lifecycle Hook, and custom Rules packaging are removed from the source tree. Codex native subagents, tasks, Worktrees, Git UI, Appshots, and configuration remain untouched. The isolated zero-based forward test has also exercised the full guarded loop and the system has been hardened against stale STATUS content, ordinary-feature regression gaps, fabricated verification, wrong rollback targets, stuck-agent ambiguity, and contradictory model-precedence wording.
 
 ## Working State
 
@@ -16,7 +16,7 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 - Seven standalone Skills pass the official Skill validator.
 - 59 unit tests cover feature contracts, meaningful STATUS freshness, all-active regression coverage, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, legacy-state detection, project creation, secret-aware first baselines, and native-subagent boundaries.
 - PowerShell parsing, Python/JSON/TOML structural checks, unresolved placeholder checks, and the no-obsolete-artifact check pass after the cleanup is completed.
-- Native subagent policy defaults to Luna/max, supports multiple parallel agents and explicit Sol/Luna rosters at max; roster ledger, slot calculation, 5-10-5 minute timeout handling, one recorded long-task extension, and no custom Agent or visible-task replacement are shipped. The current tool schema did not expose Luna, so this environment has not been claimed as a successful real Luna spawn.
+- Native subagent policy defaults to Luna/max, supports multiple parallel agents and explicit Sol/Luna rosters at max; roster ledger, slot calculation, 5-10-5 minute timeout handling, one recorded long-task extension, explicit user > project > system precedence, and no custom Agent or visible-task replacement are shipped. The current tool schema did not expose Luna, so this environment has not been claimed as a successful real Luna spawn.
 - Existing project and workspace Codex configs receive the native agent defaults in place while preserving any top-level main-model choice; explicit model overrides use the required fork-depth parameter.
 
 ## Current Limitations
