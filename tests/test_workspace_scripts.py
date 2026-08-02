@@ -117,6 +117,41 @@ class WorkspaceScriptTests(unittest.TestCase):
             )
             self.assertIn("already exists", duplicate.stdout)
 
+    def test_create_project_auto_initializes_a_new_mother_folder_for_beginner_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "new-mother"
+            self.run_script(
+                "create-project.ps1",
+                "-WorkspaceRoot",
+                str(workspace),
+                "-ProjectName",
+                "first-app",
+                "-Apply",
+            )
+            self.assertTrue((workspace / "workspace.json").is_file())
+            project = workspace / "projects/first-app"
+            self.assertTrue(project.is_dir())
+            self.assertEqual(Path(self.git(project, "rev-parse", "--show-toplevel").stdout.strip()).resolve(), project.resolve())
+            self.assertEqual(self.git(project, "log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: initialize project")
+
+    def test_existing_agent_defaults_are_preserved_when_merging_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "custom"
+            (workspace / ".codex").mkdir(parents=True)
+            (workspace / ".codex/config.toml").write_text(
+                '[agents]\n'
+                'enabled = false\n'
+                'default_subagent_model = "gpt-5.6-sol"\n'
+                'default_subagent_reasoning_effort = "high"\n',
+                encoding="utf-8",
+            )
+            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
+            config = (workspace / ".codex/config.toml").read_text(encoding="utf-8")
+            self.assertIn("enabled = false", config)
+            self.assertIn('default_subagent_model = "gpt-5.6-sol"', config)
+            self.assertIn('default_subagent_reasoning_effort = "high"', config)
+            self.assertIn("max_concurrent_threads_per_session = 6", config)
+
     def test_bootstrap_existing_project_preserves_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "existing"

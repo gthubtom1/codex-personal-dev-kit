@@ -15,6 +15,7 @@ This file records current user-visible behavior, not development history. Stable
 - `critical` means a small set of journeys that must be rechecked whenever source behavior changes. Use `standard` for other active capabilities.
 - Use `active`, `accepted`, `stable`, or `verified` for behavior that currently exists. Use `planned` only for work that does not exist yet.
 - Record important error, empty, permission, data-preservation, and compatibility behavior with the related feature.
+- Every active feature must include a machine-readable verification marker in its Verification cell, such as `test:tests/export.test.js` or `suite:unit`, plus any human explanation. The change guard rejects feature-bound inline/no-op commands and commands that are not bound to the declared marker.
 
 ## Scaling This File
 

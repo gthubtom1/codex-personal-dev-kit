@@ -22,7 +22,7 @@ python <dev-kit-root>/scripts/feature_guard.py start --root . --objective "<结�
 
 ## 修改后
 
-1. 验证新验收条件、改变的功能、显式邻接功能，以及所有 critical 主流程。
+1. 验证新验收条件、改变的功能、显式邻接功能，以及源码/配置/数据结构变化影响到的所有 active 功能；不要因为功能标记为 standard 就静默跳过。
 2. 比较最终 diff，特别检查控件、路由、字段、配置、事件绑定、保存接口、worker 和测试是否被删除或断开。
 3. 更新 FEATURES 主索引或对应领域表的当前事实，不把任务日志写进去。
 4. 逐个暂存本任务文件；不要运行原始 `git add`：
@@ -45,7 +45,7 @@ python <dev-kit-root>/scripts/feature_guard.py verify --root . --feature F-012 -
 python <dev-kit-root>/scripts/feature_guard.py complete --root .
 ```
 
-门禁会拒绝：受保护功能条目消失或被改写、变更功能没有成为 active、未声明的已跟踪文件删除、用户原有脏文件混入暂存、任务改动未暂存、critical/指定功能没有成功命令、验证后内容或 index 改变。
+门禁会拒绝：受保护功能条目消失或被改写、变更功能没有成为 active、未声明的已跟踪文件删除、用户原有脏文件混入暂存、任务改动未暂存、active/指定功能没有成功命令、验证后内容或 index 改变。大型功能目录可以用共享 `suite:all-tests` 标记或多个真实命令分批覆盖，但不能只验证 critical 功能。
 
 `complete` 后若还需编辑，先运行 `reopen`，重新 `stage` 和 `verify`。完成后运行：
 

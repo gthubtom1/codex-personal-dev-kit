@@ -22,8 +22,8 @@ FEATURES = """# Feature Map
 
 | ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F-001 | Toggle acceleration | Settings control -> save API -> worker | The saved setting controls processing. | settings integration test | critical | active |
-| F-002 | Export a result | Export button -> API -> downloaded file | A valid file is downloaded. | export integration test | standard | active |
+| F-001 | Toggle acceleration | Settings control -> save API -> worker | The saved setting controls processing. | test:tests/verify_features.py | critical | active |
+| F-002 | Export a result | Export button -> API -> downloaded file | A valid file is downloaded. | test:tests/verify_features.py | standard | active |
 """
 
 
@@ -39,10 +39,12 @@ class FeatureGuardTests(unittest.TestCase):
         (self.root / ".gitignore").write_text(".codex/current-change.json\n", encoding="utf-8")
         (self.root / "docs/FEATURES.md").write_text(FEATURES, encoding="utf-8")
         (self.root / "docs/STATUS.md").write_text(
-            "# Current Status\n\n## Milestone\n\nKeep existing behavior.\n\n## Next Action\n\nVerify the export change.\n",
+            "# Current Status\n\n## Milestone\n\nKeep existing behavior.\n\n## Working State\n\nMain checkout is clean before the task.\n\n## Verified\n\nBaseline verification is available.\n\n## Current Risks\n\nExport behavior still needs a regression check.\n\n## Next Action\n\nVerify the export change.\n",
             encoding="utf-8",
         )
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = true;\n", encoding="utf-8")
+        (self.root / "tests").mkdir()
+        (self.root / "tests/verify_features.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
         self.git("init", "-b", "main")
         self.git("add", ".")
         self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline")
@@ -85,13 +87,20 @@ class FeatureGuardTests(unittest.TestCase):
         )
 
     def stage(self, *paths: str) -> dict:
+        if any(path.replace("\\", "/") == "src/app.js" for path in paths) and not (self.root / "docs/STATUS.md").read_text(encoding="utf-8").startswith("# User draft"):
+            status = self.root / "docs/STATUS.md"
+            status.write_text(
+                "# Current Status\n\n## Milestone\n\nExport slice verified.\n\n## Working State\n\nMain checkout contains the guarded slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nContinue checking adjacent behavior.\n\n## Next Action\n\nContinue the next accepted slice.\n",
+                encoding="utf-8",
+            )
+            paths = (*paths, "docs/STATUS.md")
         return feature_guard.stage_paths(self.root, paths)
 
     def verify(self, *feature_ids: str) -> dict:
         return feature_guard.run_verification(
             self.root,
             feature_ids,
-            [sys.executable, "-c", "print('verification passed')"],
+            [sys.executable, "tests/verify_features.py"],
             timeout=30,
         )
 
@@ -188,6 +197,59 @@ class FeatureGuardTests(unittest.TestCase):
             feature_guard.run_verification(self.root, ["F-001"], ["git", "add", "src/app.js"])
         with self.assertRaisesRegex(feature_guard.GuardError, "installation"):
             feature_guard.run_verification(self.root, ["F-001"], ["pip", "install", "ruff"])
+
+    def test_feature_verification_rejects_inline_fake_success_and_requires_binding(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        with self.assertRaisesRegex(feature_guard.GuardError, "inline/no-op"):
+            feature_guard.run_verification(self.root, ["F-001"], [sys.executable, "-c", "print('verification passed')"])
+        with self.assertRaisesRegex(feature_guard.GuardError, "not bound to feature"):
+            feature_guard.run_verification(self.root, ["F-001"], [sys.executable, "tests/other_check.py"])
+
+    def test_windows_path_separator_is_normalized_for_feature_binding(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        run = feature_guard.run_verification(self.root, ["F-001"], [sys.executable, r"tests\verify_features.py"], timeout=30)
+        self.assertTrue(run["passed"])
+
+    def test_source_change_requires_current_status_document(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        feature_guard.stage_paths(self.root, ["src/app.js"])
+        feature_guard.run_verification(self.root, ["F-001", "F-002"], [sys.executable, "tests/verify_features.py"], timeout=30)
+        with self.assertRaisesRegex(feature_guard.GuardError, "STATUS.md was not updated"):
+            feature_guard.complete_contract(self.root, [], [])
+
+    def test_status_formatting_only_change_does_not_satisfy_freshness(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        status = self.root / "docs/STATUS.md"
+        status.write_text(status.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        feature_guard.stage_paths(self.root, ["src/app.js"])
+        feature_guard.stage_paths(self.root, ["docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        with self.assertRaisesRegex(feature_guard.GuardError, "formatting-only"):
+            feature_guard.complete_contract(self.root, [], [])
+
+    def test_source_change_requires_all_active_features_in_a_large_catalog(self) -> None:
+        rows = [
+            "| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for index in range(1, 42):
+            criticality = "critical" if index == 1 else "standard"
+            rows.append(
+                f"| F-{index:03d} | Capability {index} | src/app.js -> test | Result {index} | test:tests/verify_features.py | {criticality} | active |"
+            )
+        (self.root / "docs/FEATURES.md").write_text("# Feature Map\n\n" + "\n".join(rows) + "\n", encoding="utf-8")
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001")
+        with self.assertRaisesRegex(feature_guard.GuardError, "F-002"):
+            feature_guard.complete_contract(self.root, [], [])
 
     def test_verified_content_must_be_saved_through_guard_checkpoint(self) -> None:
         self.start()
@@ -314,6 +376,13 @@ class FeatureGuardTests(unittest.TestCase):
         )
         self.assertEqual(revert_hook["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIn("feature_guard.py rollback", revert_hook["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_rollback_refuses_a_user_commit_that_is_not_a_dev_kit_checkpoint(self) -> None:
+        (self.root / "src/app.js").write_text("user change\n", encoding="utf-8")
+        self.git("add", "src/app.js")
+        self.git("-c", "user.name=User", "-c", "user.email=user@example.invalid", "commit", "-m", "user save")
+        with self.assertRaisesRegex(feature_guard.GuardError, "not created by the Dev Kit checkpoint flow"):
+            feature_guard.rollback_last_checkpoint(self.root)
 
     def test_raw_git_add_is_blocked(self) -> None:
         self.start()

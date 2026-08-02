@@ -33,7 +33,8 @@ CHECKPOINT_AUTHOR_EMAIL = "codex-dev-kit@local.invalid"
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
     ".js", ".jsx", ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts",
-    ".tsx", ".vue",
+    ".tsx", ".vue", ".mjs", ".cjs", ".svelte", ".astro", ".sql", ".graphql", ".gql",
+    ".json", ".yaml", ".yml", ".toml", ".xml",
 }
 INACTIVE_STATUSES = {"planned", "retired", "removed", "deprecated", "not yet confirmed", "待确认", "规划中", "已停用"}
 ACTIVE_STATUSES = {"active", "accepted", "stable", "verified", "当前", "已验收", "稳定"}
@@ -325,6 +326,54 @@ def _path_state(root: Path, relative: str) -> str:
         return f"error:{exc.__class__.__name__}"
 
 
+def _status_content_fingerprint(root: Path) -> str:
+    """Hash meaningful STATUS content while ignoring formatting-only edits."""
+    path = root / STATUS_RELATIVE
+    if not path.is_file():
+        return "missing"
+    text = path.read_text(encoding="utf-8", errors="replace")
+    meaningful = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+    return hashlib.sha256(meaningful.encode("utf-8")).hexdigest()
+
+
+def _status_quality_errors(root: Path) -> list[str]:
+    path = root / STATUS_RELATIVE
+    if not path.is_file():
+        return ["docs/STATUS.md is missing."]
+    text = path.read_text(encoding="utf-8", errors="replace")
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("## "):
+            current = _normalize_text(line[3:])
+            sections[current] = []
+        elif current is not None and line:
+            sections[current].append(line)
+
+    aliases = {
+        "milestone": ("milestone", "current milestone", "里程碑", "当前里程碑"),
+        "working": ("working state", "工作状态"),
+        "verified": ("verified", "已验证"),
+        "risks": ("current risks", "risks", "current limitations", "limitations", "当前风险", "当前限制"),
+        "next": ("next action", "next actions", "下一步"),
+    }
+    errors: list[str] = []
+    for label, names in aliases.items():
+        content: list[str] = []
+        for name in names:
+            if name in sections:
+                content = sections[name]
+                break
+        if not content:
+            errors.append(f"docs/STATUS.md needs a non-empty {label} section.")
+            continue
+        normalized = _normalize_text(" ".join(content))
+        if normalized in {"not yet confirmed", "none", "unknown", "tbd", "待确认", "无", "未知"}:
+            errors.append(f"docs/STATUS.md {label} section is still a placeholder.")
+    return errors
+
+
 def _normalize_contract_path(root: Path, value: str) -> str:
     normalized = value.strip().replace("\\", "/")
     if not normalized or normalized in {".", "./"}:
@@ -451,8 +500,62 @@ def _required_verification_ids(root: Path, contract: dict, current: dict[str, Fe
     required = set(contract.get("explicitVerificationIds", []))
     required.update(feature_id for feature_id in contract.get("changedFeatureIds", []) if feature_id in current and _is_active(current[feature_id]))
     if _source_changed(root, contract):
-        required.update(feature.id for feature in current.values() if _is_active(feature) and _is_critical(feature))
+        # A source/config/schema change can disconnect an ordinary feature just
+        # as easily as a critical one. Prefer complete active-feature coverage;
+        # large catalogs may use a shared `suite:all-tests` marker or several
+        # real commands, but they may not silently skip ordinary features.
+        required.update(feature.id for feature in current.values() if _is_active(feature))
     return required
+
+
+def _verification_markers(feature: Feature) -> list[str]:
+    """Return machine-readable bindings from a feature's Verification cell.
+
+    Human prose is still useful, but it is not enough to bind a command to a
+    feature.  A marker such as ``test:tests/export.test.js`` or
+    ``suite:unit`` gives the guard a stable, reviewable identity without
+    executing arbitrary commands from project documentation.
+    """
+    value = feature.verification.strip()
+    if not value or _normalize_text(value) in {"not yet confirmed", "待确认"}:
+        return []
+    markers = re.findall(r"(?i)(?:test|suite|command|check)\s*[:=]\s*([^\s,;|]+)", value)
+    return [item.strip("`'\"").lower() for item in markers if item.strip("`'\"")]
+
+
+def _verification_binding_error(features: dict[str, Feature], feature_ids: Sequence[str], rendered: str, command: Sequence[str]) -> str | None:
+    if not feature_ids:
+        return None
+
+    lowered_command = rendered.lower().replace("\\", "/")
+    base = re.split(r"[\\/]", command[0].strip('"\''))[-1].lower() if command else ""
+    base = re.sub(r"\.(?:exe|cmd|bat)$", "", base)
+    args = [item.lower() for item in command[1:]]
+    inline = (
+        (base in {"python", "python3", "py", "node", "deno"} and any(item in {"-c", "-e", "--eval"} for item in args[:2]))
+        or (base in {"powershell", "pwsh"} and any(item in {"-command", "-c"} for item in args[:2]))
+        or (base in {"cmd", "cmd.exe"} and any(item == "/c" for item in args[:2]) and any(item in {"echo", "ver", "true"} for item in args))
+        or base in {"echo", "printf", "print", "true", "true.exe"}
+    )
+    if inline:
+        return "Feature-bound verification cannot be an inline/no-op command; run the project's real test, check, build, or verification file."
+
+    broad_suite = base in {"npm", "npm.cmd", "pnpm", "pnpm.cmd", "yarn", "yarn.cmd", "bun", "bun.exe", "pytest", "cargo", "go", "dotnet", "mvn", "gradle"}
+    if base in {"python", "python3", "py"} and any(item in {"unittest", "pytest", "nose"} for item in args):
+        broad_suite = True
+    for feature_id in feature_ids:
+        feature = features.get(feature_id)
+        if feature is None:
+            continue
+        markers = _verification_markers(feature)
+        if not markers:
+            return f"Feature {feature_id} needs a machine-readable Verification marker such as test:tests/example.test.js or suite:unit before it can be verified."
+        if any(marker.replace("\\", "/") in lowered_command for marker in markers):
+            continue
+        if broad_suite and any(marker.startswith(("suite", "unit", "integration", "e2e", "all")) for marker in markers):
+            continue
+        return f"Verification command is not bound to feature {feature_id}; include one declared marker ({', '.join(markers)}) or use its declared test file."
+    return None
 
 
 def _evaluate(root: Path, contract: dict) -> tuple[list[str], list[str], set[str]]:
@@ -493,7 +596,15 @@ def _evaluate(root: Path, contract: dict) -> tuple[list[str], list[str], set[str
         if not feature.verification.strip() or _normalize_text(feature.verification) in {"not yet confirmed", "待确认"}:
             warnings.append(f"Active feature {feature.id} has no usable verification entry.")
 
-    return errors, warnings, _required_verification_ids(root, contract, current)
+    required = _required_verification_ids(root, contract, current)
+    for feature_id in sorted(required):
+        feature = current.get(feature_id)
+        if feature is not None and not _verification_markers(feature):
+            errors.append(
+                f"Required feature {feature_id} has no machine-readable Verification marker. "
+                "Use a declaration such as test:tests/example.test.js or suite:unit."
+            )
+    return errors, warnings, required
 
 
 def _verification_still_matches(root: Path, contract: dict) -> bool:
@@ -519,7 +630,11 @@ def _verification_is_committed(root: Path, contract: dict) -> bool:
         return False
     tree = _run_git(root, "rev-parse", "HEAD^{tree}")
     parents = _run_git(root, "rev-list", "--parents", "-n", "1", "HEAD")
-    if tree.returncode != 0 or parents.returncode != 0:
+    metadata = _run_git(root, "show", "-s", "--format=%an\x1f%ae\x1f%s", "HEAD")
+    if tree.returncode != 0 or parents.returncode != 0 or metadata.returncode != 0:
+        return False
+    author_name, author_email, subject = (metadata.stdout.strip().split("\x1f", 2) + ["", "", ""])[:3]
+    if author_name != CHECKPOINT_AUTHOR_NAME or author_email != CHECKPOINT_AUTHOR_EMAIL or not subject.lower().startswith("checkpoint:"):
         return False
     parent_ids = parents.stdout.strip().split()[1:]
     verified_head = contract.get("verifiedHead")
@@ -607,6 +722,14 @@ def rollback_last_checkpoint(root: Path, message: str | None = None) -> str:
         )
 
     head = _git_head(root)
+    if not head:
+        raise GuardError("There is no local version to return to.")
+    metadata = _run_git(root, "show", "-s", "--format=%an\x1f%ae\x1f%s", head)
+    if metadata.returncode != 0:
+        raise GuardError("Unable to identify the latest local version.")
+    author_name, author_email, subject = (metadata.stdout.strip().split("\x1f", 2) + ["", "", ""])[:3]
+    if author_name != CHECKPOINT_AUTHOR_NAME or author_email != CHECKPOINT_AUTHOR_EMAIL or not subject.lower().startswith("checkpoint:"):
+        raise GuardError("The latest commit was not created by the Dev Kit checkpoint flow; it will not be rolled back automatically. Keep the user's commit and ask for an explicit recovery decision.")
     parent = _run_git(root, "rev-parse", "HEAD^")
     if not head or parent.returncode != 0:
         raise GuardError("There is no earlier local version to return to.")
@@ -695,6 +818,8 @@ def start_contract(
         "baselinePathStates": {relative: _path_state(root, relative) for relative in baseline_changed},
         "baselineStagedFiles": sorted(_staged_files(root)),
         "baselineDeletedFiles": sorted(_deleted_files(root, baseline_head)),
+        "baselineStatusState": _path_state(root, STATUS_RELATIVE.as_posix()),
+        "baselineStatusContentFingerprint": _status_content_fingerprint(root),
         "changedFeatureIds": changed_ids,
         "explicitVerificationIds": verify_ids,
         "protectedFeatures": protected,
@@ -817,6 +942,9 @@ def run_verification(root: Path, feature_ids: Sequence[str], command: Sequence[s
     timeout = max(1, min(int(timeout), 3600))
     before_tree, before_fingerprint = _require_staged_snapshot(root, contract)
     rendered = subprocess.list2cmdline(command)
+    binding_error = _verification_binding_error(features, verified_ids, rendered, command)
+    if binding_error:
+        raise GuardError(binding_error)
     started = _now()
     try:
         result = subprocess.run(
@@ -877,6 +1005,14 @@ def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[st
         raise GuardError("The current change contract is not open.")
 
     errors, warnings, required = _evaluate(root, contract)
+    if _source_changed(root, contract):
+        baseline_status = contract.get("baselineStatusState", "")
+        current_status = _path_state(root, STATUS_RELATIVE.as_posix())
+        if current_status == baseline_status:
+            errors.append("Source behavior changed but docs/STATUS.md was not updated. Record the new verified state, current risks, and exactly one next action before creating a checkpoint.")
+        elif _status_content_fingerprint(root) == contract.get("baselineStatusContentFingerprint", ""):
+            errors.append("Source behavior changed but docs/STATUS.md only received formatting-only edits. Update meaningful milestone, verified result, risk, and next-action content before creating a checkpoint.")
+        errors.extend(_status_quality_errors(root))
     if errors:
         raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
     index_tree, content_fingerprint = _require_staged_snapshot(root, contract)

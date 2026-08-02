@@ -40,6 +40,7 @@ Replace only after the command has actually been discovered and run successfully
 - Routine versions stay on the current branch. Every verified change gets a local recovery point before completion.
 - Use one source writer per checkout. Parallel writers require separate Worktrees and explicit ownership.
 - Keep project documents current and concise. Never add chat transcripts, hidden reasoning, raw logs, daily journals, or permanent per-task reports.
+- Before the first feature checkpoint, replace every `Not yet confirmed` placeholder in `docs/PROJECT.md`, `docs/FEATURES.md`, `docs/ARCHITECTURE.md`, `docs/STATUS.md`, and Verified Commands with confirmed facts. Active Feature rows need a machine-readable verification marker such as `test:tests/example.test.js` or `suite:unit`.
 - Never automatically push, merge, release, deploy, publish, rewrite history, or discard unconfirmed work.
 
 ## Definition Of Done

@@ -53,7 +53,6 @@ function Merge-CodexNativeAgentDefaults {
         $found = $false
         for ($index = $agentsStart + 1; $index -lt $agentsEnd; $index++) {
             if ($lines[$index] -match $keyPattern) {
-                $lines[$index] = "$($entry.Key) = $($entry.Value)"
                 $found = $true
             }
         }

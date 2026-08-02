@@ -120,14 +120,25 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 
 - The main conversation model is user-selected and is not locked by this system.
 - Default subagent model: `gpt-5.6-luna`.
-- Every subagent reasoning effort: `max`.
+- Every system-requested subagent reasoning effort: `max`.
+- Model precedence is: the user's explicit roster for this request > explicit project `[agents]` configuration > these system defaults. A model name in TOML is not proof that the current tool catalog supports it; verify before spawning.
 - Multiple subagents are allowed up to the smaller of `max_concurrent_threads_per_session` and the currently available native slots (the template default is 6, excluding the primary thread). If a requested roster is larger, run it in waves while preserving the exact total and model mix.
 - If the user specifies a roster such as “2 Sol and 3 Luna”, spawn that exact mix with `gpt-5.6-sol` or `gpt-5.6-luna`, each at `max`.
 - When explicitly overriding a subagent model or reasoning effort, pass `fork_turns = "none"` or a positive fork depth; the default full-history fork cannot be combined with per-call overrides.
 - Before the first call in a task, verify that the current Codex tool/model catalog supports every requested model and `max` effort.
-- If a requested model is unavailable, do not pass an unsupported value, silently substitute, or reduce the requested count. Report the compatibility issue and continue only with unaffected work unless the user authorizes a fallback.
+- If a requested model is unavailable in the current tool catalog, do not pass an unsupported value, silently substitute, or reduce the requested count. Report that this runtime has not confirmed the model and continue only with unaffected work unless the user authorizes a fallback.
 - Prefer native per-call model selection; do not create custom Agent files unless the user explicitly asks for persistent named agents.
 - A tool-argument serialization failure means the subagent did not start. Never report it as completed work.
+- Explicit user/project configuration wins over defaults: the merge script only fills missing `[agents]` keys and never silently changes `enabled`, model, or reasoning effort. When this system starts a roster, it requests Luna/max by default; a deliberate user override is reported and honored rather than hidden.
+
+### Unattended roster ledger and timeouts
+
+- Keep a temporary in-memory ledger for every roster: ID, requested model, reasoning effort, task, wave, and status (`queued`, `running`, `completed`, `failed`, `interrupted`, or `timeout`). Do not write agent transcripts or raw logs into the project.
+- Before spawning, inspect the native agent list. Effective free slots are `max_concurrent_threads_per_session - running native subagents`, never below zero. If the native list is unavailable or ambiguous, start no new agents until the capacity is known; do not guess.
+- Run waves of at most the effective free slots; wait for a wave to finish before starting the next. Preserve the exact requested count and model mix, recording failed starts instead of silently replacing them.
+- Default heartbeat is every 5 minutes. If an agent gives no meaningful progress for 10 minutes, send one concise follow-up; if there is still no meaningful progress after 5 more minutes, interrupt it and mark `timeout`/`interrupted`. If the agent declares a long test, build, or official research phase before starting it, the main agent may record one extension in the ledger, with a hard 30-minute cap and still at most one follow-up. Allow no silent or unlimited extensions.
+- Independent review and blind testing use `fork_turns="none"` by default (or a small explicit fork depth), receive only necessary facts, and must not receive the main agent's expected conclusion.
+- Final orchestration reporting must distinguish planned, started, completed, failed, interrupted, and timed-out agents. A timed-out agent is never counted as completed.
 
 ## Context And Documents
 

@@ -9,7 +9,16 @@ $ErrorActionPreference = "Stop"
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $workspaceConfigPath = Join-Path $workspacePath "workspace.json"
 if (-not (Test-Path -LiteralPath $workspaceConfigPath -PathType Leaf)) {
-    throw "workspace.json was not found. Run scripts/bootstrap-workspace.ps1 first."
+    if (-not $Apply) {
+        Write-Host "workspace.json was not found. Apply mode will initialize this mother folder automatically before creating the project."
+        Write-Host "Preview only. Re-run with -Apply to initialize the workspace, create templates, initialize Git, and make a local baseline checkpoint."
+        exit 0
+    }
+    $bootstrapWorkspace = Join-Path $PSScriptRoot "bootstrap-workspace.ps1"
+    & $bootstrapWorkspace -WorkspaceRoot $workspacePath -Apply
+    if (-not (Test-Path -LiteralPath $workspaceConfigPath -PathType Leaf)) {
+        throw "Mother-folder initialization completed without creating workspace.json."
+    }
 }
 
 $workspaceConfig = Get-Content -Raw -LiteralPath $workspaceConfigPath | ConvertFrom-Json
