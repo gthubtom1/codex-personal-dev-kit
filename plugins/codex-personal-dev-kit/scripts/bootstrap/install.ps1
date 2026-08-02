@@ -355,7 +355,9 @@ $requiredInstalledPaths = @(
     (Join-Path $kitTargetRoot "scripts\pre_tool_guard.py"),
     (Join-Path $kitTargetRoot "scripts\resolve-skill.ps1"),
     (Join-Path $codexHomePath "skills\codex-development-assistant\SKILL.md"),
-    (Join-Path $codexHomePath "skills\orchestrate-codex-team\SKILL.md")
+    (Join-Path $codexHomePath "skills\orchestrate-codex-team\SKILL.md"),
+    (Join-Path $codexHomePath "skills\research-and-reuse\SKILL.md"),
+    (Join-Path $codexHomePath "skills\integrate-codex-projects\SKILL.md")
 )
 $missingInstalledPaths = @($requiredInstalledPaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingInstalledPaths.Count -gt 0) {

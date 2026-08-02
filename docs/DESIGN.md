@@ -32,7 +32,7 @@ Mother Folder
 | --- | --- |
 | Global `AGENTS.md` | 简短的零基础交互、权限、安全边界和母文件夹详细规则入口 |
 | Mother-folder `AGENTS.md` | 完整工作流、目录、Skills、Git、文档、任务和原生 subagent 规则 |
-| Standalone Skills | 一个普通语言入口和六个按需加载的专业能力 |
+| Standalone Skills | 一个普通语言入口和八个按需加载的专业能力，包括外部研究复用与多项目融合 |
 | Central runtime | `~/.codex/codex-dev-kit/` 下的脚本、模板、索引、版本和来源信息 |
 | Explicit safety scripts | 通过当前任务显式运行功能保全、危险命令和 Git 检查，不定义或替代智能体 |
 | Mother-folder files | 新建项目、项目隔离、归档和原生 subagent 默认配置 |

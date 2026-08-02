@@ -73,6 +73,8 @@ foreach ($name in @(
     "orchestrate-codex-team",
     "codex-safe-development",
     "manage-project-continuity",
+    "research-and-reuse",
+    "integrate-codex-projects",
     "audit-codex-kit"
 )) {
     $path = Join-Path $codexHomePath ("skills\$name\SKILL.md")

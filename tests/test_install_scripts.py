@@ -112,6 +112,8 @@ class InstallScriptTests(unittest.TestCase):
             self.assertFalse((codex_home / "rules/codex-dev-kit.rules").exists())
             self.assertFalse((codex_home / "agents/codex-kit-reviewer.toml").exists())
             self.assertTrue((codex_home / "skills/codex-development-assistant/SKILL.md").is_file())
+            self.assertTrue((codex_home / "skills/research-and-reuse/SKILL.md").is_file())
+            self.assertTrue((codex_home / "skills/integrate-codex-projects/SKILL.md").is_file())
             self.assertTrue((codex_home / "codex-dev-kit/scripts/feature_guard.py").is_file())
             self.assertTrue((codex_home / "codex-dev-kit/source.json").is_file())
             self.assertFalse((codex_home / "config.toml").exists())

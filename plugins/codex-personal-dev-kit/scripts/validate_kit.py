@@ -22,6 +22,8 @@ SKILLS = {
     "orchestrate-codex-team",
     "codex-safe-development",
     "manage-project-continuity",
+    "research-and-reuse",
+    "integrate-codex-projects",
     "audit-codex-kit",
 }
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Integrate Codex Projects"
+  short_description: "Integrate explicitly selected projects safely"
+  default_prompt: "Use $integrate-codex-projects to plan and implement a safe capability-level integration between the projects I explicitly named."

@@ -62,10 +62,12 @@ if (-not (Test-Path -LiteralPath $skillValidator -PathType Leaf)) { throw "Skill
     "audit-codex-kit",
     "codex-development-assistant",
     "codex-safe-development",
+    "integrate-codex-projects",
     "manage-project-continuity",
     "onboard-codex-project",
     "orchestrate-codex-team",
-    "prepare-codex-goal"
+    "prepare-codex-goal",
+    "research-and-reuse"
 ) | ForEach-Object {
     $skillName = $_
     $skillPath = Join-Path $skillRoot $skillName
