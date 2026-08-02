@@ -317,7 +317,7 @@ if ($legacyPluginSelectors.Count -gt 0) {
 }
 
 $agentsTemplate = [System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "assets\standalone\AGENTS.md"))
-$agentsBlock = $agentsTemplate.Replace("{{WORKSPACE_AGENTS_PATH}}", $workspaceAgents)
+$agentsBlock = $agentsTemplate.Replace("{{WORKSPACE_AGENTS_PATH}}", $workspaceAgents).Replace("{{CODEX_HOME}}", $codexHomePath)
 $agentsTarget = Join-Path $codexHomePath "AGENTS.md"
 $currentAgents = if (Test-Path -LiteralPath $agentsTarget -PathType Leaf) { [System.IO.File]::ReadAllText($agentsTarget) } else { "" }
 $startMarker = "<!-- codex-dev-kit:start -->"

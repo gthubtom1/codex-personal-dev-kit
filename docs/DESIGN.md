@@ -115,6 +115,8 @@ The Dev Kit orchestrates Codex capabilities; it does not replace them. It does n
 
 Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 Codex Plugin 列表并匹配所有 `codex-personal-dev-kit@*`，因此旧 `source.json` 缺失或使用自定义 Marketplace 时仍能识别旧 Plugin；发现旧 metadata、`codex-kit-*.toml` 或 Dev Kit 全局 Hook 时默认停止并列出目标。显式 `-MigrateLegacy` 后先完整写入并核验新的 standalone 运行时，再备份和清理精确识别的旧文件，最后用 Codex CLI 移除旧 Plugin；迁移前的写入或全局 AGENTS 标记校验失败不会先拆掉旧系统。混合 `hooks.json` 只删除同时匹配已知 Dev Kit 根路径与 `feature_guard.py hook`/`pre_tool_guard.py` 调用的处理器；只有模糊文本引用时停止人工检查，绝不猜测删除。
 
+分发 checkout 同时保存全局短版和母目录详细版 `AGENTS.md` 模板。安装器把 `{{WORKSPACE_AGENTS_PATH}}` 和 `{{CODEX_HOME}}` 替换为新电脑上的真实路径，因此 GitHub 中不固化原电脑用户名；固定 Git tag、根目录 `VERSION`、`docs/VERSIONS.md` 和 `source.json` 共同标识可恢复的 standalone 来源。
+
 ### Central Runtime Pinning
 
 项目模板可以从源码 checkout 生成；项目不安装生命周期 Hook。需要安全检查时，Skill 显式调用 `~/.codex/codex-dev-kit/` 的中央脚本，这样源码目录移动、继续开发或出现未提交修改时，不会悄悄改变既有项目的检查脚本。

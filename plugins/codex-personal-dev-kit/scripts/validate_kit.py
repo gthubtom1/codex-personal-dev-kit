@@ -71,8 +71,9 @@ def main() -> int:
     ):
         if not (kit_root / relative).is_file():
             errors.append(f"Missing required runtime file: {relative}")
-    if not (repo_root / "docs/INDEX.md").is_file():
-        errors.append(f"Missing Dev Kit documentation index: {repo_root / 'docs/INDEX.md'}")
+    for relative in ("docs/INDEX.md", "docs/RESTORE.md", "docs/VERSIONS.md"):
+        if not (repo_root / relative).is_file():
+            errors.append(f"Missing Dev Kit distribution document: {repo_root / relative}")
     legacy_agents = list((kit_root / "assets/global-profile/agents").glob("codex-kit-*.toml"))
     if legacy_agents:
         errors.append("Standalone mode must not ship required custom agent files: " + ", ".join(path.name for path in legacy_agents))
@@ -80,6 +81,8 @@ def main() -> int:
     standalone_agents_text = standalone_agents.read_text(encoding="utf-8") if standalone_agents.is_file() else ""
     if not standalone_agents.is_file() or "{{WORKSPACE_AGENTS_PATH}}" not in standalone_agents_text:
         errors.append("Short standalone AGENTS template must point to the detailed mother-folder AGENTS.md")
+    elif "{{CODEX_HOME}}" not in standalone_agents_text:
+        errors.append("Short standalone AGENTS template must resolve Skill paths from the selected Codex home")
     elif not (
         "never prepend `.system`" in standalone_agents_text
         or "不要在 `skills` 和 Skill 名称之间擅自插入 `.system`" in standalone_agents_text

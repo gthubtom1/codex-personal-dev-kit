@@ -3,4 +3,3 @@ sandbox_mode = "workspace-write"
 
 [features]
 goals = true
-hooks = true

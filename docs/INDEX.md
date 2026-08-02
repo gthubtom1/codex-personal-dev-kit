@@ -7,6 +7,8 @@ Start with the current status, then follow only the documents relevant to the ch
 - [Feature map](FEATURES.md): stable DK-* capabilities and their verification paths.
 - [Design](DESIGN.md): system architecture, standalone installation, and workflow boundaries.
 - [Roadmap](ROADMAP.md): current and upcoming milestones.
+- [New-computer restore](RESTORE.md): clone, install, restart, diagnose, update, and recovery boundaries.
+- [Formal versions](VERSIONS.md): user-recognizable Dev Kit distribution milestones.
 - [Repository instructions](../AGENTS.md): contributor and validation rules.
 - [User-facing overview](../README.md): beginner workflow and installation overview.
 

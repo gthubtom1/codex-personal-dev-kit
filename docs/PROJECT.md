@@ -14,6 +14,7 @@ The primary user does not want to learn Git, Worktrees, task orchestration, test
 - Internal project onboarding, Goal preparation, agent orchestration, safe implementation, continuity, and audit capabilities.
 - Independent project repositories under a mother folder.
 - Regression protection, local recovery points, concise project facts, and Codex-native configuration without replacing native agents or adding lifecycle Hooks/Rules.
+- A fixed, clean GitHub distribution that can reconstruct both AGENTS layers, standalone Skills, the central runtime, templates, and diagnostics on another Windows computer.
 
 ## Non-Goals
 

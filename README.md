@@ -48,7 +48,7 @@
 ## 系统内容
 
 - 简短的全局 `~/.codex/AGENTS.md`：只保存零基础用户约定、关键安全边界和详细规则入口。
-- 详细的母文件夹 `D:\开发\AGENTS.md`：保存完整工作流、目录模型、需求拓展、架构、Git、文档、任务和原生 subagent 规则。
+- 详细的母文件夹 `<WorkspaceRoot>\AGENTS.md`：保存完整工作流、目录模型、需求拓展、架构、Git、文档、任务和原生 subagent 规则。
 - 九个 Codex standalone Skills：一个普通语言入口和八个专业能力，包括受控外部研究/源码复用与多项目能力融合，不依赖 Plugin 才能使用。
 - 中央运行时 `~/.codex/codex-dev-kit/`：Git 检查、诊断、模板和脚本；项目只引用已验证的中央运行时，不复制整套框架。
 - 母文件夹和项目 `.codex/config.toml`：模板只设置通用审批、sandbox 和 Goal，不写入任何子代理模型、推理强度、并发数、启用开关或中断设置。原生 `spawn_agent` 使用当前 Codex 任务和用户已有配置的官方默认行为。
@@ -81,15 +81,31 @@ powershell -ExecutionPolicy Bypass -File .\plugins\codex-personal-dev-kit\script
 python -m unittest discover -s tests -p test_*.py -v
 ```
 
+## 换电脑恢复
+
+仓库完整保存了系统源码、九个 Skills、运行时脚本、全局短版 `AGENTS.md` 模板、母目录详细版 `AGENTS.md` 模板、项目模板和验证测试。安装器会根据新电脑的真实用户名、Codex Home 和母目录路径生成本地文件，不需要复制旧电脑的 `C:\Users\Administrator` 路径。
+
+推荐把仓库保存到私有 GitHub，并使用固定正式版本克隆，不使用缺少 Git 历史的 ZIP 作为长期安装源。新电脑上的零基础流程是：
+
+1. 安装 Codex Desktop、Git 和 Python。
+2. 把固定版本克隆为母目录下的 `codex-dev-kit`。
+3. 在 Codex 中打开该仓库，直接说：“按照 `docs/RESTORE.md` 把这套系统安装到这台电脑，母目录使用 `D:\开发`。”
+4. Codex 先预览，再运行 standalone 安装器；安装完成后完整退出并重新打开 Codex Desktop。
+5. 新任务运行诊断，确认两层 `AGENTS.md`、九个 Skills、中央运行时和模板都已恢复。
+
+完整步骤见 [新电脑恢复指南](docs/RESTORE.md)。项目源码和项目数据不包含在本系统仓库中；每个长期项目仍需拥有自己的私有远程备份。
+
 ## GitHub 分发
 
 主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
-git clone --branch v0.1.0 --depth 1 <repository> codex-dev-kit
+git clone --branch v0.2.0 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 
 安装或更新后必须开启新 Codex 任务，让全局 `AGENTS.md` 和 Skills 重新加载。项目使用显式安全开发脚本和本地 Git 检查点，不依赖项目 Hook。
+
+公开仓库会授予其他人访问源码的能力，但复用、修改和分发权限取决于仓库许可证。当前准备默认适合私有 GitHub；如果要公开，先选择并添加明确许可证，再检查第三方方法来源和归属说明。
 
 完整设计见 `docs/DESIGN.md`。

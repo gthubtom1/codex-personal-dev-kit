@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-- Use the installed local Dev Kit in real projects and change it only for observed workflow failures.
-- Confirm the standalone AGENTS-to-Skills entry flow in a new Codex task, including explicit safety checks and native subagent access.
+- Produce a clean v0.2.0 GitHub-ready checkout that can rebuild both AGENTS layers, Skills, runtime, templates and diagnostics on another Windows computer.
+- Keep ignored stress-test output and interpreter caches outside the distribution while retaining repeatable tests.
 
 ## Next Milestone
 
@@ -13,4 +13,4 @@
 ## Later
 
 - Configure a private GitHub remote or other off-device backup only when the user requests it.
-- Create a tagged distribution after the local workflow is stable; never auto-push, publish, or deploy.
+- If the repository will be public, choose an explicit license and verify attribution before publishing.
