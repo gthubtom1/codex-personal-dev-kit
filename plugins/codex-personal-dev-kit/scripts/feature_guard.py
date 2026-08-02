@@ -775,6 +775,16 @@ def _package_version_at(root: Path, revision: str) -> str:
     return str(data.get("version", "")).strip()
 
 
+def _plain_version_at(root: Path, revision: str) -> str | None:
+    version = _run_git(root, "show", f"{revision}:VERSION")
+    if version.returncode != 0:
+        return None
+    value = version.stdout.strip()
+    if not value:
+        raise GuardError("VERSION at the selected checkpoint is empty.")
+    return value
+
+
 def create_local_version(
     root: Path,
     version: str,
@@ -794,6 +804,9 @@ def create_local_version(
     package_version = _package_version_at(root, target_commit)
     if package_version and package_version != normalized[1:]:
         raise GuardError(f"package.json version {package_version} at the selected checkpoint does not match {normalized}.")
+    plain_version = _plain_version_at(root, target_commit)
+    if plain_version is not None and plain_version != normalized[1:]:
+        raise GuardError(f"VERSION marker {plain_version} at the selected checkpoint does not match {normalized}.")
     existing = _run_git(root, "rev-parse", "--verify", f"refs/tags/{normalized}")
     if existing.returncode == 0:
         raise GuardError(f"Local version {normalized} already exists and will not be moved or overwritten.")

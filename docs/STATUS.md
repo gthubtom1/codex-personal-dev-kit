@@ -15,11 +15,12 @@ The Codex Personal Dev Kit 0.2.0 is prepared as a portable GitHub distribution. 
 - Raw Git tag creation, deletion, movement, and overwrite remain blocked; explicitly read-only tag listing and verification are allowed for audits.
 - The short global AGENTS template substitutes the selected Codex Home, so a different Windows username does not retain `C:\Users\Administrator` in installed Skill guidance.
 - `docs/RESTORE.md` defines the supported new-computer path: fixed Git checkout, preview/apply installation, full Desktop restart, diagnostics, and separate project backups.
+- Formal-version creation verifies both `package.json.version` and a tracked root `VERSION` marker when present, preventing a Git tag from disagreeing with the distributed version.
 
 ## Verified
 
 - Nine standalone Skills pass the official Skill validator.
-- The complete local regression suite passes; the current suite contains 88 tests.
+- The complete local regression suite passes; the exact count is reported by the current validation run rather than stored as durable project state.
 - The unit suite covers feature contracts, meaningful STATUS freshness, all-active regression coverage, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, exact Skill path resolution, legacy-state detection, project creation, secret-aware first baselines, template-placeholder gates, domain/ADR document budgets, official-default native-subagent boundaries, task receipt confirmation, controlled external research/source reuse, named-project integration boundaries, bounded structural validation, and standalone validator layout detection.
 - The documentation navigation audit checks local Markdown targets, GitHub-style heading anchors, external/code-fenced links, reachable durable documents, and bounded document budgets; the project template creates `docs/INDEX.md` and the workspace tests verify it.
 - A real cross-task failure was reproduced in two layers: older tasks had an 18-item cached Skill catalog before installation, and a later task guessed the invalid `.system\prepare-codex-goal` path even though the Skill was listed. The standalone instructions now require exact file locators, provide `resolve-skill.ps1`, and explicitly require a full Codex Desktop restart before treating a new task's Skill catalog as refreshed.

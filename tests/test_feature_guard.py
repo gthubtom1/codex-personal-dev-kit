@@ -496,6 +496,18 @@ class FeatureGuardTests(unittest.TestCase):
         )
         self.assertIsNone(guard_command)
 
+    def test_formal_version_must_match_a_tracked_version_marker(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        (self.root / "VERSION").write_text("2.0.0\n", encoding="utf-8")
+        self.stage("src/app.js", "VERSION")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver mismatched marker")
+
+        with self.assertRaisesRegex(feature_guard.GuardError, "VERSION marker 2.0.0"):
+            feature_guard.create_local_version(self.root, "v1.0.0")
+
     def test_rollback_refuses_unsaved_work_and_raw_git_revert(self) -> None:
         (self.root / "src/app.js").write_text("unsaved\n", encoding="utf-8")
         with self.assertRaisesRegex(feature_guard.GuardError, "unsaved changes"):
