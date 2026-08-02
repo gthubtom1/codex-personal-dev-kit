@@ -71,7 +71,7 @@ def main() -> int:
     ):
         if not (kit_root / relative).is_file():
             errors.append(f"Missing required runtime file: {relative}")
-    for relative in ("docs/INDEX.md", "docs/RESTORE.md", "docs/VERSIONS.md"):
+    for relative in ("LICENSE", "THIRD_PARTY_NOTICES.md", "docs/INDEX.md", "docs/RESTORE.md", "docs/VERSIONS.md"):
         if not (repo_root / relative).is_file():
             errors.append(f"Missing Dev Kit distribution document: {repo_root / relative}")
     legacy_agents = list((kit_root / "assets/global-profile/agents").glob("codex-kit-*.toml"))

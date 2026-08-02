@@ -85,7 +85,7 @@ python -m unittest discover -s tests -p test_*.py -v
 
 仓库完整保存了系统源码、九个 Skills、运行时脚本、全局短版 `AGENTS.md` 模板、母目录详细版 `AGENTS.md` 模板、项目模板和验证测试。安装器会根据新电脑的真实用户名、Codex Home 和母目录路径生成本地文件，不需要复制旧电脑的 `C:\Users\Administrator` 路径。
 
-推荐把仓库保存到私有 GitHub，并使用固定正式版本克隆，不使用缺少 Git 历史的 ZIP 作为长期安装源。新电脑上的零基础流程是：
+推荐使用固定正式版本克隆，不使用缺少 Git 历史的 ZIP 作为长期安装源。新电脑上的零基础流程是：
 
 1. 安装 Codex Desktop、Git 和 Python。
 2. 把固定版本克隆为母目录下的 `codex-dev-kit`。
@@ -100,12 +100,12 @@ python -m unittest discover -s tests -p test_*.py -v
 主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
-git clone --branch v0.2.0 --depth 1 <repository> codex-dev-kit
+git clone --branch v0.2.1 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 
 安装或更新后必须开启新 Codex 任务，让全局 `AGENTS.md` 和 Skills 重新加载。项目使用显式安全开发脚本和本地 Git 检查点，不依赖项目 Hook。
 
-公开仓库会授予其他人访问源码的能力，但复用、修改和分发权限取决于仓库许可证。当前准备默认适合私有 GitHub；如果要公开，先选择并添加明确许可证，再检查第三方方法来源和归属说明。
+本项目使用 [MIT License](LICENSE)。外部方法来源和归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。公开仓库不包含旧电脑的 Key、全局配置、项目源码、缓存或安装备份。
 
 完整设计见 `docs/DESIGN.md`。

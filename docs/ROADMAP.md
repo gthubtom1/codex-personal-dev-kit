@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-- Produce a clean v0.2.0 GitHub-ready checkout that can rebuild both AGENTS layers, Skills, runtime, templates and diagnostics on another Windows computer.
+- Publish a clean MIT-licensed v0.2.1 GitHub checkout that can rebuild both AGENTS layers, Skills, runtime, templates and diagnostics on another Windows computer.
 - Keep ignored stress-test output and interpreter caches outside the distribution while retaining repeatable tests.
 
 ## Next Milestone
@@ -12,5 +12,5 @@
 
 ## Later
 
-- Configure a private GitHub remote or other off-device backup only when the user requests it.
-- If the repository will be public, choose an explicit license and verify attribution before publishing.
+- Configure separate private remotes for each long-term project when the user requests off-device project backup; the public Dev Kit repository does not contain project source or data.
+- Preserve license and third-party notices in future formal versions and recheck attribution when external source code is ever vendored or adapted.

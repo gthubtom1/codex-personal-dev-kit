@@ -2,11 +2,11 @@
 
 ## Milestone
 
-The Codex Personal Dev Kit 0.2.0 is prepared as a portable GitHub distribution. A fixed clean checkout contains both `AGENTS.md` templates, nine standalone Skills, the central runtime, project/workspace templates, tests, a beginner restore guide, formal-version recovery, and diagnostics without shipping the old Plugin/Hook/custom-agent runtime.
+The Codex Personal Dev Kit 0.2.1 is prepared as a public MIT-licensed GitHub distribution. A fixed clean checkout contains both `AGENTS.md` templates, nine standalone Skills, the central runtime, project/workspace templates, tests, a beginner restore guide, formal-version recovery, diagnostics, and bounded third-party method attribution without shipping the old Plugin/Hook/custom-agent runtime.
 
 ## Working State
 
-- Source candidate: `codex-personal-dev-kit` version `0.2.0` on the current local branch.
+- Source candidate: `codex-personal-dev-kit` version `0.2.1` on the current local branch.
 - Mother folder: `D:\开发\AGENTS.md` contains the detailed system. Workspace and project templates do not write any native subagent model, reasoning, concurrency, enablement, or interruption setting; Codex official defaults and user-owned configuration remain authoritative.
 - Standalone installation writes the short global `AGENTS.md`, nine Skills, central explicit safety scripts, and project/workspace templates. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
 - Installation records every fully managed Skill/runtime/template file and its SHA-256 hash in `managed-files.json`. Diagnosis detects missing or changed files; updates back up and remove only unchanged stale Dev Kit files while preserving user-modified stale files with a warning.
@@ -40,8 +40,8 @@ The Codex Personal Dev Kit 0.2.0 is prepared as a portable GitHub distribution. 
 - Secret detection covers common named files, provider tokens, assignment-style keys, and bounded large-text handling. It is not a dedicated release security scanner.
 - Markdown anchor checking intentionally approximates common GitHub-style slugs; unusual renderer-specific extensions may still require manual review.
 - The current Codex task began before any future standalone update. A new task is required after an approved install so Codex reloads the short global instructions and Skills. Exact cross-model availability remains task- and desktop-version-dependent and cannot be guaranteed by repository configuration.
-- A public GitHub repository still needs an explicit license decision. Until the user chooses redistribution terms, private GitHub is the safe default.
+- The public distribution uses MIT terms. Future direct copying or vendoring of third-party source would require a fresh license and attribution review beyond the current method-level acknowledgements.
 
 ## Next Action
 
-Finish distribution validation and the guarded v0.2.0 local version, remove ignored test output, then let the user choose a private or public GitHub repository before any remote creation or push.
+Finish validation and the guarded v0.2.1 local version, then create `gthubtom1/codex-personal-dev-kit` as a public repository and push `main`, `v0.2.0`, and `v0.2.1` without creating a GitHub Release.
