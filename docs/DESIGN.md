@@ -144,6 +144,7 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 | `docs/ROADMAP.md` | 当前和接下来 2 到 3 个里程碑 | 小于 150 行 |
 | `docs/ARCHITECTURE.md` | 当前模块、接口、依赖和数据流 | 主索引小于 300 行 |
 | `docs/STATUS.md` | 当前里程碑、验证、问题和下一步 | 100 到 150 行 |
+| `docs/VERSIONS.md` | 正式里程碑、用户可识别能力差异和本地版本标签；不记录普通检查点或 commit hash | 小于 250 行 |
 | `docs/adr/INDEX.md` | 当前 ADR 的状态、领域和替代关系 | 小型索引 |
 | `docs/adr/` | 重大且难逆转的决定 | 一项一个文件 |
 | `docs/RUNBOOK.md` | 部署、备份、恢复和故障处理 | 仅按项目实际需要 |
@@ -159,9 +160,11 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 - 每个通过验证的纵向切片必须在任务结束前创建本地检查点；安全开发 Skill 会把缺少检查点报告为未完成。
 - 默认不创建需要用户整合的额外分支。
 - 用户只需说“回到上一个版本”；助手在确认没有未保存工作后创建一个恢复到上一版本的新提交，原版本和当前版本都保留。
+- 普通检查点不等于产品版本。用户接受的完整里程碑更新 `docs/VERSIONS.md`，在同一个最终检查点中保存代码、测试和文档，再由 guarded `version` 创建本地 `vX.Y.Z` 标签。
+- 用户不记得编号时按版本索引中的能力描述定位候选；确认后用 guarded `restore-version` 创建新的恢复检查点，保留较新历史、标签和完整版本索引。
 - 不混入任务外的用户修改，不修改全局 Git 身份。
 - 本地 Git 提供回滚但不是异地备份。远程备份需要用户明确配置和执行。
-- 禁止自动 push、pull、merge、rebase、tag、release、历史重写、强制 clean 和丢弃未确认工作。
+- 禁止自动 push、pull、merge、rebase、远程 tag/release、历史重写、强制 clean 和丢弃未确认工作。用户接受的完整里程碑可以通过 guard-managed `version` 创建不可移动的本地语义标签；普通检查点不创建标签。
 
 ## 9. Permissions And Unattended Work
 

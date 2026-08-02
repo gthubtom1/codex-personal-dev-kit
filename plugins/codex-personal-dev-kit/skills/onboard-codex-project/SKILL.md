@@ -21,7 +21,7 @@ description: 将新建或已有软件项目接入 Codex Personal Dev Kit，建�
    4. 如果仍缺失，只检查当前项目明确引用的母目录下 `<WorkspaceRoot>\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap-project.ps1`。
    5. 三个候选都不存在时，报告检查过的准确路径并停止；不要联网下载、创建替代脚本、扫描兄弟项目或修改全局配置。
 7. 使用解析到的脚本预览缺失模板，并显式传入当前项目对应的 `-WorkspaceRoot <母文件夹>`；确认目标正确后再追加 `-Apply -InitializeGit -CreateBaselineCheckpoint` 写入。脚本只创建缺失文件，不覆盖已有项目文件；已有 Git 历史不会被替换或重新初始化。只有脚本能从 `projects/<项目>` 结构或已安装的 standalone metadata 明确推导母文件夹时，才可省略 `-WorkspaceRoot`。
-8. 用真实发现更新 `AGENTS.md`、`docs/PROJECT.md`、`docs/FEATURES.md`、`docs/ARCHITECTURE.md`、`docs/STATUS.md` 和 `docs/ROADMAP.md`。FEATURES 为当前用户能力分配稳定 ID，并记录完整入口/接线链路、预期结果、验证、重要性和状态；未知命令明确标为未确认，不要编造。
+8. 用真实发现更新 `AGENTS.md`、`docs/PROJECT.md`、`docs/FEATURES.md`、`docs/ARCHITECTURE.md`、`docs/STATUS.md` 和 `docs/ROADMAP.md`。保留模板生成的简短 `docs/VERSIONS.md`，但在第一个正式里程碑前不要编造版本。FEATURES 为当前用户能力分配稳定 ID，并记录完整入口/接线链路、预期结果、验证、重要性和状态；未知命令明确标为未确认，不要编造。
 9. 识别职责混杂、耦合过高或难以验证的复杂度热点。文件行数只用于帮助定位，不作为强制拆分标准；是否拆分由职责、变更风险、测试难度和项目约定决定，也不要在接入阶段顺手进行无关的大规模重写。
 10. 运行成本最低的基线检查。记录成功命令、失败原因和环境缺口。
 11. 若已有 Git 历史且本次产生了独立、可验证的接入改动，使用 `$codex-safe-development` 在当前本地开发线上创建回退点。只有隔离实验或并行写入确有价值时才创建额外分支或 Worktree。不得 push、merge、rebase 或发布。

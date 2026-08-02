@@ -7,7 +7,7 @@ Project onboarding is in progress.
 ## Working State
 
 - Branch/worktree: not yet recorded.
-- Last checkpoint: none recorded.
+- Current formal version: none recorded.
 - Working tree: not yet inspected.
 
 ## Verified

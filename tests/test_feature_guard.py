@@ -38,6 +38,10 @@ class FeatureGuardTests(unittest.TestCase):
         (self.root / ".codex/config.toml").write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
         (self.root / ".gitignore").write_text(".codex/current-change.json\n", encoding="utf-8")
         (self.root / "docs/FEATURES.md").write_text(FEATURES, encoding="utf-8")
+        (self.root / "docs/VERSIONS.md").write_text(
+            "# Versions\n\n| Version | User-visible result | Verification | Status |\n| --- | --- | --- | --- |\n| v1.0.0 | Baseline export | suite:all-tests | recoverable |\n",
+            encoding="utf-8",
+        )
         (self.root / "docs/STATUS.md").write_text(
             "# Current Status\n\n## Milestone\n\nKeep existing behavior.\n\n## Working State\n\nMain checkout is clean before the task.\n\n## Verified\n\nBaseline verification is available.\n\n## Current Risks\n\nExport behavior still needs a regression check.\n\n## Next Action\n\nVerify the export change.\n",
             encoding="utf-8",
@@ -249,7 +253,7 @@ class FeatureGuardTests(unittest.TestCase):
             "# Current Status\n\n## Milestone\n\nExport slice verified.\n\n## Working State\n\nGuarded change is staged.\n\n## Verified\n\nExecutable feature check passed.\n\n## Current Risks\n\nKeep both behaviors covered.\n\n## Next Action\n\nReview the next accepted slice.\n",
             encoding="utf-8",
         )
-        self.stage("src/app.js", "docs/STATUS.md")
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/STATUS.md"])
         self.verify("F-001", "F-002")
         with self.assertRaisesRegex(feature_guard.GuardError, "Template placeholder remains"):
             feature_guard.complete_contract(self.root, [], [])
@@ -381,6 +385,116 @@ class FeatureGuardTests(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD^{tree}").stdout.strip(), baseline_tree)
         self.assertEqual(self.git("log", "-1", "--pretty=%s").stdout.strip(), "checkpoint: return to previous version " + baseline_head[:8])
         self.assertEqual(self.git("status", "--porcelain").stdout.strip(), "")
+
+    def test_formal_versions_create_immutable_local_tags_and_are_listed(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        checkpoint = feature_guard.create_checkpoint(self.root, "deliver v1")
+
+        version, target = feature_guard.create_local_version(self.root, "v1.0")
+        self.assertEqual(version, "v1.0.0")
+        self.assertEqual(target, checkpoint)
+        self.assertEqual(self.git("rev-parse", "v1.0.0^{commit}").stdout.strip(), checkpoint)
+        self.assertEqual(feature_guard.list_local_versions(self.root)[0][0], "v1.0.0")
+        with self.assertRaisesRegex(feature_guard.GuardError, "already exists"):
+            feature_guard.create_local_version(self.root, "v1.0.0")
+
+    def test_formal_version_can_mark_a_verified_historical_checkpoint(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        historical = feature_guard.create_checkpoint(self.root, "deliver v1")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nVersion two is verified.\n\n## Working State\n\n"
+            "The main checkout contains the second export behavior.\n\n## Verified\n\nThe feature suite passed.\n\n"
+            "## Current Risks\n\nThe earlier checkpoint must remain identifiable.\n\n## Next Action\n\n"
+            "Record the historical formal version.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v2")
+
+        version, target = feature_guard.create_local_version(self.root, "v1.0", target=historical)
+        self.assertEqual((version, target), ("v1.0.0", historical))
+        self.assertEqual(self.git("rev-parse", "v1.0.0^{commit}").stdout.strip(), historical)
+
+    def test_historical_version_target_must_be_a_current_branch_checkpoint(self) -> None:
+        self.git("checkout", "--orphan", "unrelated")
+        self.git("rm", "-rf", ".")
+        (self.root / "outside.txt").write_text("outside\n", encoding="utf-8")
+        self.git("add", "outside.txt")
+        self.git(
+            "-c", f"user.name={feature_guard.CHECKPOINT_AUTHOR_NAME}",
+            "-c", f"user.email={feature_guard.CHECKPOINT_AUTHOR_EMAIL}",
+            "commit", "-m", "checkpoint: unrelated",
+        )
+        unrelated = self.git("rev-parse", "HEAD").stdout.strip()
+        self.git("checkout", "main")
+        with self.assertRaisesRegex(feature_guard.GuardError, "current branch history"):
+            feature_guard.create_local_version(self.root, "v1.0", target=unrelated)
+
+    def test_restore_named_version_preserves_newer_history_and_complete_version_index(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        v1_checkpoint = feature_guard.create_checkpoint(self.root, "deliver v1")
+        feature_guard.create_local_version(self.root, "v1.0.0")
+        v1_tree = self.git("rev-parse", "v1.0.0^{tree}").stdout.strip()
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        versions = self.root / "docs/VERSIONS.md"
+        versions.write_text(
+            versions.read_text(encoding="utf-8") + "| v1.1.0 | Improved export | suite:all-tests | recoverable |\n",
+            encoding="utf-8",
+        )
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nFormal v1.1 export is verified.\n\n## Working State\n\nMain checkout contains the v1.1 slice.\n\n## Verified\n\nThe executable feature check passed for v1.1.\n\n## Current Risks\n\nKeep the earlier formal version recoverable.\n\n## Next Action\n\nConfirm the next milestone.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/VERSIONS.md", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        v2_checkpoint = feature_guard.create_checkpoint(self.root, "deliver v1.1")
+        feature_guard.create_local_version(self.root, "v1.1")
+
+        restored = feature_guard.restore_local_version(self.root, "v1.0")
+        self.assertNotEqual(restored, v2_checkpoint)
+        self.assertEqual(self.git("rev-parse", "HEAD^").stdout.strip(), v2_checkpoint)
+        self.assertEqual(self.git("rev-parse", "v1.0.0^{commit}").stdout.strip(), v1_checkpoint)
+        self.assertIn("v1.1.0", versions.read_text(encoding="utf-8"))
+        self.assertEqual(self.git("diff", "--name-only", "v1.0.0", "HEAD").stdout.strip(), "docs/VERSIONS.md")
+        self.assertEqual(self.git("status", "--porcelain").stdout.strip(), "")
+        product_tree = self.git("rev-parse", "HEAD^{tree}").stdout.strip()
+        self.assertNotEqual(product_tree, v1_tree)  # The durable version registry intentionally stays current.
+
+    def test_formal_version_requires_clean_checkpoint_and_matching_registry(self) -> None:
+        with self.assertRaisesRegex(feature_guard.GuardError, "verified Dev Kit checkpoint"):
+            feature_guard.create_local_version(self.root, "v1.0")
+        with self.assertRaisesRegex(feature_guard.GuardError, "look like"):
+            feature_guard.normalize_version("release-one")
+
+        guard_command = self.hook(
+            {
+                "cwd": str(self.root),
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": f"{sys.executable} {FEATURE_GUARD_PATH} versions --root ."},
+            }
+        )
+        self.assertIsNone(guard_command)
 
     def test_rollback_refuses_unsaved_work_and_raw_git_revert(self) -> None:
         (self.root / "src/app.js").write_text("unsaved\n", encoding="utf-8")

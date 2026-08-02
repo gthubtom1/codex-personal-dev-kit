@@ -38,6 +38,8 @@ Replace only after the command has actually been discovered and run successfully
 - Record accepted capabilities with stable feature IDs and complete UI/API/background/persistence wiring.
 - Before edits, use the central Dev Kit current-change checklist or safe-development script when available. The project does not install lifecycle Hooks; run explicit checks through the current task and preserve Codex-native agents, tasks, browser tools, and other built-in capabilities.
 - Routine versions stay on the current branch. Every verified change gets a local recovery point before completion.
+- Ordinary checkpoints are not product versions. When the user accepts a tested milestone, update `docs/VERSIONS.md`, create the final checkpoint, then use the guarded local `version` command to add an immutable semantic tag such as `v1.2.0`; never create a version branch or push the tag automatically.
+- If the user cannot remember a version number, compare the capability descriptions in `docs/VERSIONS.md` and local tags. Restore a confirmed tag through the guarded `restore-version` command, which preserves newer history and the complete version index.
 - Use one source writer per checkout. Parallel writers require separate Worktrees and explicit ownership.
 - Keep project documents current and concise. Never add chat transcripts, hidden reasoning, raw logs, daily journals, or permanent per-task reports.
 - Before the first feature checkpoint, replace every `Not yet confirmed` placeholder in `docs/PROJECT.md`, `docs/FEATURES.md`, `docs/ARCHITECTURE.md`, `docs/STATUS.md`, and Verified Commands with confirmed facts. Active Feature rows need a machine-readable verification marker such as `test:tests/example.test.js` or `suite:unit`.

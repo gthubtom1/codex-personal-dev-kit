@@ -30,6 +30,8 @@ MAX_COMMAND_CHARS = 2000
 MAX_CHECKPOINT_MESSAGE_CHARS = 240
 CHECKPOINT_AUTHOR_NAME = "Codex Dev Kit"
 CHECKPOINT_AUTHOR_EMAIL = "codex-dev-kit@local.invalid"
+VERSIONS_RELATIVE = Path("docs/VERSIONS.md")
+SEMVER_PATTERN = re.compile(r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$")
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
     ".js", ".jsx", ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts",
@@ -713,6 +715,175 @@ def _commit_with_local_identity(root: Path, message: str) -> str:
     return head
 
 
+def normalize_version(value: str) -> str:
+    candidate = value.strip().lower()
+    match = SEMVER_PATTERN.fullmatch(candidate)
+    if not match:
+        raise GuardError("Version must look like v1.2 or v1.2.3.")
+    major, minor, patch = match.groups()
+    return f"v{major}.{minor}.{patch or '0'}"
+
+
+def _require_clean_version_operation(root: Path) -> str:
+    contract = _read_contract(root)
+    if contract:
+        if contract.get("state") == "verified" and _verification_is_committed(root, contract):
+            _contract_path(root).unlink(missing_ok=True)
+        else:
+            raise GuardError("Finish and save the current change before managing a formal version.")
+    pending = _working_tree_status(root)
+    if pending:
+        preview = ", ".join(line[3:].strip() for line in pending[:8])
+        suffix = " ..." if len(pending) > 8 else ""
+        raise GuardError("The project has unsaved changes. Create a checkpoint before managing a formal version: " + preview + suffix)
+    head = _git_head(root)
+    if not head:
+        raise GuardError("The project has no local checkpoint to mark as a formal version.")
+    return head
+
+
+def _require_dev_kit_checkpoint(root: Path, revision: str) -> None:
+    metadata = _run_git(root, "show", "-s", "--format=%an\x1f%ae\x1f%s", revision)
+    if metadata.returncode != 0:
+        raise GuardError("Unable to inspect the candidate version checkpoint.")
+    author_name, author_email, subject = (metadata.stdout.strip().split("\x1f", 2) + ["", "", ""])[:3]
+    if author_name != CHECKPOINT_AUTHOR_NAME or author_email != CHECKPOINT_AUTHOR_EMAIL or not subject.lower().startswith("checkpoint:"):
+        raise GuardError("Formal versions can only mark a verified Dev Kit checkpoint.")
+
+
+def _resolve_version_target(root: Path, target: str | None, head: str) -> str:
+    if not target:
+        return head
+    resolved = _run_git(root, "rev-parse", "--verify", f"{target}^{{commit}}")
+    if resolved.returncode != 0:
+        raise GuardError(f"Version target was not found: {target}")
+    commit = resolved.stdout.strip()
+    ancestor = _run_git(root, "merge-base", "--is-ancestor", commit, head)
+    if ancestor.returncode != 0:
+        raise GuardError("A historical formal version must point to a checkpoint in the current branch history.")
+    return commit
+
+
+def _package_version_at(root: Path, revision: str) -> str:
+    package = _run_git(root, "show", f"{revision}:package.json")
+    if package.returncode != 0:
+        return ""
+    try:
+        data = json.loads(package.stdout)
+    except json.JSONDecodeError as exc:
+        raise GuardError(f"package.json at the selected version target is unreadable: {exc}") from exc
+    return str(data.get("version", "")).strip()
+
+
+def create_local_version(
+    root: Path,
+    version: str,
+    message: str | None = None,
+    target: str | None = None,
+) -> tuple[str, str]:
+    normalized = normalize_version(version)
+    head = _require_clean_version_operation(root)
+    target_commit = _resolve_version_target(root, target, head)
+    _require_dev_kit_checkpoint(root, target_commit)
+    versions_path = root / VERSIONS_RELATIVE
+    if not versions_path.is_file():
+        raise GuardError("docs/VERSIONS.md is required before creating a formal version.")
+    versions_text = versions_path.read_text(encoding="utf-8", errors="replace")
+    if not re.search(rf"(?im)^\|\s*{re.escape(normalized)}\s*\|", versions_text):
+        raise GuardError(f"Record {normalized} in docs/VERSIONS.md before creating its local tag.")
+    package_version = _package_version_at(root, target_commit)
+    if package_version and package_version != normalized[1:]:
+        raise GuardError(f"package.json version {package_version} at the selected checkpoint does not match {normalized}.")
+    existing = _run_git(root, "rev-parse", "--verify", f"refs/tags/{normalized}")
+    if existing.returncode == 0:
+        raise GuardError(f"Local version {normalized} already exists and will not be moved or overwritten.")
+    annotation = " ".join((message or f"local formal version {normalized}").split())
+    created = _run_git(
+        root,
+        "-c",
+        f"user.name={CHECKPOINT_AUTHOR_NAME}",
+        "-c",
+        f"user.email={CHECKPOINT_AUTHOR_EMAIL}",
+        "tag",
+        "--annotate",
+        normalized,
+        "--message",
+        annotation,
+        target_commit,
+    )
+    if created.returncode != 0:
+        raise GuardError(created.stderr.strip() or created.stdout.strip() or "Unable to create the local version tag.")
+    target = _run_git(root, "rev-parse", f"{normalized}^{{commit}}")
+    if target.returncode != 0 or target.stdout.strip() != target_commit:
+        raise GuardError("The local version tag was created but does not point to the selected verified checkpoint.")
+    return normalized, target_commit
+
+
+def list_local_versions(root: Path) -> list[tuple[str, str, str]]:
+    result = _run_git(root, "for-each-ref", "--format=%(refname:short)\x1f%(objectname)\x1f%(subject)", "refs/tags")
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Unable to read local versions.")
+    versions: list[tuple[tuple[int, int, int], str, str, str]] = []
+    for line in result.stdout.splitlines():
+        name, object_id, subject = (line.split("\x1f", 2) + ["", "", ""])[:3]
+        try:
+            normalized = normalize_version(name)
+        except GuardError:
+            continue
+        major, minor, patch = (int(part) for part in normalized[1:].split("."))
+        commit = _run_git(root, "rev-parse", f"{name}^{{commit}}")
+        if commit.returncode == 0:
+            versions.append(((major, minor, patch), normalized, commit.stdout.strip(), subject))
+    versions.sort(key=lambda item: item[0], reverse=True)
+    return [(name, commit, subject) for _, name, commit, subject in versions]
+
+
+def restore_local_version(root: Path, version: str, message: str | None = None) -> str:
+    normalized = normalize_version(version)
+    current_head = _require_clean_version_operation(root)
+    target = _run_git(root, "rev-parse", f"refs/tags/{normalized}^{{commit}}")
+    if target.returncode != 0:
+        raise GuardError(f"Local version {normalized} was not found. List available versions before choosing a restore target.")
+    target_commit = target.stdout.strip()
+    target_tree = _run_git(root, "rev-parse", f"{target_commit}^{{tree}}")
+    current_tree = _run_git(root, "rev-parse", f"{current_head}^{{tree}}")
+    if target_tree.returncode != 0 or current_tree.returncode != 0:
+        raise GuardError("Unable to inspect the selected version tree.")
+    if target_tree.stdout.strip() == current_tree.stdout.strip():
+        raise GuardError(f"The project already matches {normalized}.")
+    branch = _run_git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if branch.returncode != 0 or not branch.stdout.strip():
+        raise GuardError("Named-version restoration requires a normal local branch, not a detached HEAD.")
+    restore_message = _checkpoint_message(message, f"restore formal version {normalized}")
+    materialized = _run_git(root, "read-tree", "--reset", "-u", target_commit)
+    if materialized.returncode != 0:
+        _run_git(root, "read-tree", "--reset", "-u", current_head)
+        raise GuardError(materialized.stderr.strip() or "Unable to materialize the selected version; the original checkout was restored.")
+    try:
+        keep_registry = _run_git(
+            root,
+            "restore",
+            "--source",
+            current_head,
+            "--staged",
+            "--worktree",
+            "--",
+            VERSIONS_RELATIVE.as_posix(),
+        )
+        if keep_registry.returncode != 0:
+            raise GuardError("Unable to preserve the complete version index during restoration.")
+        new_commit = _commit_with_local_identity(root, restore_message)
+    except GuardError:
+        _run_git(root, "read-tree", "--reset", "-u", current_head)
+        raise
+    differences = _run_git(root, "diff", "--name-only", target_commit, "HEAD", "--")
+    allowed_difference = {VERSIONS_RELATIVE.as_posix()}
+    actual_difference = {line.strip() for line in differences.stdout.splitlines() if line.strip()}
+    if differences.returncode != 0 or not actual_difference.issubset(allowed_difference) or _working_tree_status(root):
+        raise GuardError("The restoration checkpoint does not match the selected version apart from the preserved version index. Stop and inspect the repository.")
+    return new_commit
+
+
 def create_checkpoint(root: Path, message: str | None = None) -> str:
     contract = _read_contract(root)
     if not contract:
@@ -1319,7 +1490,7 @@ def _is_guard_command(command: str) -> bool:
         return False
     return tokens[script_index + 1].lower() in {
         "start", "status", "stage", "verify", "complete", "checkpoint", "rollback",
-        "reopen", "allow-delete", "cancel", "close",
+        "version", "versions", "restore-version", "reopen", "allow-delete", "cancel", "close",
     }
 
 
@@ -1563,6 +1734,20 @@ def main() -> int:
     rollback.add_argument("--root", default=".")
     rollback.add_argument("--message")
 
+    version = subparsers.add_parser("version", help="Mark a verified checkpoint as a local formal version")
+    version.add_argument("--root", default=".")
+    version.add_argument("--name", required=True)
+    version.add_argument("--message")
+    version.add_argument("--target", help="Optional historical checkpoint in the current branch history")
+
+    versions = subparsers.add_parser("versions", help="List local formal versions without changing the project")
+    versions.add_argument("--root", default=".")
+
+    restore_version = subparsers.add_parser("restore-version", help="Restore a named local version with a new reversible checkpoint")
+    restore_version.add_argument("--root", default=".")
+    restore_version.add_argument("--name", required=True)
+    restore_version.add_argument("--message")
+
     reopen = subparsers.add_parser("reopen", help="Reopen a verified contract before more edits")
     reopen.add_argument("--root", default=".")
 
@@ -1609,6 +1794,18 @@ def main() -> int:
         elif args.command == "rollback":
             checkpoint_id = rollback_last_checkpoint(root, args.message)
             print(f"Returned to the previous version with recovery point: {checkpoint_id[:12]}")
+        elif args.command == "version":
+            version_name, checkpoint_id = create_local_version(root, args.name, args.message, args.target)
+            print(f"Local formal version created: {version_name} -> {checkpoint_id[:12]}")
+        elif args.command == "versions":
+            available = list_local_versions(root)
+            if not available:
+                print("No local formal versions.")
+            for version_name, checkpoint_id, subject in available:
+                print(f"{version_name}\t{checkpoint_id[:12]}\t{subject}")
+        elif args.command == "restore-version":
+            checkpoint_id = restore_local_version(root, args.name, args.message)
+            print(f"Restored {normalize_version(args.name)} with recovery point: {checkpoint_id[:12]}")
         elif args.command == "reopen":
             print(_contract_summary(reopen_contract(root)))
         elif args.command == "allow-delete":

@@ -114,7 +114,8 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 - Branches and Worktrees exist only for real isolation, background work, or parallel writers.
 - Every verified vertical slice gets a local checkpoint through the guard-managed `checkpoint` command. It uses a one-time local Dev Kit identity and never changes the user's global Git identity.
 - If the user says “回到上一个版本”, “撤销刚才的开发”, or equivalent, protect unsaved work and use the reversible rollback command. It creates a new commit and preserves both versions.
-- Never automatically push, pull, merge, rebase, tag, release, amend, rewrite history, use `reset --hard`, clean files, or discard unconfirmed changes.
+- Never automatically push, pull, merge, rebase, publish a tag/release, amend, rewrite history, use `reset --hard`, clean files, or discard unconfirmed changes. A verified user-accepted milestone may receive an immutable local semantic tag only through the guard-managed `version` command.
+- Keep routine checkpoints separate from formal product versions. Formal versions use `docs/VERSIONS.md` plus local `vX.Y.Z` tags; named restoration uses the guard-managed `restore-version` command and preserves newer history and the full version index.
 - Local Git is on-device recovery, not off-device backup. Remote backup is a separate user-approved setup.
 
 ## Native Subagents And Tasks
@@ -151,6 +152,7 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 - `docs/PROJECT.md`: user, outcome, scope, and non-goals.
 - `docs/FEATURES.md`: current user-visible capabilities and verification routes; split by stable business domain when needed.
 - `docs/STATUS.md`: current milestone, verified state, risks, and exactly one next action. Overwrite rather than append history.
+- `docs/VERSIONS.md`: accepted formal milestones and recognizable capability differences. Do not store ordinary checkpoints or commit hashes; query Git for current hashes.
 - `docs/ARCHITECTURE.md`: current modules, interfaces, dependencies, state, and data flow.
 - `docs/adr/`: only major decisions that are expensive to reverse.
 - `docs/ROADMAP.md`: current and next two or three milestones, not a wish list.
@@ -178,7 +180,7 @@ Ask first:
 
 Never automatic:
 
-- Push, pull, merge, rebase, tag, release, deploy, publish, production migration, infrastructure apply/destroy, history rewrite, destructive clean/reset, or deletion of unconfirmed work.
+- Push, pull, merge, rebase, remote tag/release, deploy, publish, production migration, infrastructure apply/destroy, history rewrite, destructive clean/reset, or deletion of unconfirmed work. Local formal-version tags are allowed only through the verified guard workflow.
 
 ## Completion Standard
 

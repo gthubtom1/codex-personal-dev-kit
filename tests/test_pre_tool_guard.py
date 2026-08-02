@@ -27,6 +27,7 @@ class PreToolGuardTests(unittest.TestCase):
             "git -C repo merge feature",
             "git reset --hard HEAD~1",
             "git commit --amend --no-edit",
+            "git tag v1.2.0",
             "pwsh -Command git clean -fd",
         ):
             with self.subTest(command=command):

@@ -26,9 +26,16 @@
 - 不为了“干净”提交缓存、构建产物、密钥或无关格式化。
 - 自动检查点使用一次性的 `Codex Dev Kit <codex-dev-kit@local.invalid>` 身份，不修改全局 Git 身份，也不伪装成用户。
 
+## 正式版本
+
+- 普通检查点和正式产品版本必须分开。只有用户接受的完整、已验证里程碑才更新 `docs/VERSIONS.md` 并通过 `feature_guard.py version --name vX.Y.Z` 创建本地语义标签。
+- 本地正式标签指向包含代码、测试和当前文档的最终检查点。旧标签不可移动、覆盖或删除，也不为版本创建分支。
+- 用户不记得版本号时，先按 `docs/VERSIONS.md` 的能力描述匹配，再用 `feature_guard.py versions` 核对真实标签；不要让用户选择 commit hash。
+- 指定版本恢复通过 `feature_guard.py restore-version --name vX.Y.Z` 创建新的恢复检查点，保留较新提交、标签和完整版本索引。
+
 ## 禁止自动操作
 
-- push、pull、merge、rebase、tag、release。
+- push、pull、merge、rebase、远程 tag/release，以及原始 `git tag`。本地正式版本只能走 guard-managed `version`。
 - `commit --amend`、强制分支删除、filter-branch/filter-repo。
 - `reset --hard`、clean、restore 或 checkout 丢弃未确认修改。
 - 删除 Worktree、stash 或 reflog 中可能仍需恢复的内容。

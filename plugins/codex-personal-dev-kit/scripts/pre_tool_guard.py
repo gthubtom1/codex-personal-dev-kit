@@ -99,7 +99,9 @@ def _git_subcommand(tokens: Sequence[str]) -> tuple[str | None, list[str]]:
 def _classify_git(tokens: Sequence[str]) -> Decision:
     subcommand, args = _git_subcommand(tokens)
     lowered_args = [arg.lower() for arg in args]
-    if subcommand in {"push", "pull", "merge", "rebase", "tag", "clean", "restore", "filter-branch", "filter-repo"}:
+    if subcommand == "tag":
+        return Decision(True, "Blocked raw git tag. Formal local versions must use feature_guard.py version so the tag matches a verified checkpoint and docs/VERSIONS.md.")
+    if subcommand in {"push", "pull", "merge", "rebase", "clean", "restore", "filter-branch", "filter-repo"}:
         return Decision(True, f"Blocked automatic git {subcommand}. Keep work local and let the user perform this operation manually.")
     if subcommand == "reset" and any(arg in {"--hard", "--merge", "--keep"} for arg in lowered_args):
         return Decision(True, "Blocked destructive git reset. Use a new branch or reversible commit instead.")

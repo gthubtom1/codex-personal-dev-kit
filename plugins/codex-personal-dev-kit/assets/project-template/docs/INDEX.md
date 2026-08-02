@@ -7,6 +7,7 @@ Use this file as the short navigation map for durable project knowledge. Start w
 - [Feature map](FEATURES.md): stable Feature IDs, connected paths, expected results, and verification.
 - [Architecture](ARCHITECTURE.md): modules, interfaces, dependencies, data flow, and state ownership.
 - [Roadmap](ROADMAP.md): current milestone and the next two or three milestones.
+- [Formal versions](VERSIONS.md): concise milestone capabilities and local recovery labels.
 - [Runbook](RUNBOOK.md): reproducible commands and local operating notes.
 - [Architecture decisions](adr/INDEX.md): accepted, superseded, or retired decisions.
 

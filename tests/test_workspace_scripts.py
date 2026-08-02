@@ -103,6 +103,8 @@ class WorkspaceScriptTests(unittest.TestCase):
                 self.assertEqual(ignored_plan.returncode, 0)
                 self.assertTrue((project / "docs/INDEX.md").is_file())
                 self.assertIn("STATUS.md", (project / "docs/INDEX.md").read_text(encoding="utf-8"))
+                self.assertTrue((project / "docs/VERSIONS.md").is_file())
+                self.assertIn("VERSIONS.md", (project / "docs/INDEX.md").read_text(encoding="utf-8"))
                 self.assertTrue((project / "docs/adr/INDEX.md").is_file())
                 self.assertFalse((project / ".codex/hooks.json").exists())
                 project_agents = (project / "AGENTS.md").read_text(encoding="utf-8")

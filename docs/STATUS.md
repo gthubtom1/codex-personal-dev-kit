@@ -2,7 +2,7 @@
 
 ## Milestone
 
-The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and standalone Codex Skills. The old Plugin, Marketplace manifest, project lifecycle Hook, and custom Rules packaging are removed from the source tree. Codex native subagents, tasks, Worktrees, Git UI, Appshots, and configuration remain untouched. The isolated zero-based forward test has exercised the full guarded loop, and the project templates now include a concise `docs/INDEX.md` navigation map with Markdown link and orphan-document audits.
+The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and standalone Codex Skills. It also separates automatic recovery checkpoints from user-facing formal versions: accepted milestones receive a concise capability index, guarded immutable local semantic tags, and reversible named-version restoration without requiring Git knowledge.
 
 ## Working State
 
@@ -11,11 +11,12 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 - Standalone installation writes the short global `AGENTS.md`, nine Skills, central explicit safety scripts, and project/workspace templates. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
 - Installation records every fully managed Skill/runtime/template file and its SHA-256 hash in `managed-files.json`. Diagnosis detects missing or changed files; updates back up and remove only unchanged stale Dev Kit files while preserving user-modified stale files with a warning.
 - Legacy Plugin, custom-agent, and Dev Kit Hook detection remains only as an explicit migration/diagnostic path; it is not a runtime dependency.
+- Formal versions are recorded in `docs/VERSIONS.md`; the guard can mark the current verified checkpoint or safely backfill a verified ancestor during onboarding. Restoration creates a new checkpoint while preserving newer history, tags, and the complete index.
 
 ## Verified
 
 - Nine standalone Skills pass the official Skill validator.
-- The complete local regression suite passes: 79 tests.
+- The complete local regression suite passes: 87 tests.
 - The unit suite covers feature contracts, meaningful STATUS freshness, all-active regression coverage, native edit/write guard behavior, exact checkpoints, reversible rollback, dirty-user-change isolation, bounded context recovery, document-bloat audits, dangerous command protection, standalone install/update/diagnosis, exact Skill path resolution, legacy-state detection, project creation, secret-aware first baselines, template-placeholder gates, domain/ADR document budgets, official-default native-subagent boundaries, task receipt confirmation, controlled external research/source reuse, named-project integration boundaries, bounded structural validation, and standalone validator layout detection.
 - The documentation navigation audit checks local Markdown targets, GitHub-style heading anchors, external/code-fenced links, reachable durable documents, and bounded document budgets; the project template creates `docs/INDEX.md` and the workspace tests verify it.
 - A real cross-task failure was reproduced in two layers: older tasks had an 18-item cached Skill catalog before installation, and a later task guessed the invalid `.system\prepare-codex-goal` path even though the Skill was listed. The standalone instructions now require exact file locators, provide `resolve-skill.ps1`, and explicitly require a full Codex Desktop restart before treating a new task's Skill catalog as refreshed.
@@ -38,4 +39,4 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 
 ## Next Action
 
-Finish source validation and independent review, then update the installed standalone runtime only with explicit approval and verify the behavior in a newly opened Codex Desktop task.
+Complete the full source validation, create the guarded local checkpoint, synchronize the standalone runtime, then migrate and re-audit the authorized test game with formal v1.0.0 and v1.1.0 recovery points.

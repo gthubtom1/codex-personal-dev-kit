@@ -211,6 +211,70 @@ See [the public reference](https://example.com).
             self.assertEqual(report["metrics"]["broken_document_link_count"], 0)
             self.assertEqual(report["metrics"]["orphan_document_count"], 0)
 
+    def test_dependency_free_package_does_not_require_lockfile_but_declared_dependencies_do(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / ".codex").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text("# Status\n\n## Next Action\n\nContinue.\n", encoding="utf-8")
+            (root / "docs/FEATURES.md").write_text(
+                "# Features\n\n| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |\n| --- | --- | --- | --- | --- | --- | --- |\n| F-001 | Run | index | Works | test:tests/check.py | critical | active |\n",
+                encoding="utf-8",
+            )
+            (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
+            (root / "package.json").write_text('{"name":"no-deps","scripts":{"test":"node --test"}}\n', encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            codes = {item["code"] for item in audit_project.audit(root)["findings"]}
+            self.assertNotIn("missing-lockfile", codes)
+
+            (root / "package.json").write_text('{"name":"has-deps","dependencies":{"left-pad":"1.3.0"}}\n', encoding="utf-8")
+            report = audit_project.audit(root)
+            self.assertIn("missing-lockfile", {item["code"] for item in report["findings"]})
+
+    def test_formal_tags_require_a_complete_versions_index(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / ".codex").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text("# Status\n\n## Next Action\n\nContinue.\n", encoding="utf-8")
+            (root / "docs/FEATURES.md").write_text(
+                "# Features\n\n| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |\n| --- | --- | --- | --- | --- | --- | --- |\n| F-001 | Run | index | Works | test:tests/check.py | critical | active |\n",
+                encoding="utf-8",
+            )
+            (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(root), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["git", "-C", str(root), "tag", "v1.0.0"], check=True)
+
+            missing = audit_project.audit(root)
+            self.assertIn("versions-index-missing", {item["code"] for item in missing["findings"]})
+            (root / "docs/VERSIONS.md").write_text("# Versions\n\n| Version | Result | Verification | Status |\n| --- | --- | --- | --- |\n| v0.9.0 | Old | suite:all-tests | recoverable |\n", encoding="utf-8")
+            incomplete = audit_project.audit(root)
+            self.assertIn("versions-index-incomplete", {item["code"] for item in incomplete["findings"]})
+
+    def test_status_checkpoint_hash_is_reported_as_volatile_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / ".codex").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text(
+                "# Status\n\n## Working State\n\n- Last checkpoint: abc1234.\n\n## Next Action\n\nContinue.\n",
+                encoding="utf-8",
+            )
+            (root / "docs/FEATURES.md").write_text(
+                "# Features\n\n| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |\n| --- | --- | --- | --- | --- | --- | --- |\n| F-001 | Run | index | Works | test:tests/check.py | critical | active |\n",
+                encoding="utf-8",
+            )
+            (root / ".gitignore").write_text(".codex/current-change.json\n.codex/active-plan.md\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            report = audit_project.audit(root)
+            self.assertIn("status-volatile-checkpoint", {item["code"] for item in report["findings"]})
+
 
 if __name__ == "__main__":
     unittest.main()

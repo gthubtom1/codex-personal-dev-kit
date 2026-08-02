@@ -65,6 +65,7 @@ def main() -> int:
         "scripts/merge-codex-config.ps1",
         "scripts/bootstrap/resolve-codex-cli.ps1",
         "assets/project-template/docs/INDEX.md",
+        "assets/project-template/docs/VERSIONS.md",
         "assets/project-template/docs/adr/INDEX.md",
         "assets/workspace-template/.codex/config.toml",
     ):

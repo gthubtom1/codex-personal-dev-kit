@@ -32,6 +32,7 @@ DOC_BUDGETS = {
     "docs/ARCHITECTURE.md": ("lines", 300),
     "docs/DESIGN.md": ("lines", 300),
     "docs/STATUS.md": ("lines", 150),
+    "docs/VERSIONS.md": ("lines", 250),
 }
 DOMAIN_DOCUMENT_MAX_LINES = 1000
 DOMAIN_DOCUMENT_MAX_BYTES = 128 * 1024
@@ -317,6 +318,8 @@ def audit(root: Path) -> dict:
         status_text = status_path.read_text(encoding="utf-8", errors="replace")
         if not status_has_next_action(status_text):
             findings.append(finding("P2", "status-next-action-missing", "STATUS.md needs one concrete Next Action so a fresh Codex task can resume without reading old chats.", "docs/STATUS.md"))
+        if re.search(r"(?im)^\s*-?\s*Last checkpoint\s*:", status_text):
+            findings.append(finding("P3", "status-volatile-checkpoint", "STATUS.md records a checkpoint identifier that becomes stale after the next documentation commit. Keep the current formal version here and query Git for the latest checkpoint.", "docs/STATUS.md"))
 
     feature_map = root / "docs/FEATURES.md"
     if feature_map.is_file():
@@ -387,7 +390,15 @@ def audit(root: Path) -> dict:
     manifests = {name for name in relative_names if name in {"package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts"}}
     js_locks = [name for name in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb") if name in relative_names]
     if "package.json" in manifests and not js_locks:
-        findings.append(finding("P2", "missing-lockfile", "package.json exists without a recognized JavaScript lockfile."))
+        package_path = root / "package.json"
+        try:
+            package = json.loads(package_path.read_text(encoding="utf-8"))
+            dependency_sections = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+            declared_dependencies = any(isinstance(package.get(section), dict) and package.get(section) for section in dependency_sections)
+            if declared_dependencies:
+                findings.append(finding("P2", "missing-lockfile", "package.json declares dependencies without a recognized JavaScript lockfile.", "package.json"))
+        except (json.JSONDecodeError, OSError) as exc:
+            findings.append(finding("P1", "package-json-invalid", f"package.json could not be read: {exc}", "package.json"))
     if len(js_locks) > 1:
         findings.append(finding("P2", "multiple-lockfiles", f"Multiple JavaScript lockfiles found: {', '.join(js_locks)}."))
 
@@ -449,6 +460,16 @@ def audit(root: Path) -> dict:
                         risky.append(name)
             if risky:
                 findings.append(finding("P0", "sensitive-files-tracked", f"Potential secret-bearing files are tracked: {', '.join(risky[:10])}."))
+        tag_code, tags = git(root, "tag", "--list", "v[0-9]*")
+        semantic_tags = [tag for tag in tags.splitlines() if re.fullmatch(r"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", tag)] if tag_code == 0 else []
+        versions_path = root / "docs/VERSIONS.md"
+        if semantic_tags and not versions_path.is_file():
+            findings.append(finding("P2", "versions-index-missing", "Formal local version tags exist but docs/VERSIONS.md is missing, so a beginner cannot identify versions by capability.", "docs/VERSIONS.md"))
+        elif semantic_tags:
+            versions_text = versions_path.read_text(encoding="utf-8", errors="replace")
+            missing_rows = [tag for tag in semantic_tags if not re.search(rf"(?im)^\|\s*{re.escape(tag)}\s*\|", versions_text)]
+            if missing_rows:
+                findings.append(finding("P2", "versions-index-incomplete", "Formal versions are missing from docs/VERSIONS.md: " + ", ".join(missing_rows), "docs/VERSIONS.md"))
         ignore_code, _ = git(root, "check-ignore", ".codex/current-change.json")
         if ignore_code != 0:
             findings.append(finding("P1", "change-contract-not-ignored", ".codex/current-change.json must stay local and out of Git history.", ".gitignore"))
