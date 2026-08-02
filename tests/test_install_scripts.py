@@ -142,6 +142,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("Standalone runtime detected", text)
         self.assertIn("Join-Path $codexHome \"skills\"", text)
         self.assertIn("source validation script", text.lower())
+        self.assertIn("reportedRoot", text)
 
     def test_resolve_skill_uses_exact_standalone_path_and_rejects_guesses(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

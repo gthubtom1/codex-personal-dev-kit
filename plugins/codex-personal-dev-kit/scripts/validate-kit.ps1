@@ -97,4 +97,5 @@ if ($powerShellParseErrors.Count -gt 0) {
 }
 Write-Host "PowerShell parse checks passed."
 
-Write-Host "All available validators passed for $repoRoot"
+$reportedRoot = if ($sourceMode) { $repoRoot } else { $runtimeRoot }
+Write-Host "All available validators passed for $reportedRoot"

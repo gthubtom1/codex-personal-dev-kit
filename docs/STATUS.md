@@ -21,7 +21,7 @@ The Codex Personal Dev Kit now uses the intended two-layer `AGENTS.md` model and
 - Native subagent policy requests Luna/max by default, supports multiple parallel agents and explicit Sol/Luna rosters at max; the roster ledger now distinguishes requested/effective model and provenance (`explicit-spawn`, `config-default`, `inherited-current-model`, `runtime-unconfirmed`). The system no longer rejects an inherited Luna solely because an explicit model catalog omits Luna; explicit overrides still require native acceptance/result and never silently substitute. Disabled `[agents].enabled` or `[features].multi_agent` gates are diagnosed and reported without being overridden.
 - Existing project and workspace Codex configs receive the native agent defaults in place while preserving any top-level main-model choice; explicit model overrides use the required fork-depth parameter.
 - The structural validator now accepts equivalent Chinese/English Skill-path wording and caps its full unit-test subprocess at 300 seconds (override only through `CODEX_DEV_KIT_TEST_TIMEOUT_SECONDS`), so unattended validation reports a timeout instead of waiting forever.
-- The PowerShell validator now detects whether it is running from the source checkout or the installed standalone runtime; standalone validation delegates to the pinned local source and separately checks the seven installed Skill directories.
+- The PowerShell validator now detects whether it is running from the source checkout or the installed standalone runtime; standalone validation delegates to the pinned local source, separately checks the seven installed Skill directories, and reports the actual source/runtime path in its success line.
 
 ## Current Limitations
 
