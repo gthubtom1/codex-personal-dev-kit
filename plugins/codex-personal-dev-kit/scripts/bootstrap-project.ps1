@@ -5,7 +5,8 @@ param(
     [string]$CodexHome,
     [switch]$Apply,
     [switch]$InitializeGit,
-    [switch]$CreateBaselineCheckpoint
+    [switch]$CreateBaselineCheckpoint,
+    [switch]$RemoveLegacyLunaDefault
 )
 
 $ErrorActionPreference = "Stop"
@@ -201,7 +202,10 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($action in $actions) {
     if ($action.Action -eq "merge") {
         $existing = [System.IO.File]::ReadAllText($action.Path)
-        $merged = Merge-CodexNativeAgentDefaults -Content $existing
+        if ((Test-CodexLegacyLunaDefault -Content $existing) -and -not $RemoveLegacyLunaDefault) {
+            Write-Warning "Legacy Luna child-model default detected and preserved in $($action.Path). Re-run with -Apply -RemoveLegacyLunaDefault only after confirming it came from the old Dev Kit."
+        }
+        $merged = Merge-CodexNativeAgentDefaults -Content $existing -RemoveLegacyLunaDefault:$RemoveLegacyLunaDefault
         if ($merged -ne $existing) {
             [System.IO.File]::WriteAllText($action.Path, $merged, $utf8NoBom)
         }

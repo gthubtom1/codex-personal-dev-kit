@@ -18,21 +18,22 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 ## 子代理模型策略
 
 - 主对话模型由用户在 Codex 中选择，本 Skill 不锁定主对话模型。
-- 原生解析顺序是：本次 spawn 的明确模型/推理（包括用户本次 roster）> 项目 `[agents]` 默认 > 当前父任务模型/推理。模板把默认值设为 `gpt-5.6-luna` 和 `max`，但默认值只是路由请求，不能单独证明调用已成功。
-- 显式模型目录是覆盖模型的参考，不是当前父任务继承模型的完整清单。若当前任务运行时已确认父模型为 Luna，spawn 不传 `model` 时先记录请求来源为 `inherited-current-model`；只有原生调用接受并启动后，才把有效模型记为 Luna。目录没列 Luna 不能单独拦截这条路径；父模型无法确认、调用被拒绝或没有启动结果时，记录有效模型 `unconfirmed` 和失败状态，不猜测。
+- 原生解析顺序是：本次 spawn 的明确模型/推理（包括用户本次 roster）> 项目显式 `[agents]` 默认 > 当前父任务模型/推理。受管模板不固定 `default_subagent_model`，所以未明确选择时继承当前父任务模型；模板只把默认推理强度设为 `max`。
+- 当前任务 `spawn_agent` 工具暴露的模型枚举，是该任务显式模型覆盖的权威能力面。用户或项目请求的显式模型不在该枚举中时，不调用、不重复试错、不静默换成其他模型；把该分配记为 `task-tool-unsupported`，并说明需要使用兼容该模型的主任务重新开始，或由用户选择当前任务允许的模型。
+- 全局设置页、其他任务的模型目录、配置字符串和历史成功记录都不能证明当前任务能显式启动某个模型。未显式覆盖时不传 `model`：若项目存在明确 `default_subagent_model`，成功启动后记为 `config-default`；否则成功后记为 `inherited-current-model`。失败或未确认都记为 `runtime-unconfirmed`。
 - 子代理不是固定 1 个；按任务拆分多个有界并行工作。有效并发上限取配置的 `max_concurrent_threads_per_session` 与当前原生可用槽位的较小值（模板默认 6，不含主线程）；请求总数超过有效上限时分波次完成，保持用户指定的总数量和模型比例，不得静默减少。
-- 用户明确指定组合时，例如“2 个 Sol、3 个 Luna”，按指定数量分别调用 `gpt-5.6-sol` 和 `gpt-5.6-luna`，每个都使用 `max`。
-- 用户明确指定 Sol/Luna 时，使用原生 `spawn_agent` 的显式模型参数和 `max`；以原生参数接受、启动结果和返回状态确认该分配。若原生运行时拒绝或未确认，报告对应代理的精确失败，保持有效模型 `unconfirmed`，不得静默换模型或减少数量。模型目录缺少某名称本身不构成失败证据，但原生 Unknown model/拒绝结果是失败证据。
+- 用户明确指定模型组合时，先逐项与当前任务的 `spawn_agent` 模型枚举核对。支持的分配按精确数量调用并使用 `max`；不支持的分配保留在账本中并明确失败，不静默替换模型、减少数量或用可见任务补位。
 - 第一次调用前同时检查有效配置的能力闸门：`[agents].enabled = false` 或 `[features].multi_agent = false` 时，明确报告被关闭的闸门并停止子代理路由，询问用户是否要显式启用；不通过可见任务、自定义 Agent、Plugin 或 Hook 绕过。配置合并只补缺失键，不静默修改用户的关闭选择。
-- 未指定模型时依赖 Codex 原生的 `[agents]` 默认或当前父任务继承值；显式指定 Sol/Luna 时，使用原生 `spawn_agent` 的单次调用参数，并同时传入 `fork_turns="none"` 或明确的正整数 fork 深度，因为模型/推理覆盖不能与默认的完整历史 fork 混用。除非用户明确要求持久命名代理，不创建自定义 Agent 文件。
+- 未指定模型时依赖项目显式 `[agents]` 默认或当前父任务继承值；显式指定当前任务支持的模型时，使用原生 `spawn_agent` 的单次调用参数，并同时传入 `fork_turns="none"` 或明确的正整数 fork 深度，因为模型/推理覆盖不能与默认的完整历史 fork 混用。除非用户明确要求持久命名代理，不创建自定义 Agent 文件。
 - 参数序列化失败表示子代理没有启动。不得反复重试错误参数，也不得把失败调用写成已完成的独立检查。
-- 显式用户/项目 `[agents]` 配置优先：配置合并只补缺失键，不静默改写 `enabled`、模型或推理强度。系统发起的新 roster 默认请求 Luna/max；发现用户已有覆盖时要说明并尊重，不把覆盖伪装成默认值。
+- 显式用户/项目 `[agents]` 配置优先：配置合并只补缺失键，不静默改写 `enabled`、模型或推理强度。受管模板不写入子代理模型，只补 `max` 推理强度和并发设置；已有显式模型仍须通过当前任务能力面核对。
 
 ## 无人值守账本和超时
 
-主代理在内存中维护一份临时 roster ledger，不写入项目长期文档。每条记录至少包含：代理编号、请求模型、有效模型、模型来源（`explicit-spawn`、`config-default`、`inherited-current-model` 或 `runtime-unconfirmed`）、推理强度、任务、波次、状态（`queued`、`running`、`completed`、`failed`、`interrupted` 或 `timeout`）和精炼结果。有效模型只能在原生调用接受并启动后填写；Unknown model、参数拒绝、超时或中断必须保留失败/未确认状态。只有 `running` 的原生子代理占用并发槽位，不能悄悄换模型或补一个未声明的代理。
+主代理在内存中维护一份临时 roster ledger，不写入项目长期文档。每条记录至少包含：代理编号、请求模型、有效模型、模型来源（`explicit-spawn`、`config-default`、`inherited-current-model`、`task-tool-unsupported` 或 `runtime-unconfirmed`）、推理强度、任务、波次、状态（`queued`、`running`、`completed`、`failed`、`interrupted` 或 `timeout`）和精炼结果。有效模型只能在原生调用接受并启动后填写；能力面不支持、参数拒绝、超时或中断必须保留失败/未确认状态。只有 `running` 的原生子代理占用并发槽位，不能悄悄换模型或补一个未声明的代理。
 
-- 启动前先读取原生 agent 列表，按 `max_concurrent_threads_per_session - running` 计算空槽，结果不低于 0；列表不可用或状态有歧义时保守地不启动新代理并报告，不能猜测容量。波次大小取这个空槽数；一波全部结束后才启动下一波。
+- `spawn_agent` 是启动子代理的核心能力；`list_agents` 只是可选的容量管理能力。存在 `list_agents` 时按 `max_concurrent_threads_per_session - running` 计算空槽，结果不低于 0；不存在时仍可使用 `spawn_agent`，但进入保守降级模式：每波最多 2 个且不超过配置上限，只计算当前主任务已成功启动且尚未结束的代理。一波全部结束后再开启下一波。
+- 如果缺少 follow-up、等待或 interrupt 等管理能力，只启动短时、有界的只读任务，并明确报告无人值守监控能力受限；不要把缺少 `list_agents` 误报成整个子代理功能不可用。
 - 每个代理启动时声明阶段目标和心跳点。默认每 5 分钟应有一次心跳；连续 10 分钟没有有效进展时只发送一次简短 `followup_task`，再等 5 分钟仍无进展就 `interrupt_agent`，标记为 `timeout` 或 `interrupted`，主代理继续处理其他独立结果。若代理事先声明长测试、构建或官方研究，主代理可在 ledger 中记录一次延长，硬上限 30 分钟，仍最多一次 follow-up；不得无限延期。
 - 独立审查/盲测默认用 `fork_turns="none"`；只提供必要事实，不把主代理的结论、怀疑或修复方案泄漏给审查者。
 - 汇总时报告计划数量、实际启动数量、完成/失败/中断/超时数量以及未完成任务；不得把超时代理当作成功。
@@ -41,10 +42,9 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 
 ```text
 spawn_agent(..., model="gpt-5.6-sol", reasoning_effort="max", fork_turns="none")
-spawn_agent(..., model="gpt-5.6-luna", reasoning_effort="max", fork_turns="none")
 ```
 
-这只是原生调用参数约束，不是要创建自定义 Agent 文件。
+示例模型必须先出现在当前任务的 `spawn_agent` 模型枚举中。这只是原生调用参数约束，不是要创建自定义 Agent 文件。
 
 ## 选择执行形态
 

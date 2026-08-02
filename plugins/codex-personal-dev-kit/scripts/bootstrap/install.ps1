@@ -32,6 +32,17 @@ $workspaceAgents = Join-Path $workspacePath "AGENTS.md"
 if (-not (Test-Path -LiteralPath $workspaceAgents -PathType Leaf)) {
     throw "Detailed workspace AGENTS.md was not found: $workspaceAgents"
 }
+$workspaceConfig = Join-Path $workspacePath ".codex\config.toml"
+$legacyLunaDefaultDetected = $false
+if (Test-Path -LiteralPath $workspaceConfig -PathType Leaf) {
+    $workspaceConfigText = [System.IO.File]::ReadAllText($workspaceConfig)
+    $legacyLunaDefaultDetected = [bool]($workspaceConfigText -match '(?m)^\s*default_subagent_model\s*=\s*["'']gpt-5\.6-luna["'']\s*(?:#.*)?$')
+}
+$workspaceAgentsText = [System.IO.File]::ReadAllText($workspaceAgents)
+$legacyRoutingTextDetected = [bool](
+    $workspaceAgentsText -match '(?i)(default|默认|请求).{0,40}(gpt-5\.6-luna|Luna/max)' -or
+    $workspaceAgentsText -match '(?i)(agent list|代理列表).{0,80}(unavailable|不可用|不启动)'
+)
 
 $bootstrapKitRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $bootstrapRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $bootstrapKitRoot "..\.."))
@@ -408,6 +419,12 @@ if ($MigrateLegacy) {
 Write-Host "Standalone Codex Dev Kit installed at $kitTargetRoot"
 Write-Host "No Plugin, global Hook, custom agent file, or config.toml change was installed."
 Write-Host "Backups of changed managed files, if any, are under $backupRoot"
-Write-Host "Review codex-dev-kit\config.fragment.toml before applying native subagent model defaults."
+Write-Host "Review codex-dev-kit\config.fragment.toml before applying native subagent concurrency/reasoning settings; the fragment does not pin a child model."
+if ($legacyLunaDefaultDetected) {
+    Write-Warning "Legacy Luna child-model default remains in $workspaceConfig. It was not removed because it may be a deliberate user choice. Use bootstrap-workspace.ps1 -Apply -RemoveLegacyLunaDefault only after confirming its origin."
+}
+if ($legacyRoutingTextDetected) {
+    Write-Warning "Legacy subagent-routing text remains in $workspaceAgents. Update the detailed workspace rules before claiming task-local model routing or list_agents degradation is active."
+}
 Write-Host "Fully exit Codex Desktop and reopen it, then create a new task so the short global instructions and standalone Skills reload."
 Write-Host "Creating a task inside an already-running app-server may keep an older Skill catalog; disk files alone do not prove that the task discovered the Skill."

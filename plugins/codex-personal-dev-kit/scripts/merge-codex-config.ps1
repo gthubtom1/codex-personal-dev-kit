@@ -3,7 +3,8 @@ function Merge-CodexNativeAgentDefaults {
     param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [string]$Content
+        [string]$Content,
+        [switch]$RemoveLegacyLunaDefault
     )
 
     $newline = if ($Content.Contains("`r`n")) { "`r`n" } else { "`n" }
@@ -19,7 +20,6 @@ function Merge-CodexNativeAgentDefaults {
         "enabled" = "true"
         "max_concurrent_threads_per_session" = "6"
         "interrupt_message" = "true"
-        "default_subagent_model" = '"gpt-5.6-luna"'
         "default_subagent_reasoning_effort" = '"max"'
     }
 
@@ -48,6 +48,16 @@ function Merge-CodexNativeAgentDefaults {
         }
     }
 
+    if ($RemoveLegacyLunaDefault) {
+        $legacyPattern = '^\s*default_subagent_model\s*=\s*["'']gpt-5\.6-luna["'']\s*(?:#.*)?$'
+        for ($index = $agentsEnd - 1; $index -gt $agentsStart; $index--) {
+            if ($lines[$index] -match $legacyPattern) {
+                $lines.RemoveAt($index)
+                $agentsEnd--
+            }
+        }
+    }
+
     foreach ($entry in $defaults.GetEnumerator()) {
         $keyPattern = '^\s*' + [regex]::Escape($entry.Key) + '\s*='
         $found = $false
@@ -63,4 +73,15 @@ function Merge-CodexNativeAgentDefaults {
     }
 
     return (($lines -join $newline) + $newline)
+}
+
+function Test-CodexLegacyLunaDefault {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    return [bool]($Content -match '(?m)^\s*default_subagent_model\s*=\s*["'']gpt-5\.6-luna["'']\s*(?:#.*)?$')
 }

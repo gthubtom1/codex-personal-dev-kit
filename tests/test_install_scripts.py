@@ -105,6 +105,7 @@ class InstallScriptTests(unittest.TestCase):
 
             installed = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
             self.assertIn("Fully exit Codex Desktop", installed.stdout)
+            self.assertIn("does not pin a child model", installed.stdout)
             agents = codex_home / "AGENTS.md"
             self.assertIn("<!-- codex-dev-kit:start -->", agents.read_text(encoding="utf-8"))
             self.assertIn(str(workspace / "AGENTS.md"), agents.read_text(encoding="utf-8"))
@@ -135,6 +136,40 @@ class InstallScriptTests(unittest.TestCase):
             backups = list((codex_home / "backups/codex-dev-kit").rglob("AGENTS.md"))
             self.assertTrue(backups)
             self.assertIn("OUTDATED MANAGED CONTENT", backups[-1].read_text(encoding="utf-8"))
+
+    def test_install_reports_legacy_workspace_subagent_routing_without_mutating_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, head = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "workspace"
+            workspace.mkdir(parents=True)
+            (workspace / "AGENTS.md").write_text(
+                "- 子代理默认请求 `gpt-5.6-luna`。\n"
+                "- 原生 agent list 不可用时不启动。\n",
+                encoding="utf-8",
+            )
+            (workspace / ".codex").mkdir()
+            config_path = workspace / ".codex/config.toml"
+            config_path.write_text(
+                '[agents]\n'
+                'default_subagent_model = "gpt-5.6-luna"\n',
+                encoding="utf-8",
+            )
+
+            result = self.run_install(
+                codex_home,
+                workspace,
+                "-Source",
+                str(source_root),
+                "-Ref",
+                head,
+                "-Apply",
+            )
+
+            self.assertIn("Legacy Luna child-model default remains", result.stdout)
+            self.assertIn("Legacy subagent-routing text remains", result.stdout)
+            self.assertIn('default_subagent_model = "gpt-5.6-luna"', config_path.read_text(encoding="utf-8"))
 
     def test_validation_script_supports_standalone_runtime_layout(self) -> None:
         text = VALIDATE_SCRIPT.read_text(encoding="utf-8")

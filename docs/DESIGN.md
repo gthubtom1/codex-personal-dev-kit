@@ -37,7 +37,7 @@ Mother Folder
 | Explicit safety scripts | 通过当前任务显式运行功能保全、危险命令和 Git 检查，不定义或替代智能体 |
 | Mother-folder files | 新建项目、项目隔离、归档和原生 subagent 默认配置 |
 | Project `AGENTS.md` | 当前项目命令、验证、边界和文档路由 |
-| Project `.codex/config.toml` | workspace-write、Goal、多代理并发上限和 Luna/max 子代理默认设置 |
+| Project `.codex/config.toml` | workspace-write、Goal、多代理并发上限和 max 子代理推理默认值；不固定子代理模型 |
 | Code/tests/Git/docs | 长期项目事实和恢复来源 |
 | Current Codex task | 一个连贯成果的临时上下文和持久 Goal |
 
@@ -46,7 +46,7 @@ Mother Folder
 ### Verified Codex Runtime Facts
 
 - Codex automatically loads one global instruction file from `~/.codex`, then discovers project instructions from the selected project root down to the working directory. When an individual project under `D:\开发\projects\` is the Git/project root, the parent `D:\开发\AGENTS.md` is not automatically discovered; the short global file must explicitly require reading it.
-- Native subagent defaults live under `[agents]` as `default_subagent_model` and `default_subagent_reasoning_effort`. The Dev Kit repository and generated templates request Luna/max and allow six concurrent subagent threads; existing project/workspace configs are merged in place without changing a top-level main-model choice. Codex resolves a child as explicit per-spawn values > project `[agents]` defaults > the current parent task values. A selectable model catalog is not a complete list of inherited parent models, so the ledger records route provenance separately from the effective model; only native acceptance/start confirms the effective model, while Unknown model/rejection remains failed and unconfirmed.
+- Native subagent settings live under `[agents]`. Managed templates set `default_subagent_reasoning_effort = "max"` and allow six concurrent child threads, but deliberately omit `default_subagent_model`; existing user/project model defaults are preserved. Codex resolves a child as explicit per-spawn values > an existing project `[agents]` default > current parent-task values. The model enum exposed by the current task's `spawn_agent` tool is authoritative for explicit overrides; unpinned calls inherit. `list_agents` is optional capacity information, so its absence activates conservative two-at-a-time waves instead of disabling `spawn_agent`.
 - Before routing to native subagents, the explicit diagnostic checks the effective `[agents].enabled` and `[features].multi_agent` gates. If either is explicitly `false`, the workflow reports the exact disabled gate and stops that route until the user enables it; it never works around the setting with visible tasks, custom Agents, Plugins, or Hooks. The diagnostic also flags known plaintext sensitive keys without printing their values.
 - 本 Dev Kit 不安装生命周期 Hook，避免任何工具匹配器改变 Codex 原生 subagent、任务、浏览器或文件编辑语义；需要保护时由 Skill 调用显式脚本。
 - `AGENTS.md` should stay small and route to focused Skills or references. Project state is split across concise current documents instead of expanding one permanent transcript.

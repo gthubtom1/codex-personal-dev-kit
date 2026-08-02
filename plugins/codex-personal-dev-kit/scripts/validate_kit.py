@@ -84,6 +84,7 @@ def main() -> int:
         errors.append("Short standalone AGENTS template must define exact Skill path resolution")
     for config_path in (
         repo_root / ".codex/config.toml",
+        kit_root / "assets/global-profile/config.fragment.toml",
         kit_root / "assets/workspace-template/.codex/config.toml",
         kit_root / "assets/project-template/.codex/config.toml",
     ):
@@ -91,8 +92,10 @@ def main() -> int:
             errors.append(f"Missing native Codex config template: {config_path}")
             continue
         config_text = config_path.read_text(encoding="utf-8")
-        if 'default_subagent_model = "gpt-5.6-luna"' not in config_text:
-            errors.append(f"Default subagent model is not Luna: {config_path}")
+        if re.search(r"(?m)^default_subagent_model\s*=", config_text):
+            errors.append(
+                f"Managed templates must inherit the current parent model instead of pinning a subagent model: {config_path}"
+            )
         if 'default_subagent_reasoning_effort = "max"' not in config_text:
             errors.append(f"Default subagent reasoning is not max: {config_path}")
         concurrency = re.search(r"(?m)^max_concurrent_threads_per_session\s*=\s*(\d+)\s*$", config_text)

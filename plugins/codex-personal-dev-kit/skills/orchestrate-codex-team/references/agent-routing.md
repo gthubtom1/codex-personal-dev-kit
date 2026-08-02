@@ -29,24 +29,25 @@
 ## 模型门禁
 
 - 主对话模型由用户选择，不由本路由固定。
-- Codex 原生解析顺序为本次 spawn 的明确模型/推理（包括用户 roster）> 项目 `[agents]` 默认 > 当前父任务模型/推理。模板默认请求 `gpt-5.6-luna`/`max`；有效并发上限取配置值与当前原生可用槽位的较小值。
-- 显式模型目录不是父任务继承模型的完整清单。父任务已被运行时确认是 Luna 且 spawn 未传 `model` 时，先按 `inherited-current-model` 记录请求来源；只有原生调用接受并启动后才填写有效模型 Luna。父任务无法确认、Unknown model、参数拒绝或没有启动结果时，按有效模型 `unconfirmed`、来源 `runtime-unconfirmed` 和失败状态记录，不伪造。
-- 用户明确指定 Sol/Luna 数量时，按精确数量和模型调用，每个子代理都必须是 `max`；显式模型覆盖必须带 `fork_turns="none"` 或正整数 fork 深度。总数超过有效并发上限时分波次执行，保持精确总数，不静默减少。
-- 对显式模型覆盖，以原生 `spawn_agent` 参数接受、启动结果和返回状态确认；失败时报告该显式分配失败并保留有效模型 `unconfirmed`，不得静默降级、换模型或减少数量。目录缺少名称只能触发核对，不能单独否定继承路径；原生 Unknown model/拒绝结果则是失败证据。
+- Codex 原生解析顺序为本次 spawn 的明确模型/推理（包括用户 roster）> 项目显式 `[agents]` 默认 > 当前父任务模型/推理。受管模板不固定子代理模型，只把默认推理强度设为 `max`。
+- 当前任务 `spawn_agent` 暴露的模型枚举，是该任务显式模型覆盖的权威能力面。请求模型不在枚举中时，不发起调用，记录 `task-tool-unsupported` 并报告兼容性问题；全局设置、其他任务目录和配置字符串不能覆盖该限制。
+- 未显式指定模型时不传 `model`。项目存在明确 `default_subagent_model` 时，原生调用成功后记录 `config-default`；没有项目默认时才记录 `inherited-current-model`。父模型无法确认、参数拒绝或没有启动结果时，记录有效模型 `unconfirmed`、来源 `runtime-unconfirmed` 和失败状态。
+- 用户明确指定模型数量时，先核对当前任务能力面，再按受支持的精确数量调用，每个子代理都使用 `max`；显式模型覆盖必须带 `fork_turns="none"` 或正整数 fork 深度。总数超过有效并发上限时分波次执行，不静默减少或替换。
 - 调用前检查有效配置的原生能力闸门：`[agents].enabled = false` 或 `[features].multi_agent = false` 时停止子代理路由，报告准确配置位置并等待用户明确启用；不得用可见任务、Plugin、Hook 或自定义 Agent 规避。合并脚本只补缺失键，保留显式关闭。
 - 角色只是任务职责，不使用自定义 Agent 文件替代原生 per-call 模型选择，除非用户明确要求持久命名代理。
-- 显式用户/项目 `[agents]` 配置优先；合并脚本只补缺失键。系统新发起的 roster 默认请求 Luna/max，发现显式覆盖时说明并尊重，不静默改写。
+- 显式用户/项目 `[agents]` 配置优先；合并脚本只补缺失键。受管模板不新增 `default_subagent_model`，已有显式模型仍需通过当前任务能力面核对。
 
 ## 波次与卡住处理
 
-每次编排建立一份只存在于当前主任务内存的 roster ledger：编号、请求模型、有效模型、模型来源、任务、波次、状态和结果摘要。有效模型只在原生调用接受并启动后确认；启动参数错误、Unknown model、失败、超时和中断必须记录，不能静默补位。
+每次编排建立一份只存在于当前主任务内存的 roster ledger：编号、请求模型、有效模型、模型来源、任务、波次、状态和结果摘要。模型来源包括 `explicit-spawn`、`config-default`、`inherited-current-model`、`task-tool-unsupported` 和 `runtime-unconfirmed`。有效模型只在原生调用接受并启动后确认；能力面不支持、启动参数错误、失败、超时和中断必须记录，不能静默补位。
 
-- 启动前调用原生 agent 列表，空槽 = `max_concurrent_threads_per_session - running`，下限为 0；列表不可用/歧义时不启动新代理。波次大小取空槽数，一波结束后才开启下一波。
+- `spawn_agent` 是核心启动能力，`list_agents` 是可选容量能力。有 `list_agents` 时，空槽 = `max_concurrent_threads_per_session - running`，下限为 0；没有时采用保守降级波次，每波最多 2 个且不超过配置上限，只统计当前主任务已成功启动且未结束的代理。缺少 `list_agents` 不能被解释为子代理整体不可用。
+- 如果等待、follow-up 或 interrupt 管理工具不完整，只启动短时有界任务并报告无人值守管理限制。
 - 每个代理先声明阶段目标和心跳点；默认每 5 分钟心跳，连续 10 分钟无有效进展时只 `followup_task` 一次，再等 5 分钟仍无进展就 `interrupt_agent`，标为 `timeout`/`interrupted`。长测试/构建/官方研究可在启动前登记一次延长，硬上限 30 分钟，仍最多一次 follow-up。
 - 独立审查使用 `fork_turns="none"` 或有限 fork，只发送必要材料，不发送主代理预期答案。
 - 最终汇总必须区分 planned、started、completed、failed、interrupted、timeout；没有结果的代理不能被算作完成。
 
-显式模型覆盖的原生调用必须同时提供 `fork_turns="none"` 或正整数 fork 深度；如果只使用配置中的默认 Luna/max，则不要伪造一个自定义角色来绕过默认值。
+显式模型覆盖的原生调用必须同时提供 `fork_turns="none"` 或正整数 fork 深度；继承父任务模型时不要伪造自定义角色或配置字符串来绕过当前任务能力面。
 
 ## 角色边界
 

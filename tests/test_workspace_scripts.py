@@ -46,7 +46,7 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(legacy_workspace), "-Apply")
             legacy_config = (legacy_workspace / ".codex/config.toml").read_text(encoding="utf-8")
             self.assertIn('model = "gpt-5.5"', legacy_config)
-            self.assertIn('default_subagent_model = "gpt-5.6-luna"', legacy_config)
+            self.assertNotIn("default_subagent_model", legacy_config)
             self.assertIn('default_subagent_reasoning_effort = "max"', legacy_config)
             self.assertIn("max_concurrent_threads_per_session = 6", legacy_config)
 
@@ -71,7 +71,7 @@ class WorkspaceScriptTests(unittest.TestCase):
             workspace_config = workspace / ".codex/config.toml"
             self.assertTrue(workspace_config.is_file())
             config_text = workspace_config.read_text(encoding="utf-8")
-            self.assertIn('default_subagent_model = "gpt-5.6-luna"', config_text)
+            self.assertNotIn("default_subagent_model", config_text)
             self.assertIn('default_subagent_reasoning_effort = "max"', config_text)
             agents.write_text(agents.read_text(encoding="utf-8") + "\nCUSTOM-WORKSPACE-RULE\n", encoding="utf-8")
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
@@ -154,6 +154,69 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertIn('default_subagent_reasoning_effort = "high"', config)
             self.assertIn("max_concurrent_threads_per_session = 6", config)
 
+    def test_legacy_luna_default_requires_explicit_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "legacy-luna"
+            (workspace / ".codex").mkdir(parents=True)
+            config_path = workspace / ".codex/config.toml"
+            config_path.write_text(
+                '[agents]\n'
+                'default_subagent_model = "gpt-5.6-luna"\n',
+                encoding="utf-8",
+            )
+
+            preserved = self.run_script(
+                "bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply"
+            )
+            self.assertIn("Legacy Luna child-model default detected and preserved", preserved.stdout)
+            self.assertIn('default_subagent_model = "gpt-5.6-luna"', config_path.read_text(encoding="utf-8"))
+
+            migrated = self.run_script(
+                "bootstrap-workspace.ps1",
+                "-WorkspaceRoot",
+                str(workspace),
+                "-Apply",
+                "-RemoveLegacyLunaDefault",
+            )
+            self.assertIn("will be removed", migrated.stdout)
+            migrated_config = config_path.read_text(encoding="utf-8")
+            self.assertNotIn("default_subagent_model", migrated_config)
+            self.assertIn('default_subagent_reasoning_effort = "max"', migrated_config)
+
+    def test_existing_project_legacy_luna_default_requires_explicit_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "existing"
+            (project / ".codex").mkdir(parents=True)
+            config_path = project / ".codex/config.toml"
+            config_path.write_text(
+                '[agents]\n'
+                'default_subagent_model = "gpt-5.6-luna"\n',
+                encoding="utf-8",
+            )
+
+            preserved = self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(project),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+            )
+            self.assertIn("Legacy Luna child-model default detected and preserved", preserved.stdout)
+            self.assertIn("default_subagent_model", config_path.read_text(encoding="utf-8"))
+
+            self.run_script(
+                "bootstrap-project.ps1",
+                "-ProjectRoot",
+                str(project),
+                "-WorkspaceRoot",
+                str(root),
+                "-Apply",
+                "-RemoveLegacyLunaDefault",
+            )
+            self.assertNotIn("default_subagent_model", config_path.read_text(encoding="utf-8"))
+
     def test_bootstrap_existing_project_preserves_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "existing"
@@ -182,7 +245,7 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertFalse((project / ".codex/hooks.json").exists())
             project_config = (project / ".codex/config.toml").read_text(encoding="utf-8")
             self.assertIn('model = "gpt-5.5"', project_config)
-            self.assertIn('default_subagent_model = "gpt-5.6-luna"', project_config)
+            self.assertNotIn("default_subagent_model", project_config)
             self.assertIn('default_subagent_reasoning_effort = "max"', project_config)
             self.assertIn("max_concurrent_threads_per_session = 6", project_config)
             self.assertEqual(self.git(project, "rev-parse", "--show-toplevel").returncode, 0)
