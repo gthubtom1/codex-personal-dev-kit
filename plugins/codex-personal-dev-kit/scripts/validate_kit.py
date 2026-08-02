@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,16 @@ SKILLS = {
     "manage-project-continuity",
     "audit-codex-kit",
 }
+
+def _unit_test_timeout_seconds() -> int:
+    raw = os.environ.get("CODEX_DEV_KIT_TEST_TIMEOUT_SECONDS", "300")
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 300
+
+
+UNIT_TEST_TIMEOUT_SECONDS = _unit_test_timeout_seconds()
 
 
 def main() -> int:
@@ -63,9 +74,13 @@ def main() -> int:
     if legacy_agents:
         errors.append("Standalone mode must not ship required custom agent files: " + ", ".join(path.name for path in legacy_agents))
     standalone_agents = kit_root / "assets/standalone/AGENTS.md"
-    if not standalone_agents.is_file() or "{{WORKSPACE_AGENTS_PATH}}" not in standalone_agents.read_text(encoding="utf-8"):
+    standalone_agents_text = standalone_agents.read_text(encoding="utf-8") if standalone_agents.is_file() else ""
+    if not standalone_agents.is_file() or "{{WORKSPACE_AGENTS_PATH}}" not in standalone_agents_text:
         errors.append("Short standalone AGENTS template must point to the detailed mother-folder AGENTS.md")
-    elif "never prepend `.system`" not in standalone_agents.read_text(encoding="utf-8"):
+    elif not (
+        "never prepend `.system`" in standalone_agents_text
+        or "不要在 `skills` 和 Skill 名称之间擅自插入 `.system`" in standalone_agents_text
+    ):
         errors.append("Short standalone AGENTS template must define exact Skill path resolution")
     for config_path in (
         repo_root / ".codex/config.toml",
@@ -130,15 +145,35 @@ def main() -> int:
             except Exception as exc:
                 errors.append(f"Invalid TOML {path}: {exc}")
 
-    tests = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", str(repo_root / "tests"), "-p", "test_*.py"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-    )
-    if tests.returncode != 0:
-        errors.append("Unit tests failed:\n" + tests.stdout)
+    test_command = [
+        sys.executable,
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        str(repo_root / "tests"),
+        "-p",
+        "test_*.py",
+    ]
+    try:
+        tests = subprocess.run(
+            test_command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=UNIT_TEST_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.stdout or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf-8", errors="replace")
+        errors.append(
+            f"Unit tests timed out after {UNIT_TEST_TIMEOUT_SECONDS} seconds:\n{partial}"
+        )
+    else:
+        if tests.returncode != 0:
+            errors.append("Unit tests failed:\n" + tests.stdout)
 
     if errors:
         print("\n".join(f"ERROR: {item}" for item in errors))

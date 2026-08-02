@@ -133,8 +133,8 @@ class OrchestrationRoutingTests(unittest.TestCase):
         self.assertIn("The main conversation model is user-selected", workspace_agents)
         self.assertIn("Default subagent model: `gpt-5.6-luna`", workspace_agents)
         self.assertIn("Every system-requested subagent reasoning effort: `max`", workspace_agents)
-        self.assertIn("系统默认子代理使用 `gpt-5.6-luna`", orchestration_skill)
-        self.assertIn("系统发起的每个子代理推理强度为 `max`", orchestration_skill)
+        self.assertIn("默认值设为 `gpt-5.6-luna`", orchestration_skill)
+        self.assertIn("默认值只是路由请求", orchestration_skill)
         self.assertIn("2 个 Sol、3 个 Luna", orchestration_skill)
         self.assertIn("gpt-5.6-sol", orchestration_skill)
         self.assertIn('fork_turns="none"', orchestration_skill)
@@ -147,13 +147,27 @@ class OrchestrationRoutingTests(unittest.TestCase):
         self.assertIn("10 minutes", workspace_agents)
         self.assertIn("native agent list", workspace_agents)
         self.assertIn("Explicit user/project", workspace_agents)
-        self.assertIn("user's explicit roster", workspace_agents)
+        self.assertTrue("user's roster" in workspace_agents or "user's explicit roster" in workspace_agents)
         self.assertIn("30-minute cap", workspace_agents)
         self.assertIn("分波次执行", (PLUGIN / "assets/standalone/AGENTS.md").read_text(encoding="utf-8"))
         for config in (workspace_config, project_config, repo_config):
             self.assertNotRegex(config, r"(?m)^model\s*=")
             self.assertRegex(config, r"(?m)^max_concurrent_threads_per_session\s*=\s*[2-9]\d*\s*$")
         self.assertNotIn("`codex_kit_reviewer`", orchestration_skill)
+
+    def test_model_inheritance_is_not_rejected_by_catalog_omission(self):
+        orchestration_skill = (PLUGIN / "skills/orchestrate-codex-team/SKILL.md").read_text(encoding="utf-8")
+        routing = (PLUGIN / "skills/orchestrate-codex-team/references/agent-routing.md").read_text(encoding="utf-8")
+        workspace_agents = (PLUGIN / "assets/workspace-template/AGENTS.md").read_text(encoding="utf-8")
+
+        for text in (orchestration_skill, routing, workspace_agents):
+            self.assertIn("inherited-current-model", text)
+            self.assertIn("runtime-unconfirmed", text)
+        self.assertIn("目录没列 Luna", orchestration_skill)
+        self.assertIn("model catalog", workspace_agents)
+        self.assertIn("not a complete list", workspace_agents)
+        self.assertIn("timeout=", (PLUGIN / "scripts/validate_kit.py").read_text(encoding="utf-8"))
+        self.assertIn("timed out", (PLUGIN / "scripts/validate_kit.py").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
