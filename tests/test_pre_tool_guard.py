@@ -54,6 +54,8 @@ class PreToolGuardTests(unittest.TestCase):
     def test_allows_local_development_commands(self) -> None:
         for command in (
             "git status -sb",
+            "git tag --list --format='%(refname:short)'",
+            "git tag -v v1.2.0",
             "git add app.js",
             "git commit -m 'checkpoint: feature'",
             "npm test",
@@ -61,6 +63,15 @@ class PreToolGuardTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_allowed(command)
+
+    def test_git_tag_read_only_flags_cannot_hide_a_mutation(self) -> None:
+        for command in (
+            "git tag --list --force v1.2.0",
+            "git tag --format='%(refname:short)' --delete v1.2.0",
+            "git tag --list --message release v1.2.0",
+        ):
+            with self.subTest(command=command):
+                self.assert_blocked(command)
 
 
 if __name__ == "__main__":

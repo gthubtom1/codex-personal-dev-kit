@@ -100,7 +100,19 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
     subcommand, args = _git_subcommand(tokens)
     lowered_args = [arg.lower() for arg in args]
     if subcommand == "tag":
-        return Decision(True, "Blocked raw git tag. Formal local versions must use feature_guard.py version so the tag matches a verified checkpoint and docs/VERSIONS.md.")
+        mutating_flags = {
+            "-a", "--annotate", "-s", "--sign", "-u", "--local-user", "-f", "--force",
+            "-d", "--delete", "-m", "--message", "-f", "--file", "--cleanup", "--create-reflog",
+        }
+        read_only_mode = not args or any(
+            arg in {"-l", "--list", "-v", "--verify", "--column", "--no-column", "--ignore-case"}
+            or arg.startswith(("-n", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort=", "--format=", "--column="))
+            for arg in lowered_args
+        )
+        mutating = any(arg in mutating_flags or any(arg.startswith(flag + "=") for flag in mutating_flags if flag.startswith("--")) for arg in lowered_args)
+        if read_only_mode and not mutating:
+            return Decision(False, "")
+        return Decision(True, "Blocked raw git tag mutation. Formal local versions must use feature_guard.py version so the tag matches a verified checkpoint and docs/VERSIONS.md.")
     if subcommand in {"push", "pull", "merge", "rebase", "clean", "restore", "filter-branch", "filter-repo"}:
         return Decision(True, f"Blocked automatic git {subcommand}. Keep work local and let the user perform this operation manually.")
     if subcommand == "reset" and any(arg in {"--hard", "--merge", "--keep"} for arg in lowered_args):
