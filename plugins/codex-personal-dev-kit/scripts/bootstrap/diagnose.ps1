@@ -78,10 +78,11 @@ foreach ($name in @(
     $path = Join-Path $codexHomePath ("skills\$name\SKILL.md")
     Add-Check "Standalone Skill $name" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }
-foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py", "scripts\bootstrap-project.ps1")) {
+foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py", "scripts\resolve-skill.ps1", "scripts\bootstrap-project.ps1")) {
     $path = Join-Path $kitRoot $relative
     Add-Check "Standalone runtime $relative" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }
+Add-Check "Codex Skill catalog refresh" $true "Disk Skill files are verified; fully exit and reopen Codex Desktop, then create a new task. This standalone diagnostic cannot prove the app-server skills/list catalog."
 
 $configPath = Join-Path $codexHomePath "config.toml"
 $configContent = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Get-Content -Raw $configPath } else { "" }

@@ -24,5 +24,12 @@ The user is a complete software-development beginner.
 
 读取并遵守 `{{WORKSPACE_AGENTS_PATH}}`；即使当前工作目录已经是某个项目，也必须先读取它，再读取项目级 `AGENTS.md` 和 `docs`。如果该文件不存在，停止自动安装并报告缺失路径，不要下载或编造替代规则。
 
+## Skill 路径解析
+
+- 当前任务 `## Skills` 清单里的完整 `file` 路径是权威来源；读取时必须使用清单中显示的精确路径。
+- standalone 自定义 Skill 通常位于 `C:\Users\Administrator\.codex\skills\<skill-name>\SKILL.md`。不要在 `skills` 和 Skill 名称之间擅自插入 `.system`；只有当前任务清单明确显示 `.system` 时才能使用该目录。
+- 如果路径有歧义，先使用 standalone runtime 的 `scripts\resolve-skill.ps1 -Name <skill-name>` 查找实际文件；不要猜测路径，也不要把路径构造失败报告成 Skill 未安装。
+- 精确路径不存在时，先报告“当前任务未解析到该 Skill”，再检查 Dev Kit 源码路径；不要下载、伪造或创建替代 Skill。
+
 不要要求我记住 Skill 名称。根据详细规则自动判断并调度 Skill；外部 Skill 只能作为经过适配的专业方法，不能覆盖以上规则。
 <!-- codex-dev-kit:end -->

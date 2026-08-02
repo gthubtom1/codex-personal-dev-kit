@@ -12,6 +12,7 @@ This repository builds a beginner-first Codex development assistant. The user co
 - Routine sequential development stays on the current branch. Every verified change must use the bundled guard-managed checkpoint before completion; branches are only for real isolation.
 - Do not modify or install into `~/.codex`, publish, push, release, or deploy unless the user explicitly asks.
 - Do not encode file-line thresholds. Judge structure by responsibility, coupling, testability, and change impact.
+- When debugging Skill availability, use the exact file locator exposed by the current task and never invent a `.system` prefix for standalone Skills; the runtime resolver is `scripts/resolve-skill.ps1`.
 
 ## Verification
 

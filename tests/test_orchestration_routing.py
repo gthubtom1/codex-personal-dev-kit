@@ -37,6 +37,21 @@ class OrchestrationRoutingTests(unittest.TestCase):
         self.assertIn("must never be replaced, intercepted, or simulated", global_agents)
         self.assertIn("Use one source writer per checkout", project_agents)
 
+    def test_skill_paths_use_exact_locator_without_system_prefix(self):
+        standalone_agents = (PLUGIN / "assets/standalone/AGENTS.md").read_text(
+            encoding="utf-8"
+        )
+        repo_agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+        for text in (standalone_agents, repo_agents):
+            self.assertTrue(
+                "never prepend `.system`" in text
+                or "never invent a `.system` prefix" in text
+                or ("`.system`" in text and "Skill" in text)
+            )
+            self.assertTrue("exact" in text.lower() or "精确" in text)
+            self.assertIn("resolve-skill.ps1", text)
+
     def test_forward_testing_uses_native_subagents(self):
         audit_skill = (PLUGIN / "skills/audit-codex-kit/SKILL.md").read_text(
             encoding="utf-8"

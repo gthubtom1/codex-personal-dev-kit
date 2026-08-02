@@ -342,6 +342,7 @@ $requiredInstalledPaths = @(
     (Join-Path $kitTargetRoot "source.json"),
     (Join-Path $kitTargetRoot "scripts\feature_guard.py"),
     (Join-Path $kitTargetRoot "scripts\pre_tool_guard.py"),
+    (Join-Path $kitTargetRoot "scripts\resolve-skill.ps1"),
     (Join-Path $codexHomePath "skills\codex-development-assistant\SKILL.md"),
     (Join-Path $codexHomePath "skills\orchestrate-codex-team\SKILL.md")
 )
@@ -408,4 +409,5 @@ Write-Host "Standalone Codex Dev Kit installed at $kitTargetRoot"
 Write-Host "No Plugin, global Hook, custom agent file, or config.toml change was installed."
 Write-Host "Backups of changed managed files, if any, are under $backupRoot"
 Write-Host "Review codex-dev-kit\config.fragment.toml before applying native subagent model defaults."
-Write-Host "Start a new Codex task so the short global instructions and standalone Skills reload."
+Write-Host "Fully exit Codex Desktop and reopen it, then create a new task so the short global instructions and standalone Skills reload."
+Write-Host "Creating a task inside an already-running app-server may keep an older Skill catalog; disk files alone do not prove that the task discovered the Skill."

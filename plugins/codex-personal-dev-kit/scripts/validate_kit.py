@@ -47,6 +47,7 @@ def main() -> int:
     for relative in (
         "scripts/feature_guard.py",
         "scripts/pre_tool_guard.py",
+        "scripts/resolve-skill.ps1",
         "scripts/audit_project.py",
         "scripts/merge-codex-config.ps1",
         "scripts/bootstrap/resolve-codex-cli.ps1",
@@ -64,6 +65,8 @@ def main() -> int:
     standalone_agents = kit_root / "assets/standalone/AGENTS.md"
     if not standalone_agents.is_file() or "{{WORKSPACE_AGENTS_PATH}}" not in standalone_agents.read_text(encoding="utf-8"):
         errors.append("Short standalone AGENTS template must point to the detailed mother-folder AGENTS.md")
+    elif "never prepend `.system`" not in standalone_agents.read_text(encoding="utf-8"):
+        errors.append("Short standalone AGENTS template must define exact Skill path resolution")
     for config_path in (
         repo_root / ".codex/config.toml",
         kit_root / "assets/workspace-template/.codex/config.toml",

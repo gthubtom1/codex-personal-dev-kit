@@ -12,6 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/install.ps1"
 DIAGNOSE_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/bootstrap/diagnose.ps1"
+RESOLVE_SKILL_SCRIPT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts/resolve-skill.ps1"
 POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
@@ -101,7 +102,8 @@ class InstallScriptTests(unittest.TestCase):
             self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head)
             self.assertFalse(codex_home.exists())
 
-            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            installed = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            self.assertIn("Fully exit Codex Desktop", installed.stdout)
             agents = codex_home / "AGENTS.md"
             self.assertIn("<!-- codex-dev-kit:start -->", agents.read_text(encoding="utf-8"))
             self.assertIn(str(workspace / "AGENTS.md"), agents.read_text(encoding="utf-8"))
@@ -132,6 +134,32 @@ class InstallScriptTests(unittest.TestCase):
             backups = list((codex_home / "backups/codex-dev-kit").rglob("AGENTS.md"))
             self.assertTrue(backups)
             self.assertIn("OUTDATED MANAGED CONTENT", backups[-1].read_text(encoding="utf-8"))
+
+    def test_resolve_skill_uses_exact_standalone_path_and_rejects_guesses(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            codex_home = Path(directory) / "codex-home"
+            skill_path = codex_home / "skills/prepare-codex-goal/SKILL.md"
+            skill_path.parent.mkdir(parents=True)
+            skill_path.write_text("---\nname: prepare-codex-goal\n---\n", encoding="utf-8")
+
+            resolved = self.run_script(
+                RESOLVE_SKILL_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-Name",
+                "prepare-codex-goal",
+            )
+            self.assertEqual(Path(resolved.stdout.strip()), skill_path.resolve())
+
+            missing = self.run_script(
+                RESOLVE_SKILL_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-Name",
+                "missing-skill",
+                expected=1,
+            )
+            self.assertIn("do not prepend '.system'", missing.stdout)
 
     def test_rejects_nonlocal_standalone_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
