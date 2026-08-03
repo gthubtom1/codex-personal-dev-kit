@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-- Prepare a clean MIT-licensed v0.2.4 checkout with the v0.2.3 guarded operations and cache-free standalone installation.
-- Keep ignored stress-test output and interpreter caches outside the distribution while retaining repeatable tests.
+- Prepare a clean MIT-licensed v0.2.5 checkout whose standalone installer can bootstrap and link both AGENTS layers on a blank Windows computer.
+- Preserve existing workspace instructions and configuration while keeping preview and repeated installation idempotent.
 
 ## Next Milestone
 

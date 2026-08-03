@@ -18,7 +18,7 @@
 3. 从私有 GitHub 克隆固定正式版本：
 
 ```powershell
-git clone --branch v0.2.4 --depth 1 <repository-url> D:\开发\codex-dev-kit
+git clone --branch v0.2.5 --depth 1 <repository-url> D:\开发\codex-dev-kit
 ```
 
 4. 先预览安装：
@@ -35,7 +35,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File D:\开发\codex-dev-kit\plug
 <CodexHome>\codex-dev-kit\
 <WorkspaceRoot>\AGENTS.md
 <WorkspaceRoot>\workspace.json
+<WorkspaceRoot>\.codex\config.toml
+<WorkspaceRoot>\projects\
+<WorkspaceRoot>\archives\
 ```
+
+母目录可以事先完全不存在。安装器会从仓库内模板创建详细版 `<WorkspaceRoot>\AGENTS.md`，替换真实母目录和 Skill 源路径，再让全局短版 `<CodexHome>\AGENTS.md` 指向它。预览模式不写入；重复执行保持幂等；已经存在的母目录 `AGENTS.md` 和 `.codex\config.toml` 不会被覆盖。
 
 6. 完整退出 Codex Desktop，再重新打开并创建新任务。仅新建任务而不退出整个应用，可能继续使用旧 Skill 目录缓存。
 7. 运行安装诊断：

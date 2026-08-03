@@ -151,6 +151,100 @@ class InstallScriptTests(unittest.TestCase):
             self.assertTrue(backups)
             self.assertIn("OUTDATED MANAGED CONTENT", backups[-1].read_text(encoding="utf-8"))
 
+    def test_blank_computer_install_creates_and_links_both_agents_layers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, head = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "new-workspace"
+
+            preview = self.run_script(
+                INSTALL_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                "-Source",
+                str(source_root),
+                "-Ref",
+                head,
+            )
+            self.assertIn("create-workspace", preview.stdout)
+            self.assertIn("Preview only", preview.stdout)
+            self.assertFalse(workspace.exists())
+            self.assertFalse(codex_home.exists())
+
+            self.run_script(
+                INSTALL_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                "-Source",
+                str(source_root),
+                "-Ref",
+                head,
+                "-Apply",
+            )
+
+            workspace_agents = workspace / "AGENTS.md"
+            global_agents = codex_home / "AGENTS.md"
+            self.assertTrue(workspace_agents.is_file())
+            self.assertTrue((workspace / "workspace.json").is_file())
+            self.assertTrue((workspace / ".codex/config.toml").is_file())
+            self.assertTrue((workspace / "projects").is_dir())
+            self.assertTrue((workspace / "archives").is_dir())
+            workspace_text = workspace_agents.read_text(encoding="utf-8")
+            workspace_metadata = (workspace / "workspace.json").read_text(encoding="utf-8")
+            global_text = global_agents.read_text(encoding="utf-8")
+            self.assertIn(str(workspace), workspace_text)
+            self.assertIn(str(source_root / "plugins/codex-personal-dev-kit/skills"), workspace_text)
+            self.assertIn(str(workspace_agents), global_text)
+            self.assertNotIn("{{", workspace_text)
+            self.assertNotIn("{{", workspace_metadata)
+            self.assertNotIn("{{", global_text)
+
+            second = self.run_script(
+                INSTALL_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                "-Source",
+                str(source_root),
+                "-Ref",
+                head,
+                "-Apply",
+            )
+            self.assertIn("keep-workspace", second.stdout)
+            self.assertEqual(workspace_text, workspace_agents.read_text(encoding="utf-8"))
+
+    def test_install_preserves_existing_workspace_agents(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, head = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "existing-workspace"
+            workspace.mkdir(parents=True)
+            custom_agents = "# My existing workspace rules\n\nKeep this exact text.\n"
+            (workspace / "AGENTS.md").write_text(custom_agents, encoding="utf-8")
+
+            self.run_script(
+                INSTALL_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                "-Source",
+                str(source_root),
+                "-Ref",
+                head,
+                "-Apply",
+            )
+
+            self.assertEqual(custom_agents, (workspace / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertIn(str(workspace / "AGENTS.md"), (codex_home / "AGENTS.md").read_text(encoding="utf-8"))
+
     def test_install_never_inspects_or_mutates_existing_subagent_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

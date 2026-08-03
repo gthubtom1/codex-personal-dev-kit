@@ -29,9 +29,6 @@ foreach ($path in @($codexHomePath, $workspacePath)) {
 }
 
 $workspaceAgents = Join-Path $workspacePath "AGENTS.md"
-if (-not (Test-Path -LiteralPath $workspaceAgents -PathType Leaf)) {
-    throw "Detailed workspace AGENTS.md was not found: $workspaceAgents"
-}
 $bootstrapKitRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $bootstrapRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $bootstrapKitRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($Source)) {
@@ -53,6 +50,16 @@ elseif (Test-Path -LiteralPath (Join-Path $resolvedSource "assets\standalone\AGE
 }
 else {
     throw "Local standalone Dev Kit checkout is missing the standalone AGENTS template: $resolvedSource"
+}
+$workspaceTemplateRoot = Join-Path $kitSourceRoot "assets\workspace-template"
+$requiredWorkspaceTemplatePaths = @(
+    (Join-Path $workspaceTemplateRoot "AGENTS.md"),
+    (Join-Path $workspaceTemplateRoot "workspace.json"),
+    (Join-Path $workspaceTemplateRoot ".codex\config.toml")
+)
+$missingWorkspaceTemplatePaths = @($requiredWorkspaceTemplatePaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+if ($missingWorkspaceTemplatePaths.Count -gt 0) {
+    throw "Local standalone Dev Kit checkout is missing workspace template files: $($missingWorkspaceTemplatePaths -join ', ')"
 }
 
 $git = Get-Command git -ErrorAction SilentlyContinue
@@ -99,6 +106,28 @@ $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $backupRoot = Join-Path $codexHomePath "backups\codex-dev-kit\$timestamp"
 $planned = New-Object System.Collections.Generic.List[object]
 $managedFileRecords = New-Object System.Collections.Generic.List[object]
+$workspaceName = Split-Path -Leaf $workspacePath
+$workspaceTargets = @(
+    [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "projects") },
+    [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "archives") },
+    [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath ".codex") },
+    [pscustomobject]@{ Type = "file"; Path = $workspaceAgents; Source = (Join-Path $workspaceTemplateRoot "AGENTS.md") },
+    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "workspace.json"); Source = (Join-Path $workspaceTemplateRoot "workspace.json") },
+    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath ".codex\config.toml"); Source = (Join-Path $workspaceTemplateRoot ".codex\config.toml") }
+)
+if (Test-Path -LiteralPath $workspacePath -PathType Leaf) {
+    throw "WorkspaceRoot points to a file instead of a directory: $workspacePath"
+}
+foreach ($target in $workspaceTargets) {
+    if ($target.Type -eq "directory" -and (Test-Path -LiteralPath $target.Path -PathType Leaf)) {
+        throw "Workspace directory target is occupied by a file: $($target.Path)"
+    }
+    if ($target.Type -eq "file" -and (Test-Path -LiteralPath $target.Path -PathType Container)) {
+        throw "Workspace file target is occupied by a directory: $($target.Path)"
+    }
+    $workspaceAction = if (Test-Path -LiteralPath $target.Path) { "keep-workspace" } else { "create-workspace" }
+    $planned.Add([pscustomobject]@{ Action = $workspaceAction; Path = $target.Path })
+}
 $oldManifestPath = Join-Path $codexHomePath "codex-dev-kit\managed-files.json"
 $oldManifest = $null
 if (Test-Path -LiteralPath $oldManifestPath -PathType Leaf) {
@@ -335,6 +364,26 @@ $endIndex = $currentAgents.IndexOf($endMarker, [System.StringComparison]::Ordina
 if ($startMarkerCount -eq 1 -and $endIndex -le $startIndex) {
     throw "Global AGENTS.md has Codex Dev Kit managed markers in the wrong order. Restore the file before installation: $agentsTarget"
 }
+
+if ($Apply) {
+    New-Item -ItemType Directory -Path $workspacePath -Force | Out-Null
+    foreach ($target in $workspaceTargets) {
+        if (Test-Path -LiteralPath $target.Path) {
+            continue
+        }
+        if ($target.Type -eq "directory") {
+            New-Item -ItemType Directory -Path $target.Path -Force | Out-Null
+            continue
+        }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $target.Path) -Force | Out-Null
+        $workspaceContent = [System.IO.File]::ReadAllText($target.Source)
+        $workspaceContent = $workspaceContent.Replace("{{WORKSPACE_NAME}}", $workspaceName)
+        $workspaceContent = $workspaceContent.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
+        $workspaceContent = $workspaceContent.Replace("{{DEV_KIT_SKILLS_ROOT}}", (Join-Path $kitSourceRoot "skills"))
+        [System.IO.File]::WriteAllText($target.Path, $workspaceContent, $utf8NoBom)
+    }
+}
+
 if ($startIndex -ge 0 -and $endIndex -gt $startIndex) {
     $afterEnd = $endIndex + $endMarker.Length
     $newline = if ($currentAgents.Contains("`r`n")) { "`r`n" } else { "`n" }
@@ -418,6 +467,9 @@ if (-not $Apply) {
 
 $requiredInstalledPaths = @(
     $agentsTarget,
+    $workspaceAgents,
+    (Join-Path $workspacePath "workspace.json"),
+    (Join-Path $workspacePath ".codex\config.toml"),
     (Join-Path $kitTargetRoot "VERSION"),
     (Join-Path $kitTargetRoot "source.json"),
     (Join-Path $kitTargetRoot "managed-files.json"),
@@ -489,7 +541,8 @@ if ($MigrateLegacy) {
 }
 
 Write-Host "Standalone Codex Dev Kit installed at $kitTargetRoot"
-Write-Host "No Plugin, global Hook, custom agent file, or config.toml change was installed."
+Write-Host "Detailed workspace instructions are available at $workspaceAgents"
+Write-Host "No Plugin, global Hook, custom agent file, or global config.toml change was installed."
 Write-Host "Backups of changed managed files, if any, are under $backupRoot"
 Write-Host "The Dev Kit does not install or merge any native subagent model, reasoning, concurrency, or enablement setting."
 Write-Host "Fully exit Codex Desktop and reopen it, then create a new task so the short global instructions and standalone Skills reload."

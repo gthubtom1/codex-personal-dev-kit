@@ -86,7 +86,7 @@ python -m unittest discover -s tests -p test_*.py -v
 
 ## 换电脑恢复
 
-仓库完整保存了系统源码、九个 Skills、运行时脚本、全局短版 `AGENTS.md` 模板、母目录详细版 `AGENTS.md` 模板、项目模板和验证测试。安装器会根据新电脑的真实用户名、Codex Home 和母目录路径生成本地文件，不需要复制旧电脑的 `C:\Users\Administrator` 路径。
+仓库完整保存了系统源码、九个 Skills、运行时脚本、全局短版 `AGENTS.md` 模板、母目录详细版 `AGENTS.md` 模板、项目模板和验证测试。即使母目录还是空的，安装器也会根据新电脑的真实用户名、Codex Home 和母目录路径创建详细母目录规则，再生成指向它的全局短版规则；不需要预先手工创建 `AGENTS.md`，也不会复制旧电脑的 `C:\Users\Administrator` 路径。
 
 推荐使用固定正式版本克隆，不使用缺少 Git 历史的 ZIP 作为长期安装源。新电脑上的零基础流程是：
 
@@ -103,7 +103,7 @@ python -m unittest discover -s tests -p test_*.py -v
 主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
-git clone --branch v0.2.4 --depth 1 <repository> codex-dev-kit
+git clone --branch v0.2.5 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 

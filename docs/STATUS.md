@@ -2,13 +2,13 @@
 
 ## Milestone
 
-The Codex Personal Dev Kit 0.2.4 is the clean-install correction for the v0.2.3 guarded operation set. It preserves fast-forward synchronization/linear integration, exact unstaging, integrated Worktree cleanup and exact-version Windows tool installation while permanently excluding Python cache artifacts from standalone installation.
+The Codex Personal Dev Kit 0.2.5 closes the blank-computer bootstrap gap: one fixed standalone checkout now creates the detailed mother-folder instructions and workspace skeleton before linking the short global AGENTS file to that real path.
 
 ## Working State
 
-- Source candidate: `codex-personal-dev-kit` version `0.2.4` on the current local branch.
+- Source candidate: `codex-personal-dev-kit` version `0.2.5` on the current local branch.
 - Mother folder: `D:\开发\AGENTS.md` contains the detailed system. Workspace and project templates do not write any native subagent model, reasoning, concurrency, enablement, or interruption setting; Codex official defaults and user-owned configuration remain authoritative.
-- Standalone installation writes the short global `AGENTS.md`, nine Skills, central explicit safety scripts, and project/workspace templates. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
+- Standalone installation can start from a nonexistent mother folder: preview reports the workspace plan without writing, while apply creates the detailed mother-folder `AGENTS.md`, `workspace.json`, `.codex/config.toml`, `projects/`, and `archives/`, then writes the linked short global `AGENTS.md`, nine Skills, central explicit safety scripts, and templates. Repeated installation is idempotent and existing mother-folder instructions/configuration are preserved. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
 - Installation records every fully managed Skill/runtime/template file and its SHA-256 hash in `managed-files.json`. Diagnosis detects missing or changed files; updates back up and remove only unchanged stale Dev Kit files while preserving user-modified stale files with a warning.
 - Legacy Plugin, custom-agent, and Dev Kit Hook detection remains only as an explicit migration/diagnostic path; it is not a runtime dependency.
 - Formal versions are recorded in `docs/VERSIONS.md`; the guard can mark the current verified checkpoint or safely backfill a verified ancestor during onboarding. Restoration creates a new checkpoint while preserving newer history, tags, and the complete index.
@@ -50,4 +50,4 @@ The Codex Personal Dev Kit 0.2.4 is the clean-install correction for the v0.2.3 
 
 ## Next Action
 
-Finish validation and create the guarded v0.2.4 local version, then reinstall standalone mode and verify the previously managed cache artifact is removed. Do not update GitHub until the user separately authorizes this new remote state change.
+After the v0.2.5 formal tag and authorized remote backup, validate one future computer migration from a fresh fixed-tag checkout and add regression coverage for any real discrepancy found there.
