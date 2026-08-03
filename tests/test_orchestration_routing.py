@@ -39,7 +39,7 @@ class NativeOrchestrationTests(unittest.TestCase):
             self.assertNotIn("task-tool-unsupported", text)
         self.assertIn("不传模型、推理强度或并发覆盖", skill)
         self.assertIn("确认", skill)
-        self.assertIn("readable", workspace)
+        self.assertIn("任务正文可读", workspace)
 
     def test_native_agents_are_not_replaced_by_visible_tasks_or_extensions(self):
         skill = (PLUGIN / "skills/orchestrate-codex-team/SKILL.md").read_text(encoding="utf-8")
@@ -52,8 +52,8 @@ class NativeOrchestrationTests(unittest.TestCase):
         workspace = (PLUGIN / "assets/workspace-template/AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("同一 checkout 默认只有主代理写入", skill)
         self.assertIn("任务正文缺失、不可读或范围错误", skill)
-        self.assertIn("one writer per checkout", workspace.lower())
-        self.assertIn("task text is readable", workspace.lower())
+        self.assertIn("一个 checkout 只有一个写入者", workspace)
+        self.assertIn("任务正文可读", workspace)
 
     def test_project_template_explicitly_reads_only_the_parent_rules_file(self):
         project = (PLUGIN / "assets/project-template/AGENTS.md").read_text(encoding="utf-8")

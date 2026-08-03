@@ -54,10 +54,11 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertNotIn("multi_agent", legacy_config)
 
             workspace = Path(directory) / "mother"
-            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace))
+            codex_home = Path(directory) / "codex-home"
+            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-CodexHome", str(codex_home))
             self.assertFalse(workspace.exists())
 
-            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
+            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-CodexHome", str(codex_home), "-Apply")
             self.assertTrue((workspace / "projects").is_dir())
             self.assertTrue((workspace / "archives").is_dir())
             self.assertFalse((workspace / ".git").exists())
@@ -66,13 +67,15 @@ class WorkspaceScriptTests(unittest.TestCase):
 
             agents = workspace / "AGENTS.md"
             agents_text = agents.read_text(encoding="utf-8")
-            self.assertIn("Existing-project development starts only after the user opens that exact project folder", agents_text)
+            self.assertIn("用户会在 Codex 中直接打开要开发的", agents_text)
             self.assertIn(str(workspace), agents_text)
             self.assertIn(str(SCRIPT_ROOT.parent / "skills"), agents_text)
+            self.assertIn(str(codex_home), agents_text)
             self.assertIn("<CodexHome>\\codex-dev-kit\\scripts\\bootstrap-project.ps1", agents_text)
-            self.assertIn("never guess from the Skill directory", agents_text)
+            self.assertIn("不得从 Skill 目录猜路径", agents_text)
             self.assertNotIn("{{WORKSPACE_ROOT}}", agents_text)
             self.assertNotIn("{{DEV_KIT_SKILLS_ROOT}}", agents_text)
+            self.assertNotIn("{{CODEX_HOME}}", agents_text)
             workspace_config = workspace / ".codex/config.toml"
             self.assertTrue(workspace_config.is_file())
             config_text = workspace_config.read_text(encoding="utf-8")
@@ -80,7 +83,7 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertNotIn("multi_agent", config_text)
             self.assertIn("goals = true", config_text)
             agents.write_text(agents.read_text(encoding="utf-8") + "\nCUSTOM-WORKSPACE-RULE\n", encoding="utf-8")
-            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
+            self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-CodexHome", str(codex_home), "-Apply")
             self.assertIn("CUSTOM-WORKSPACE-RULE", agents.read_text(encoding="utf-8"))
 
             self.run_script("create-project.ps1", "-WorkspaceRoot", str(workspace), "-ProjectName", "alpha")

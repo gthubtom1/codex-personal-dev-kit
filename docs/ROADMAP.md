@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-- Prepare a clean MIT-licensed v0.2.5 checkout whose standalone installer can bootstrap and link both AGENTS layers on a blank Windows computer.
-- Preserve existing workspace instructions and configuration while keeping preview and repeated installation idempotent.
+- Prepare a clean MIT-licensed v0.2.6 checkout whose canonical portable template exactly reconstructs the complete Chinese mother-folder rules.
+- Detect local/template AGENTS drift without overwriting or exposing custom rules, while retaining blank-install and idempotence guarantees.
 
 ## Next Milestone
 

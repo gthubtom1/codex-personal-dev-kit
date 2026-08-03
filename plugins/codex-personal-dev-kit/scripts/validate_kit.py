@@ -88,6 +88,26 @@ def main() -> int:
         or "不要在 `skills` 和 Skill 名称之间擅自插入 `.system`" in standalone_agents_text
     ):
         errors.append("Short standalone AGENTS template must define exact Skill path resolution")
+    workspace_agents = kit_root / "assets/workspace-template/AGENTS.md"
+    workspace_agents_text = workspace_agents.read_text(encoding="utf-8") if workspace_agents.is_file() else ""
+    required_workspace_tokens = {
+        "{{WORKSPACE_NAME}}",
+        "{{WORKSPACE_ROOT}}",
+        "{{DEV_KIT_SKILLS_ROOT}}",
+        "{{CODEX_HOME}}",
+    }
+    if not workspace_agents.is_file():
+        errors.append("Missing detailed mother-folder AGENTS template")
+    else:
+        missing_tokens = sorted(required_workspace_tokens - set(re.findall(r"\{\{[^}]+\}\}", workspace_agents_text)))
+        if missing_tokens:
+            errors.append("Detailed AGENTS template is missing portable tokens: " + ", ".join(missing_tokens))
+        for hardcoded in (r"D:\开发", r"C:\Users\Administrator"):
+            if hardcoded in workspace_agents_text:
+                errors.append(f"Detailed AGENTS template contains a machine-specific path: {hardcoded}")
+        for heading in ("## 1. 用户合同", "## 4. Skill 调度总表", "## 8. Git、检查点和回退（用户无需操作）", "## 12. Codex 桌面高级设置的零基础规则"):
+            if heading not in workspace_agents_text:
+                errors.append(f"Detailed AGENTS template is missing canonical section: {heading}")
     for config_path in (
         repo_root / ".codex/config.toml",
         kit_root / "assets/global-profile/config.fragment.toml",

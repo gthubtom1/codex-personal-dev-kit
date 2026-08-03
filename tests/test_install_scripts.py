@@ -56,10 +56,6 @@ class InstallScriptTests(unittest.TestCase):
         expected: int = 0,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
-        workspace.mkdir(parents=True, exist_ok=True)
-        agents = workspace / "AGENTS.md"
-        if not agents.exists():
-            agents.write_text("# Detailed workspace instructions\n", encoding="utf-8")
         return self.run_script(
             INSTALL_SCRIPT,
             "-CodexHome",
@@ -197,6 +193,15 @@ class InstallScriptTests(unittest.TestCase):
             workspace_text = workspace_agents.read_text(encoding="utf-8")
             workspace_metadata = (workspace / "workspace.json").read_text(encoding="utf-8")
             global_text = global_agents.read_text(encoding="utf-8")
+            expected_workspace_text = (
+                (source_root / "plugins/codex-personal-dev-kit/assets/workspace-template/AGENTS.md")
+                .read_text(encoding="utf-8")
+                .replace("{{WORKSPACE_NAME}}", workspace.name)
+                .replace("{{WORKSPACE_ROOT}}", str(workspace))
+                .replace("{{DEV_KIT_SKILLS_ROOT}}", str(source_root / "plugins/codex-personal-dev-kit/skills"))
+                .replace("{{CODEX_HOME}}", str(codex_home))
+            )
+            self.assertEqual(expected_workspace_text, workspace_text)
             self.assertIn(str(workspace), workspace_text)
             self.assertIn(str(source_root / "plugins/codex-personal-dev-kit/skills"), workspace_text)
             self.assertIn(str(workspace_agents), global_text)
@@ -229,7 +234,7 @@ class InstallScriptTests(unittest.TestCase):
             custom_agents = "# My existing workspace rules\n\nKeep this exact text.\n"
             (workspace / "AGENTS.md").write_text(custom_agents, encoding="utf-8")
 
-            self.run_script(
+            result = self.run_script(
                 INSTALL_SCRIPT,
                 "-CodexHome",
                 str(codex_home),
@@ -244,6 +249,30 @@ class InstallScriptTests(unittest.TestCase):
 
             self.assertEqual(custom_agents, (workspace / "AGENTS.md").read_text(encoding="utf-8"))
             self.assertIn(str(workspace / "AGENTS.md"), (codex_home / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertIn("preserve-custom-workspace", result.stdout)
+
+    def test_diagnose_reports_workspace_agents_template_drift_without_exposing_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, head = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "workspace"
+            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            private_rule = "PRIVATE-WORKSPACE-RULE-DO-NOT-PRINT"
+            agents = workspace / "AGENTS.md"
+            agents.write_text(agents.read_text(encoding="utf-8") + private_rule + "\n", encoding="utf-8")
+
+            diagnosis = self.run_script(
+                DIAGNOSE_SCRIPT,
+                "-CodexHome",
+                str(codex_home),
+                "-WorkspaceRoot",
+                str(workspace),
+                expected=1,
+            )
+            self.assertIn("Detailed AGENTS matches installed template", diagnosis.stdout)
+            self.assertIn("Workspace rules differ", diagnosis.stdout)
+            self.assertNotIn(private_rule, diagnosis.stdout)
 
     def test_install_never_inspects_or_mutates_existing_subagent_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

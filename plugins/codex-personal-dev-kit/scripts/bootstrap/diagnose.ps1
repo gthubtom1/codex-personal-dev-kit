@@ -66,6 +66,27 @@ if ($source -and $source.sourceType -eq "local") {
     }
 }
 
+$workspaceTemplatePath = Join-Path $kitRoot "assets\workspace-template\AGENTS.md"
+if ((Test-Path -LiteralPath $workspaceTemplatePath -PathType Leaf) -and (Test-Path -LiteralPath $workspaceAgents -PathType Leaf)) {
+    $workspaceName = Split-Path -Leaf $workspacePath
+    $devKitSkillsRoot = if ($source -and $source.sourceType -eq "local" -and -not [string]::IsNullOrWhiteSpace([string]$source.source)) {
+        Join-Path ([string]$source.source) "plugins\codex-personal-dev-kit\skills"
+    }
+    else {
+        Join-Path $codexHomePath "skills"
+    }
+    $expectedWorkspaceAgents = [System.IO.File]::ReadAllText($workspaceTemplatePath)
+    $expectedWorkspaceAgents = $expectedWorkspaceAgents.Replace("{{WORKSPACE_NAME}}", $workspaceName)
+    $expectedWorkspaceAgents = $expectedWorkspaceAgents.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
+    $expectedWorkspaceAgents = $expectedWorkspaceAgents.Replace("{{DEV_KIT_SKILLS_ROOT}}", $devKitSkillsRoot)
+    $expectedWorkspaceAgents = $expectedWorkspaceAgents.Replace("{{CODEX_HOME}}", $codexHomePath)
+    $actualWorkspaceAgents = [System.IO.File]::ReadAllText($workspaceAgents)
+    Add-Check "Detailed AGENTS matches installed template" ($actualWorkspaceAgents -eq $expectedWorkspaceAgents) $(if ($actualWorkspaceAgents -eq $expectedWorkspaceAgents) { "canonical rendered template" } else { "Workspace rules differ from the installed fixed template; reconcile deliberately before relying on GitHub recovery." })
+}
+else {
+    Add-Check "Detailed AGENTS matches installed template" $false $(if (-not (Test-Path -LiteralPath $workspaceTemplatePath -PathType Leaf)) { $workspaceTemplatePath } else { $workspaceAgents })
+}
+
 foreach ($name in @(
     "codex-development-assistant",
     "onboard-codex-project",

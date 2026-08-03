@@ -107,6 +107,11 @@ $backupRoot = Join-Path $codexHomePath "backups\codex-dev-kit\$timestamp"
 $planned = New-Object System.Collections.Generic.List[object]
 $managedFileRecords = New-Object System.Collections.Generic.List[object]
 $workspaceName = Split-Path -Leaf $workspacePath
+$workspaceAgentsContent = [System.IO.File]::ReadAllText((Join-Path $workspaceTemplateRoot "AGENTS.md"))
+$workspaceAgentsContent = $workspaceAgentsContent.Replace("{{WORKSPACE_NAME}}", $workspaceName)
+$workspaceAgentsContent = $workspaceAgentsContent.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
+$workspaceAgentsContent = $workspaceAgentsContent.Replace("{{DEV_KIT_SKILLS_ROOT}}", (Join-Path $kitSourceRoot "skills"))
+$workspaceAgentsContent = $workspaceAgentsContent.Replace("{{CODEX_HOME}}", $codexHomePath)
 $workspaceTargets = @(
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "projects") },
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "archives") },
@@ -125,7 +130,15 @@ foreach ($target in $workspaceTargets) {
     if ($target.Type -eq "file" -and (Test-Path -LiteralPath $target.Path -PathType Container)) {
         throw "Workspace file target is occupied by a directory: $($target.Path)"
     }
-    $workspaceAction = if (Test-Path -LiteralPath $target.Path) { "keep-workspace" } else { "create-workspace" }
+    $workspaceAction = if (-not (Test-Path -LiteralPath $target.Path)) {
+        "create-workspace"
+    }
+    elseif ($target.Path -eq $workspaceAgents -and [System.IO.File]::ReadAllText($target.Path) -ne $workspaceAgentsContent) {
+        "preserve-custom-workspace"
+    }
+    else {
+        "keep-workspace"
+    }
     $planned.Add([pscustomobject]@{ Action = $workspaceAction; Path = $target.Path })
 }
 $oldManifestPath = Join-Path $codexHomePath "codex-dev-kit\managed-files.json"
@@ -376,10 +389,16 @@ if ($Apply) {
             continue
         }
         New-Item -ItemType Directory -Path (Split-Path -Parent $target.Path) -Force | Out-Null
-        $workspaceContent = [System.IO.File]::ReadAllText($target.Source)
-        $workspaceContent = $workspaceContent.Replace("{{WORKSPACE_NAME}}", $workspaceName)
-        $workspaceContent = $workspaceContent.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
-        $workspaceContent = $workspaceContent.Replace("{{DEV_KIT_SKILLS_ROOT}}", (Join-Path $kitSourceRoot "skills"))
+        $workspaceContent = if ($target.Path -eq $workspaceAgents) {
+            $workspaceAgentsContent
+        }
+        else {
+            $templateContent = [System.IO.File]::ReadAllText($target.Source)
+            $templateContent = $templateContent.Replace("{{WORKSPACE_NAME}}", $workspaceName)
+            $templateContent = $templateContent.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
+            $templateContent = $templateContent.Replace("{{DEV_KIT_SKILLS_ROOT}}", (Join-Path $kitSourceRoot "skills"))
+            $templateContent.Replace("{{CODEX_HOME}}", $codexHomePath)
+        }
         [System.IO.File]::WriteAllText($target.Path, $workspaceContent, $utf8NoBom)
     }
 }
@@ -460,6 +479,10 @@ $manifest = [ordered]@{
 Set-ManagedTextFile -Target $oldManifestPath -Content ($manifest + [Environment]::NewLine)
 
 $planned | Format-Table -AutoSize
+$workspaceAgentsDrift = @($planned | Where-Object { $_.Action -eq "preserve-custom-workspace" -and $_.Path -eq $workspaceAgents })
+if ($workspaceAgentsDrift.Count -gt 0) {
+    Write-Warning "Existing detailed workspace AGENTS.md differs from this fixed Dev Kit template and was preserved. Reconcile it deliberately, then rerun diagnosis; the installer will not overwrite custom rules."
+}
 if (-not $Apply) {
     Write-Host "Preview only. Re-run with -Apply to install the short global AGENTS block, standalone Skills, central runtime, and templates."
     exit 0

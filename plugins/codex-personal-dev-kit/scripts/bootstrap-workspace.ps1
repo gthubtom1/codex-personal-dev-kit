@@ -1,12 +1,22 @@
 [CmdletBinding()]
 param(
     [string]$WorkspaceRoot = (Get-Location).Path,
+    [string]$CodexHome,
     [switch]$Apply
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "merge-codex-config.ps1")
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
+$codexHomePath = if (-not [string]::IsNullOrWhiteSpace($CodexHome)) {
+    [System.IO.Path]::GetFullPath($CodexHome)
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
+    [System.IO.Path]::GetFullPath($env:CODEX_HOME)
+}
+else {
+    [System.IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath("UserProfile")) ".codex"))
+}
 $filesystemRoot = [System.IO.Path]::GetPathRoot($workspacePath)
 if ($workspacePath.TrimEnd('\', '/') -eq $filesystemRoot.TrimEnd('\', '/')) {
     throw "Refusing to use a filesystem root as the workspace: $workspacePath"
@@ -79,6 +89,7 @@ foreach ($target in $targets) {
     $content = $content.Replace("{{WORKSPACE_NAME}}", $workspaceName)
     $content = $content.Replace("{{WORKSPACE_ROOT}}", $workspacePath)
     $content = $content.Replace("{{DEV_KIT_SKILLS_ROOT}}", $skillsRoot)
+    $content = $content.Replace("{{CODEX_HOME}}", $codexHomePath)
     [System.IO.File]::WriteAllText($target.Path, $content, $utf8NoBom)
 }
 
