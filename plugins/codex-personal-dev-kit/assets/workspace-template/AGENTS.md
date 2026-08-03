@@ -114,7 +114,7 @@ Methods may be adapted from `mattpocock/skills` for requirements, domain modelin
 - Branches and Worktrees exist only for real isolation, background work, or parallel writers.
 - Every verified vertical slice gets a local checkpoint through the guard-managed `checkpoint` command. It uses a one-time local Dev Kit identity and never changes the user's global Git identity.
 - If the user says “回到上一个版本”, “撤销刚才的开发”, or equivalent, protect unsaved work and use the reversible rollback command. It creates a new commit and preserves both versions.
-- Never automatically push, pull, merge, rebase, publish a tag/release, amend, rewrite history, use `reset --hard`, clean files, or discard unconfirmed changes. A verified user-accepted milestone may receive an immutable local semantic tag only through the guard-managed `version` command.
+- Default to local recovery. After the user explicitly authorizes an exact remote, current branch, and formal tags, Codex may use the guard-managed `publish` command to push only those refs and verify them. Never use raw/force push, pull, merge, rebase, publish a Release, amend, rewrite history, use `reset --hard`, clean files, delete remote refs, or discard unconfirmed changes. A verified user-accepted milestone may receive an immutable local semantic tag only through guard-managed `version`.
 - Keep routine checkpoints separate from formal product versions. Formal versions use `docs/VERSIONS.md` plus local `vX.Y.Z` tags; named restoration uses the guard-managed `restore-version` command and preserves newer history and the full version index.
 - Local Git is on-device recovery, not off-device backup. Remote backup is a separate user-approved setup.
 
@@ -178,9 +178,9 @@ Ask first:
 - Global Codex configuration, Skills installation, agents, Plugins, or system settings.
 - Remote messages, PRs, issues, Git remotes, or any external state change.
 
-Never automatic:
+Never raw, destructive, or unauthorized:
 
-- Push, pull, merge, rebase, remote tag/release, deploy, publish, production migration, infrastructure apply/destroy, history rewrite, destructive clean/reset, or deletion of unconfirmed work. Local formal-version tags are allowed only through the verified guard workflow.
+- Raw/force push, pull, merge, rebase, remote Release, deploy, publish, production migration, infrastructure apply/destroy, history rewrite, destructive clean/reset, remote-ref deletion, or deletion of unconfirmed work. Explicitly authorized exact branch/tag backup is allowed only through the verified guarded publisher; local formal-version tags are allowed only through the guarded version workflow.
 
 ## Completion Standard
 

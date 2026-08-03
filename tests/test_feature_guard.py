@@ -508,6 +508,71 @@ class FeatureGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(feature_guard.GuardError, "VERSION marker 2.0.0"):
             feature_guard.create_local_version(self.root, "v1.0.0")
 
+    def test_guarded_publish_requires_exact_authorization_and_pushes_only_formal_refs(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        checkpoint = feature_guard.create_checkpoint(self.root, "deliver public v1")
+        feature_guard.create_local_version(self.root, "v1.0.0")
+
+        with tempfile.TemporaryDirectory() as remote_directory:
+            remote = Path(remote_directory) / "remote.git"
+            initialized = subprocess.run(
+                ["git", "init", "--bare", str(remote)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            self.git("remote", "add", "origin", str(remote))
+
+            with self.assertRaisesRegex(feature_guard.GuardError, "confirmed remote URL"):
+                feature_guard.publish_authorized_refs(
+                    self.root,
+                    "origin",
+                    "main",
+                    ["v1.0.0"],
+                    str(remote) + "-wrong",
+                )
+
+            published = feature_guard.publish_authorized_refs(
+                self.root,
+                "origin",
+                "main",
+                ["v1.0.0"],
+                str(remote),
+            )
+            self.assertEqual(published, ["origin:main", "v1.0.0"])
+            remote_branch = subprocess.run(
+                ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            remote_tag = subprocess.run(
+                ["git", "--git-dir", str(remote), "rev-parse", "refs/tags/v1.0.0^{}"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(remote_branch.stdout.strip(), checkpoint)
+            self.assertEqual(remote_tag.stdout.strip(), checkpoint)
+
+            # Repeating the exact authorized publication is idempotent.
+            repeated = feature_guard.publish_authorized_refs(
+                self.root,
+                "origin",
+                "main",
+                ["v1.0.0"],
+                str(remote),
+            )
+            self.assertEqual(repeated, ["origin:main", "v1.0.0"])
+
     def test_rollback_refuses_unsaved_work_and_raw_git_revert(self) -> None:
         (self.root / "src/app.js").write_text("unsaved\n", encoding="utf-8")
         with self.assertRaisesRegex(feature_guard.GuardError, "unsaved changes"):

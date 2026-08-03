@@ -36,7 +36,7 @@ description: 在 Git、测试、审查和权限保护下实施功能、修复、
 
 先询问：生产依赖、付费服务、重大架构替换、数据库结构迁移、访问项目外数据、安装全局工具或修改全局 Codex 配置。
 
-禁止自动执行：push、pull、merge、rebase、远程 tag/release、deploy、包发布、生产迁移、基础设施 apply/destroy、强制 clean、`reset --hard` 和不可恢复数据操作。用户接受的正式里程碑允许通过 `feature_guard.py version` 创建本地语义版本标签；不得运行原始 `git tag`。
+禁止原始或未授权执行：`git push`、pull、merge、rebase、远程 release、deploy、包发布、生产迁移、基础设施 apply/destroy、强制 clean、`reset --hard` 和不可恢复数据操作。用户接受的正式里程碑允许通过 `feature_guard.py version` 创建本地语义版本标签；不得运行原始 `git tag`。用户明确授权精确远程、当前分支和正式标签后，由 AI 使用 `feature_guard.py publish` 完成受控远程备份，不把 Git 命令交给用户。
 
 ## 完成标准
 

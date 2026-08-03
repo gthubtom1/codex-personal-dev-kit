@@ -165,16 +165,16 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 - 普通检查点不等于产品版本。用户接受的完整里程碑更新 `docs/VERSIONS.md`，在同一个最终检查点中保存代码、测试和文档，再由 guarded `version` 创建本地 `vX.Y.Z` 标签。
 - 用户不记得编号时按版本索引中的能力描述定位候选；确认后用 guarded `restore-version` 创建新的恢复检查点，保留较新历史、标签和完整版本索引。
 - 不混入任务外的用户修改，不修改全局 Git 身份。
-- 本地 Git 提供回滚但不是异地备份。远程备份需要用户明确配置和执行。
-- 禁止自动 push、pull、merge、rebase、远程 tag/release、历史重写、强制 clean 和丢弃未确认工作。用户接受的完整里程碑可以通过 guard-managed `version` 创建不可移动的本地语义标签；普通检查点不创建标签。
+- 本地 Git 提供回滚但不是异地备份。远程备份需要用户明确授权目标 remote、当前 branch 和正式 tags；授权后由 AI 通过 guarded publisher 完成，不要求用户运行 Git。
+- Guarded publisher 要求干净且已验证的 Dev Kit 检查点、至少一个指向 HEAD 的正式标签、精确 remote URL、dry-run、atomic 精确 refspec 和远程回读验证。原始/force push、远程 ref 删除或移动、pull、merge、rebase、远程 Release、历史重写、强制 clean 和丢弃未确认工作仍禁止。
 
 ## 9. Permissions And Unattended Work
 
 自动：项目内读写、已有测试和构建、当前任务内的原生只读子代理、本地 Git 初始化和检查点、精炼文档更新。
 
-询问：生产依赖、付费服务、外部或隐私数据、重大架构替换、数据库结构迁移、全局 Codex 或系统工具变化。
+询问：生产依赖、付费服务、外部或隐私数据、重大架构替换、数据库结构迁移、全局 Codex 或系统工具变化，以及任何远程状态变化。明确授权后的精确 branch/tag 备份由 AI 自行执行。
 
-禁止自动：发布、部署、生产迁移、包发布、基础设施变更、远程 Git 集成和不可恢复数据操作。
+禁止原始、破坏性或未授权操作：raw/force push、pull/merge/rebase、Release、部署、生产迁移、包发布、基础设施变更、历史重写、远程 ref 删除和不可恢复数据操作。
 
 普通软件请求由全局 AGENTS 自动路由到入口 Skill。用户明确要求完成多步骤结果、做到可用、继续直到完成或无人值守时，入口 Skill 在范围明确后建立持久 Goal；用户不需要知道 Goal 这个词。Goal 和计划任务不扩大权限。
 
@@ -194,4 +194,4 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 - 文档保持可快速定位，没有无限追加历史。
 - Standalone Skills、安装/诊断脚本、显式安全脚本和原生 subagent 边界验证通过；仓库不安装 Plugin、项目生命周期 Hook 或自定义 Rules。
 - 新上下文的原生子代理能在不看到设计答案时正确执行典型场景，且不会被替换成用户可见任务。
-- 创建本地 Dev Kit Git 检查点，但不自动安装到全局、不 push、不发布。
+- 创建本地 Dev Kit Git 检查点；不自动安装到全局。只有用户明确授权时才通过 guarded publisher 做精确远程备份，不创建 Release 或部署。

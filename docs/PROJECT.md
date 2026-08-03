@@ -20,5 +20,5 @@ The primary user does not want to learn Git, Worktrees, task orchestration, test
 ## Non-Goals
 
 - Replacing product decisions that materially change cost, privacy, or outcome.
-- Automatic remote Git integration, publishing, deployment, production migrations, or infrastructure changes.
+- Unattended or raw remote Git integration, Release publishing, deployment, production migrations, or infrastructure changes. Explicitly authorized exact branch/tag backup through the guarded publisher is in scope.
 - Saving chat transcripts, reasoning logs, or permanent per-task reports as project memory.

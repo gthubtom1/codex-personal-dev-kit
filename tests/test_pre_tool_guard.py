@@ -33,6 +33,9 @@ class PreToolGuardTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_blocked(command)
 
+        push = pre_tool_guard.classify_command("git push origin main")
+        self.assertIn("feature_guard.py publish", push.reason)
+
     def test_blocks_publish_deploy_and_catastrophic_delete(self) -> None:
         for command in (
             "npm publish",
@@ -72,6 +75,23 @@ class PreToolGuardTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assert_blocked(command)
+
+    def test_blocked_high_risk_actions_do_not_delegate_raw_commands_to_beginner(self) -> None:
+        for command in (
+            "git pull origin main",
+            "git worktree remove ../old-worktree",
+            "gh release create v1.0.0",
+            "winget install Git.Git",
+            "pip install ruff",
+            "npm publish",
+        ):
+            with self.subTest(command=command):
+                decision = pre_tool_guard.classify_command(command)
+                self.assertTrue(decision.blocked)
+                reason = decision.reason.lower()
+                self.assertNotIn("perform it manually", reason)
+                self.assertNotIn("user must", reason)
+                self.assertNotIn("ask the user to", reason)
 
 
 if __name__ == "__main__":

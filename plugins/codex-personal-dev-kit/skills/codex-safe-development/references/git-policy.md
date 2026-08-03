@@ -33,9 +33,10 @@
 - 用户不记得版本号时，先按 `docs/VERSIONS.md` 的能力描述匹配，再用 `feature_guard.py versions` 核对真实标签；不要让用户选择 commit hash。
 - 指定版本恢复通过 `feature_guard.py restore-version --name vX.Y.Z` 创建新的恢复检查点，保留较新提交、标签和完整版本索引。
 
-## 禁止自动操作
+## 远程发布与禁止操作
 
-- push、pull、merge、rebase、远程 tag/release，以及原始 `git tag`。本地正式版本只能走 guard-managed `version`。
+- 默认不改变远程状态。用户用普通语言明确授权目标仓库、当前分支和正式版本后，由 AI 使用 `feature_guard.py publish` 精确推送一个分支和已验证的不可移动正式标签；必须先 dry-run、核对远程 URL，并在推送后验证远程 refs。
+- 原始 `git push`、force push、删除或移动远程 refs、远程 release、pull、merge、rebase，以及原始 `git tag` 仍禁止。受控发布不创建 GitHub Release、不部署，也不扩大到未授权分支或标签。
 - `commit --amend`、强制分支删除、filter-branch/filter-repo。
 - `reset --hard`、clean、restore 或 checkout 丢弃未确认修改。
 - 删除 Worktree、stash 或 reflog 中可能仍需恢复的内容。

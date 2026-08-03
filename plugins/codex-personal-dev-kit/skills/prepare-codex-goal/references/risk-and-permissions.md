@@ -14,11 +14,11 @@
 - 访问项目范围外文件、私密目录、外部系统、密钥或真实用户数据。
 - 重大架构替换、公共 API 破坏、数据库结构迁移或大规模数据回填。
 - 修改全局 Codex 配置、安装 Skills、Hooks、Rules、Agents 或其他系统设置。
-- 对外发送消息、创建 PR、修改远程 issue 或执行其他外部状态变更。
+- 对外发送消息、创建 PR、修改远程 issue、首次设置/改变 Git remote，或执行其他外部状态变更。已存在远程上的精确正式版本备份仍需用户明确授权目标 remote、branch 和 tags。
 
 ## 禁止自动执行
 
-- `git push`、pull、merge、rebase、远程 tag/release、强制分支删除或历史重写。经用户接受的本地正式版本标签由 guard-managed `version` 自动创建，不等于远程发布。
+- 原始 `git push`、force push、pull、merge、rebase、远程 release、删除/移动远程 refs、强制分支删除或历史重写。经用户接受的本地正式版本标签由 guard-managed `version` 创建；明确授权后的精确远程 branch/tag 备份只能由 guard-managed `publish` 执行。
 - `git reset --hard`、`git clean`、丢弃未确认的工作区修改。
 - release、deploy、包发布、生产迁移、基础设施 apply/destroy。
 - 删除生产数据、轮换密钥、关闭服务或不可恢复操作。

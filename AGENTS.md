@@ -10,7 +10,7 @@ This repository builds a beginner-first Codex development assistant. The user co
 - Protect accepted Dev Kit features before edits. Keep one source writer per checkout and use read-only subagents for independent exploration, review, and verification.
 - Treat Codex native subagents, user-visible tasks, Worktrees, the review pane, and Appshots as product capabilities to orchestrate, never as surfaces for this Dev Kit to replace or intercept.
 - Routine sequential development stays on the current branch. Every verified change must use the bundled guard-managed checkpoint before completion; branches are only for real isolation.
-- Do not modify or install into `~/.codex`, publish, push, release, or deploy unless the user explicitly asks.
+- Do not modify or install into `~/.codex`, change remote state, release, or deploy unless the user explicitly asks. When the user authorizes an exact branch/tag backup, use only the tested guarded publisher; never use raw/force push or delete remote refs.
 - Do not encode file-line thresholds. Judge structure by responsibility, coupling, testability, and change impact.
 - When debugging Skill availability, use the exact file locator exposed by the current task and never invent a `.system` prefix for standalone Skills; the runtime resolver is `scripts/resolve-skill.ps1`.
 

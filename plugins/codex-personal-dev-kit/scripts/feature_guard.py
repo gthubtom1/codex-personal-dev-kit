@@ -851,6 +851,109 @@ def list_local_versions(root: Path) -> list[tuple[str, str, str]]:
     return [(name, commit, subject) for _, name, commit, subject in versions]
 
 
+def _normalize_remote_url(value: str) -> str:
+    normalized = value.strip().replace("\\", "/").rstrip("/")
+    if normalized.lower().endswith(".git"):
+        normalized = normalized[:-4]
+    return normalized.lower()
+
+
+def _remote_refs(root: Path, remote: str) -> dict[str, str]:
+    result = _run_git(root, "ls-remote", "--heads", "--tags", remote)
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or result.stdout.strip() or f"Unable to inspect remote {remote}.")
+    refs: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split("\t", 1)
+        if len(parts) == 2:
+            refs[parts[1].strip()] = parts[0].strip()
+    return refs
+
+
+def publish_authorized_refs(
+    root: Path,
+    remote: str,
+    branch: str,
+    tags: Sequence[str],
+    confirmed_remote_url: str,
+) -> list[str]:
+    """Push one exact branch and immutable formal tags after explicit user authorization."""
+    head = _require_clean_version_operation(root)
+    _require_dev_kit_checkpoint(root, head)
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", remote):
+        raise GuardError("Use one explicit Git remote name such as origin.")
+    branch_check = _run_git(root, "check-ref-format", "--branch", branch)
+    if branch_check.returncode != 0:
+        raise GuardError(f"Invalid branch name for guarded publishing: {branch}")
+    current_branch = _run_git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if current_branch.returncode != 0 or current_branch.stdout.strip() != branch:
+        raise GuardError(f"Guarded publishing requires the currently checked out branch {branch}.")
+    branch_head = _run_git(root, "rev-parse", "--verify", f"refs/heads/{branch}")
+    if branch_head.returncode != 0 or branch_head.stdout.strip() != head:
+        raise GuardError("The selected branch does not point to the current verified checkpoint.")
+
+    remote_url_result = _run_git(root, "remote", "get-url", remote)
+    if remote_url_result.returncode != 0:
+        raise GuardError(f"Git remote was not found: {remote}")
+    actual_remote_url = remote_url_result.stdout.strip()
+    if not confirmed_remote_url.strip() or _normalize_remote_url(actual_remote_url) != _normalize_remote_url(confirmed_remote_url):
+        raise GuardError(
+            "The confirmed remote URL does not match the configured remote. "
+            f"Expected an exact confirmation for: {actual_remote_url}"
+        )
+
+    normalized_tags = [normalize_version(tag) for tag in _split_values(tags)]
+    if not normalized_tags:
+        raise GuardError("Guarded publishing requires at least one formal version tag.")
+    versions_path = root / VERSIONS_RELATIVE
+    versions_text = versions_path.read_text(encoding="utf-8", errors="replace") if versions_path.is_file() else ""
+    local_targets: dict[str, str] = {}
+    head_is_formal = False
+    for tag in normalized_tags:
+        if not re.search(rf"(?im)^\|\s*{re.escape(tag)}\s*\|", versions_text):
+            raise GuardError(f"Formal version {tag} is missing from docs/VERSIONS.md.")
+        object_type = _run_git(root, "cat-file", "-t", f"refs/tags/{tag}")
+        if object_type.returncode != 0 or object_type.stdout.strip() != "tag":
+            raise GuardError(f"{tag} must be an annotated formal tag created by the guarded version command.")
+        target = _run_git(root, "rev-parse", f"refs/tags/{tag}^{{commit}}")
+        if target.returncode != 0:
+            raise GuardError(f"Unable to resolve local formal version {tag}.")
+        target_commit = target.stdout.strip()
+        _require_dev_kit_checkpoint(root, target_commit)
+        ancestor = _run_git(root, "merge-base", "--is-ancestor", target_commit, head)
+        if ancestor.returncode != 0:
+            raise GuardError(f"Formal version {tag} is not in the current branch history.")
+        local_targets[tag] = target_commit
+        head_is_formal = head_is_formal or target_commit == head
+    if not head_is_formal:
+        raise GuardError("At least one authorized formal version tag must point to the current branch checkpoint.")
+
+    before = _remote_refs(root, remote)
+    for tag, target_commit in local_targets.items():
+        remote_target = before.get(f"refs/tags/{tag}^{{}}") or before.get(f"refs/tags/{tag}")
+        if remote_target and remote_target != target_commit:
+            raise GuardError(f"Remote tag {tag} already exists at a different checkpoint and will not be moved.")
+
+    refspecs = [f"refs/heads/{branch}:refs/heads/{branch}"] + [
+        f"refs/tags/{tag}:refs/tags/{tag}" for tag in normalized_tags
+    ]
+    dry_run = _run_git(root, "push", "--dry-run", "--porcelain", "--atomic", remote, *refspecs)
+    if dry_run.returncode != 0:
+        raise GuardError(dry_run.stderr.strip() or dry_run.stdout.strip() or "Guarded publish dry-run failed.")
+    pushed = _run_git(root, "push", "--porcelain", "--atomic", remote, *refspecs)
+    if pushed.returncode != 0:
+        raise GuardError(pushed.stderr.strip() or pushed.stdout.strip() or "Guarded publish failed.")
+
+    after = _remote_refs(root, remote)
+    if after.get(f"refs/heads/{branch}") != head:
+        raise GuardError("Remote branch verification failed after publishing.")
+    for tag, target_commit in local_targets.items():
+        remote_target = after.get(f"refs/tags/{tag}^{{}}") or after.get(f"refs/tags/{tag}")
+        if remote_target != target_commit:
+            raise GuardError(f"Remote verification failed for formal version {tag}.")
+    return [f"{remote}:{branch}", *normalized_tags]
+
+
 def restore_local_version(root: Path, version: str, message: str | None = None) -> str:
     normalized = normalize_version(version)
     current_head = _require_clean_version_operation(root)
@@ -1503,7 +1606,7 @@ def _is_guard_command(command: str) -> bool:
         return False
     return tokens[script_index + 1].lower() in {
         "start", "status", "stage", "verify", "complete", "checkpoint", "rollback",
-        "version", "versions", "restore-version", "reopen", "allow-delete", "cancel", "close",
+        "version", "versions", "restore-version", "publish", "reopen", "allow-delete", "cancel", "close",
     }
 
 
@@ -1761,6 +1864,13 @@ def main() -> int:
     restore_version.add_argument("--name", required=True)
     restore_version.add_argument("--message")
 
+    publish = subparsers.add_parser("publish", help="Push one explicitly authorized branch and formal version set")
+    publish.add_argument("--root", default=".")
+    publish.add_argument("--remote", required=True)
+    publish.add_argument("--branch", required=True)
+    publish.add_argument("--tag", action="append", required=True)
+    publish.add_argument("--confirm-remote-url", required=True)
+
     reopen = subparsers.add_parser("reopen", help="Reopen a verified contract before more edits")
     reopen.add_argument("--root", default=".")
 
@@ -1819,6 +1929,9 @@ def main() -> int:
         elif args.command == "restore-version":
             checkpoint_id = restore_local_version(root, args.name, args.message)
             print(f"Restored {normalize_version(args.name)} with recovery point: {checkpoint_id[:12]}")
+        elif args.command == "publish":
+            published = publish_authorized_refs(root, args.remote, args.branch, args.tag, args.confirm_remote_url)
+            print("Guarded remote publish verified: " + ", ".join(published))
         elif args.command == "reopen":
             print(_contract_summary(reopen_contract(root)))
         elif args.command == "allow-delete":

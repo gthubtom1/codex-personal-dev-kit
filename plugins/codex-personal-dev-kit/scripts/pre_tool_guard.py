@@ -114,7 +114,9 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
             return Decision(False, "")
         return Decision(True, "Blocked raw git tag mutation. Formal local versions must use feature_guard.py version so the tag matches a verified checkpoint and docs/VERSIONS.md.")
     if subcommand in {"push", "pull", "merge", "rebase", "clean", "restore", "filter-branch", "filter-repo"}:
-        return Decision(True, f"Blocked automatic git {subcommand}. Keep work local and let the user perform this operation manually.")
+        if subcommand == "push":
+            return Decision(True, "Blocked raw git push. After explicit user authorization, use feature_guard.py publish with the exact remote URL, branch, and formal tags.")
+        return Decision(True, f"Blocked raw git {subcommand}. This operation needs an explicit, tested guarded workflow; do not hand the raw Git command to a beginner.")
     if subcommand == "reset" and any(arg in {"--hard", "--merge", "--keep"} for arg in lowered_args):
         return Decision(True, "Blocked destructive git reset. Use a new branch or reversible commit instead.")
     if subcommand == "commit" and "--amend" in lowered_args:
@@ -128,7 +130,7 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
     if subcommand == "stash" and lowered_args and lowered_args[0] in {"drop", "clear"}:
         return Decision(True, "Blocked deletion of Git stash recovery data.")
     if subcommand == "worktree" and lowered_args and lowered_args[0] in {"remove", "prune"}:
-        return Decision(True, "Blocked automatic Worktree removal. Archive and remove it manually after review.")
+        return Decision(True, "Blocked raw Worktree removal. A guarded cleanup must first prove the Worktree is clean, integrated, and has no unique recovery data; do not hand this command to a beginner.")
     if subcommand == "reflog" and lowered_args and lowered_args[0] in {"delete", "expire"}:
         return Decision(True, "Blocked deletion of Git reflog recovery history.")
     if subcommand == "gc" and any(arg.startswith("--prune") for arg in lowered_args):
@@ -155,33 +157,33 @@ def _classify_external(tokens: Sequence[str]) -> Decision:
     if base == "yarn" and args[:1] == ["dlx"]:
         return _classify_tokens(tokens[2:])
     if base in {"python", "python3", "py"} and len(args) >= 3 and args[0] == "-m" and args[1] == "twine" and args[2] == "upload":
-        return Decision(True, "Blocked package upload. Build and verify artifacts locally; publish manually.")
+        return Decision(True, "Blocked raw package upload. Publishing requires separate explicit authorization and a tested guarded release workflow.")
 
     if base in {"winget", "choco", "scoop"} and any(arg in {"install", "upgrade", "update"} for arg in args[:4]):
-        return Decision(True, "Blocked automatic global software installation or upgrade. Ask the user to run the reviewed command manually.")
+        return Decision(True, "Blocked raw global software installation or upgrade. Stop and request authorization with scope, source, version, rollback, and necessity; do not delegate the command to a beginner.")
     if base in {"npm", "pnpm", "yarn", "bun"} and any(arg in {"install", "i", "add"} for arg in args[:4]) and any(arg in {"-g", "--global"} for arg in args):
-        return Decision(True, "Blocked automatic global JavaScript package installation. Prefer a project-local dependency or ask the user to install it manually.")
+        return Decision(True, "Blocked raw global JavaScript package installation. Prefer a project-local dependency; otherwise request scoped authorization and keep execution with the assistant.")
     if base == "yarn" and args[:2] == ["global", "add"]:
         return Decision(True, "Blocked automatic global JavaScript package installation.")
     if base in {"pip", "pip3", "pipx"} and any(arg in {"install", "upgrade", "uninstall"} for arg in args[:4]):
-        return Decision(True, "Blocked ambiguous system-level Python package installation. Use an explicit project virtual environment or ask the user to install it manually.")
+        return Decision(True, "Blocked ambiguous system-level Python package installation. Use an explicit project virtual environment or request scoped authorization; do not hand the command to a beginner.")
     if base in {"python", "python3", "py"} and len(args) >= 3 and args[:2] == ["-m", "pip"] and any(arg in {"install", "uninstall"} for arg in args[2:6]):
         explicit_venv = "/.venv/" in executable or "/venv/" in executable
         if not explicit_venv:
             return Decision(True, "Blocked Python package installation outside an explicit project virtual environment.")
 
     if base == "gh" and (args[:2] == ["pr", "merge"] or args[:1] == ["release"] or args[:2] == ["repo", "delete"]):
-        return Decision(True, "Blocked remote GitHub mutation. Prepare local evidence and let the user perform it manually.")
+        return Decision(True, "Blocked raw GitHub mutation. It requires separate explicit authorization and a tested guarded PR/release/repository workflow; do not hand the command to a beginner.")
     if base in {"npm", "pnpm"} and args[:1] == ["publish"]:
-        return Decision(True, "Blocked package publishing. The user must publish manually.")
+        return Decision(True, "Blocked raw package publishing. It requires separate explicit authorization and a tested guarded release workflow.")
     if base == "yarn" and (args[:2] == ["npm", "publish"] or args[:1] == ["publish"]):
-        return Decision(True, "Blocked package publishing. The user must publish manually.")
+        return Decision(True, "Blocked raw package publishing. It requires separate explicit authorization and a tested guarded release workflow.")
     if base in {"cargo", "gem"} and args[:1] in (["publish"], ["push"]):
-        return Decision(True, "Blocked package publishing. The user must publish manually.")
+        return Decision(True, "Blocked raw package publishing. It requires separate explicit authorization and a tested guarded release workflow.")
     if base == "twine" and args[:1] == ["upload"]:
-        return Decision(True, "Blocked package upload. The user must publish manually.")
+        return Decision(True, "Blocked raw package upload. It requires separate explicit authorization and a tested guarded release workflow.")
     if base == "docker" and args[:1] == ["push"]:
-        return Decision(True, "Blocked container image publishing. The user must push manually.")
+        return Decision(True, "Blocked raw container image publishing. It requires separate explicit authorization, immutable artifact identity, and a tested guarded release workflow.")
 
     blocked_prefixes = {
         "kubectl": {"apply", "delete", "replace", "patch", "rollout", "scale", "set"},
@@ -205,7 +207,7 @@ def _classify_external(tokens: Sequence[str]) -> Decision:
     if base == "gcloud" and "deploy" in args[:4]:
         return Decision(True, "Blocked automatic Google Cloud deployment.")
     if base in {"make", "task", "just"} and args and any(word in args[0] for word in ("deploy", "release", "publish", "prod-migrate", "infra-apply")):
-        return Decision(True, "Blocked release or deployment task. Run it manually after review.")
+        return Decision(True, "Blocked raw release or deployment task. It requires separate explicit authorization and a tested guarded environment-specific workflow.")
     if base in {"npm", "pnpm", "yarn", "bun"} and args[:1] == ["run"] and len(args) > 1 and any(word in args[1] for word in ("deploy", "release", "publish", "migrate:prod", "infra:apply")):
         return Decision(True, "Blocked release, production migration, or deployment script.")
     if base == "prisma" and args[:2] == ["migrate", "deploy"]:
