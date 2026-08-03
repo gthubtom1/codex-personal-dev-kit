@@ -954,6 +954,187 @@ def publish_authorized_refs(
     return [f"{remote}:{branch}", *normalized_tags]
 
 
+def sync_authorized_branch(
+    root: Path,
+    remote: str,
+    branch: str,
+    confirmed_remote_url: str,
+) -> str:
+    """Fetch and fast-forward one explicitly authorized current branch without merging divergence."""
+    head = _require_clean_version_operation(root)
+    _require_dev_kit_checkpoint(root, head)
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", remote):
+        raise GuardError("Use one explicit Git remote name such as origin.")
+    branch_check = _run_git(root, "check-ref-format", "--branch", branch)
+    if branch_check.returncode != 0:
+        raise GuardError(f"Invalid branch name for guarded synchronization: {branch}")
+    current_branch = _run_git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if current_branch.returncode != 0 or current_branch.stdout.strip() != branch:
+        raise GuardError(f"Guarded synchronization requires the currently checked out branch {branch}.")
+    remote_url_result = _run_git(root, "remote", "get-url", remote)
+    if remote_url_result.returncode != 0:
+        raise GuardError(f"Git remote was not found: {remote}")
+    actual_remote_url = remote_url_result.stdout.strip()
+    if not confirmed_remote_url.strip() or _normalize_remote_url(actual_remote_url) != _normalize_remote_url(confirmed_remote_url):
+        raise GuardError(
+            "The confirmed remote URL does not match the configured remote. "
+            f"Expected an exact confirmation for: {actual_remote_url}"
+        )
+
+    tracking_ref = f"refs/remotes/{remote}/{branch}"
+    fetched = _run_git(root, "fetch", "--no-tags", remote, f"refs/heads/{branch}:{tracking_ref}")
+    if fetched.returncode != 0:
+        raise GuardError(fetched.stderr.strip() or fetched.stdout.strip() or "Guarded synchronization fetch failed.")
+    remote_head_result = _run_git(root, "rev-parse", "--verify", tracking_ref)
+    if remote_head_result.returncode != 0:
+        raise GuardError(f"Remote branch was not found after fetch: {remote}/{branch}")
+    remote_head = remote_head_result.stdout.strip()
+    _require_dev_kit_checkpoint(root, remote_head)
+    if remote_head == head:
+        return "up-to-date"
+
+    remote_is_ancestor = _run_git(root, "merge-base", "--is-ancestor", remote_head, head)
+    if remote_is_ancestor.returncode == 0:
+        return "local-ahead"
+    local_is_ancestor = _run_git(root, "merge-base", "--is-ancestor", head, remote_head)
+    if local_is_ancestor.returncode != 0:
+        raise GuardError(
+            "The local and remote branches diverged. Guarded synchronization will not merge or rebase automatically; "
+            "preserve both lines and use a separately reviewed integration task."
+        )
+
+    advanced = _run_git(root, "merge", "--ff-only", tracking_ref)
+    if advanced.returncode != 0:
+        raise GuardError(advanced.stderr.strip() or advanced.stdout.strip() or "Fast-forward synchronization failed.")
+    after = _git_head(root)
+    if after != remote_head or _working_tree_status(root):
+        raise GuardError("Fast-forward synchronization did not leave the exact remote checkpoint in a clean worktree.")
+    _require_dev_kit_checkpoint(root, after)
+    return "fast-forwarded"
+
+
+def integrate_linear_branch(root: Path, source_branch: str) -> str:
+    """Fast-forward the current branch to one exact local guarded branch; refuse divergent histories."""
+    current_head = _require_clean_version_operation(root)
+    _require_dev_kit_checkpoint(root, current_head)
+    branch_check = _run_git(root, "check-ref-format", "--branch", source_branch)
+    if branch_check.returncode != 0:
+        raise GuardError(f"Invalid source branch for guarded integration: {source_branch}")
+    current_branch_result = _run_git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if current_branch_result.returncode != 0:
+        raise GuardError("Guarded integration requires a named current branch.")
+    current_branch = current_branch_result.stdout.strip()
+    if source_branch == current_branch:
+        raise GuardError("Choose a different local source branch to integrate.")
+    source_result = _run_git(root, "rev-parse", "--verify", f"refs/heads/{source_branch}")
+    if source_result.returncode != 0:
+        raise GuardError(f"The exact local source branch was not found: {source_branch}")
+    source_head = source_result.stdout.strip()
+    _require_dev_kit_checkpoint(root, source_head)
+    if source_head == current_head:
+        return "already-integrated"
+    source_is_ancestor = _run_git(root, "merge-base", "--is-ancestor", source_head, current_head)
+    if source_is_ancestor.returncode == 0:
+        return "already-integrated"
+    current_is_ancestor = _run_git(root, "merge-base", "--is-ancestor", current_head, source_head)
+    if current_is_ancestor.returncode != 0:
+        raise GuardError(
+            "The current and source branches diverged. Guarded integration will not create a merge commit or rebase; "
+            "preserve both branches and run a separately scoped conflict-resolution task."
+        )
+    advanced = _run_git(root, "merge", "--ff-only", source_branch)
+    if advanced.returncode != 0:
+        raise GuardError(advanced.stderr.strip() or advanced.stdout.strip() or "Guarded branch integration failed.")
+    after = _git_head(root)
+    if after != source_head or _working_tree_status(root):
+        raise GuardError("Guarded integration did not leave the exact source checkpoint in a clean worktree.")
+    _require_dev_kit_checkpoint(root, after)
+    return "fast-forwarded"
+
+
+def unstage_guarded_paths(root: Path, paths: Sequence[str]) -> dict:
+    """Remove only guard-staged paths from the index while preserving their working-tree content."""
+    contract = _read_contract(root)
+    if not contract or contract.get("state") != "open":
+        raise GuardError("Open or reopen the current change contract before unstaging task files.")
+    normalized = [_normalize_contract_path(root, value) for value in _split_values(paths)]
+    if not normalized:
+        raise GuardError("Unstage at least one explicit project-relative file path.")
+    declared = set(contract.get("stagedPaths", []))
+    missing = set(normalized) - declared
+    if missing:
+        raise GuardError("Only paths staged by the current guard may be unstaged: " + ", ".join(sorted(missing)))
+    previous_tree = _index_tree(root)
+    result = _run_git(root, "restore", "--staged", "--", *normalized)
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Git could not unstage the declared task paths.")
+    remaining = _staged_files(root)
+    unexpected = remaining - (declared - set(normalized))
+    if unexpected:
+        _run_git(root, "read-tree", previous_tree)
+        raise GuardError("The Git index changed outside the requested paths: " + ", ".join(sorted(unexpected)))
+    contract["state"] = "open"
+    contract["stagedPaths"] = sorted(remaining)
+    contract["verificationRuns"] = []
+    _clear_verification(contract)
+    _write_contract(root, contract)
+    return contract
+
+
+def _registered_worktrees(root: Path) -> dict[Path, dict[str, str]]:
+    result = _run_git(root, "worktree", "list", "--porcelain")
+    if result.returncode != 0:
+        raise GuardError(result.stderr.strip() or "Unable to inspect registered Git Worktrees.")
+    entries: dict[Path, dict[str, str]] = {}
+    current: dict[str, str] = {}
+    for line in [*result.stdout.splitlines(), ""]:
+        if not line.strip():
+            if current.get("worktree"):
+                entries[Path(current["worktree"]).resolve()] = dict(current)
+            current = {}
+            continue
+        key, _, value = line.partition(" ")
+        current[key] = value.strip()
+    return entries
+
+
+def remove_integrated_worktree(root: Path, worktree_path: str) -> str:
+    """Remove one registered Worktree only when it contains no files or commits needing recovery."""
+    current_head = _require_clean_version_operation(root)
+    target = Path(worktree_path).expanduser().resolve()
+    if target == root.resolve():
+        raise GuardError("The currently opened project Worktree cannot remove itself.")
+    worktrees = _registered_worktrees(root)
+    entry = worktrees.get(target)
+    if not entry:
+        raise GuardError(f"The exact registered Worktree was not found: {target}")
+    if "locked" in entry:
+        raise GuardError("The selected Worktree is locked and will not be removed automatically.")
+    status = _run_git(target, "status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching")
+    if status.returncode != 0:
+        raise GuardError(status.stderr.strip() or "Unable to inspect the selected Worktree.")
+    if status.stdout.strip():
+        raise GuardError("The selected Worktree contains modified, untracked, or ignored files and will not be removed.")
+    target_head = entry.get("HEAD") or entry.get("head")
+    if not target_head:
+        resolved = _run_git(target, "rev-parse", "HEAD")
+        target_head = resolved.stdout.strip() if resolved.returncode == 0 else ""
+    if not target_head:
+        raise GuardError("Unable to identify the selected Worktree checkpoint.")
+    integrated = _run_git(root, "merge-base", "--is-ancestor", target_head, current_head)
+    if integrated.returncode != 0:
+        raise GuardError("The selected Worktree has commits not contained in the current project history and will be preserved.")
+    removed = _run_git(root, "worktree", "remove", str(target))
+    if removed.returncode != 0:
+        raise GuardError(removed.stderr.strip() or removed.stdout.strip() or "Git refused the guarded Worktree removal.")
+    pruned = _run_git(root, "worktree", "prune", "--expire=now")
+    if pruned.returncode != 0:
+        raise GuardError(pruned.stderr.strip() or "Worktree metadata cleanup failed.")
+    if target in _registered_worktrees(root):
+        raise GuardError("The Worktree still appears in the Git registry after cleanup.")
+    return str(target)
+
+
 def restore_local_version(root: Path, version: str, message: str | None = None) -> str:
     normalized = normalize_version(version)
     current_head = _require_clean_version_operation(root)
@@ -1606,7 +1787,8 @@ def _is_guard_command(command: str) -> bool:
         return False
     return tokens[script_index + 1].lower() in {
         "start", "status", "stage", "verify", "complete", "checkpoint", "rollback",
-        "version", "versions", "restore-version", "publish", "reopen", "allow-delete", "cancel", "close",
+        "version", "versions", "restore-version", "publish", "sync", "integrate", "unstage", "remove-worktree",
+        "reopen", "allow-delete", "cancel", "close",
     }
 
 
@@ -1871,6 +2053,24 @@ def main() -> int:
     publish.add_argument("--tag", action="append", required=True)
     publish.add_argument("--confirm-remote-url", required=True)
 
+    sync = subparsers.add_parser("sync", help="Fetch and fast-forward one explicitly authorized current branch")
+    sync.add_argument("--root", default=".")
+    sync.add_argument("--remote", required=True)
+    sync.add_argument("--branch", required=True)
+    sync.add_argument("--confirm-remote-url", required=True)
+
+    integrate = subparsers.add_parser("integrate", help="Fast-forward the current branch to one exact local guarded branch")
+    integrate.add_argument("--root", default=".")
+    integrate.add_argument("--source-branch", required=True)
+
+    unstage = subparsers.add_parser("unstage", help="Unstage exact guard-owned paths without discarding their content")
+    unstage.add_argument("--root", default=".")
+    unstage.add_argument("--path", action="append", required=True)
+
+    remove_worktree = subparsers.add_parser("remove-worktree", help="Remove one clean Worktree whose commits are already integrated")
+    remove_worktree.add_argument("--root", default=".")
+    remove_worktree.add_argument("--path", required=True)
+
     reopen = subparsers.add_parser("reopen", help="Reopen a verified contract before more edits")
     reopen.add_argument("--root", default=".")
 
@@ -1932,6 +2132,18 @@ def main() -> int:
         elif args.command == "publish":
             published = publish_authorized_refs(root, args.remote, args.branch, args.tag, args.confirm_remote_url)
             print("Guarded remote publish verified: " + ", ".join(published))
+        elif args.command == "sync":
+            result = sync_authorized_branch(root, args.remote, args.branch, args.confirm_remote_url)
+            print(f"Guarded branch synchronization: {result}")
+        elif args.command == "integrate":
+            result = integrate_linear_branch(root, args.source_branch)
+            print(f"Guarded local branch integration: {result}")
+        elif args.command == "unstage":
+            contract = unstage_guarded_paths(root, args.path)
+            print("Remaining guard-staged paths: " + (", ".join(contract.get("stagedPaths", [])) or "none"))
+        elif args.command == "remove-worktree":
+            removed = remove_integrated_worktree(root, args.path)
+            print(f"Guarded Worktree removed: {removed}")
         elif args.command == "reopen":
             print(_contract_summary(reopen_contract(root)))
         elif args.command == "allow-delete":

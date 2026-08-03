@@ -166,15 +166,18 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 - 用户不记得编号时按版本索引中的能力描述定位候选；确认后用 guarded `restore-version` 创建新的恢复检查点，保留较新历史、标签和完整版本索引。
 - 不混入任务外的用户修改，不修改全局 Git 身份。
 - 本地 Git 提供回滚但不是异地备份。远程备份需要用户明确授权目标 remote、当前 branch 和正式 tags；授权后由 AI 通过 guarded publisher 完成，不要求用户运行 Git。
-- Guarded publisher 要求干净且已验证的 Dev Kit 检查点、至少一个指向 HEAD 的正式标签、精确 remote URL、dry-run、atomic 精确 refspec 和远程回读验证。原始/force push、远程 ref 删除或移动、pull、merge、rebase、远程 Release、历史重写、强制 clean 和丢弃未确认工作仍禁止。
+- Guarded publisher 要求干净且已验证的 Dev Kit 检查点、至少一个指向 HEAD 的正式标签、精确 remote URL、dry-run、atomic 精确 refspec 和远程回读验证。原始/force Git、远程 ref 删除或移动、分叉历史自动整合、远程 Release、历史重写、强制 clean 和丢弃未确认工作仍禁止。
+- Guarded synchronization separates safe linear movement from conflict resolution. `sync` fetches one exact authorized remote/current branch and permits only fast-forward; `integrate` accepts one exact local source branch and permits only fast-forward. Local-ahead and already-integrated states are idempotent; divergence never creates an unverified merge commit or rebase.
+- Guarded index repair unstages only exact paths recorded by the open change contract and preserves working content. Guarded Worktree cleanup requires a registered non-current path, no modified/untracked/ignored files, and a target commit already contained in current history; it never uses force or deletes the branch.
+- Guarded Windows tool installation lives inside the safe-development Skill. It requires explicit package ID/version/scope confirmation, uses only winget's named official source, refuses implicit upgrade/downgrade, and verifies the exact installed result.
 
 ## 9. Permissions And Unattended Work
 
 自动：项目内读写、已有测试和构建、当前任务内的原生只读子代理、本地 Git 初始化和检查点、精炼文档更新。
 
-询问：生产依赖、付费服务、外部或隐私数据、重大架构替换、数据库结构迁移、全局 Codex 或系统工具变化，以及任何远程状态变化。明确授权后的精确 branch/tag 备份由 AI 自行执行。
+询问：生产依赖、付费服务、外部或隐私数据、重大架构替换、数据库结构迁移、全局 Codex 或系统工具变化，以及任何远程状态变化。明确授权后的精确 branch/tag 备份、快进同步和固定版本 winget 首次安装由 AI 自行执行。
 
-禁止原始、破坏性或未授权操作：raw/force push、pull/merge/rebase、Release、部署、生产迁移、包发布、基础设施变更、历史重写、远程 ref 删除和不可恢复数据操作。
+禁止原始、破坏性或未授权操作：raw/force Git、分叉历史自动 merge/rebase、Release、部署、生产迁移、包发布、基础设施变更、历史重写、远程 ref 删除和不可恢复数据操作。已有 guarded path 不受此句阻止。
 
 普通软件请求由全局 AGENTS 自动路由到入口 Skill。用户明确要求完成多步骤结果、做到可用、继续直到完成或无人值守时，入口 Skill 在范围明确后建立持久 Goal；用户不需要知道 Goal 这个词。Goal 和计划任务不扩大权限。
 

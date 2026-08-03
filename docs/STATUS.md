@@ -2,11 +2,11 @@
 
 ## Milestone
 
-The Codex Personal Dev Kit 0.2.2 adds an explicitly authorized guarded remote backup path to the public MIT-licensed distribution. A fixed clean checkout contains both `AGENTS.md` templates, nine standalone Skills, the central runtime, project/workspace templates, tests, a beginner restore guide, formal-version recovery, diagnostics, and bounded third-party method attribution without shipping the old Plugin/Hook/custom-agent runtime.
+The Codex Personal Dev Kit 0.2.3 extends the guarded remote backup design with four beginner-safe execution paths: fast-forward synchronization/linear integration, exact unstaging, integrated Worktree cleanup, and exact-version Windows tool installation. The distribution remains standalone and does not ship the old Plugin/Hook/custom-agent runtime.
 
 ## Working State
 
-- Source candidate: `codex-personal-dev-kit` version `0.2.2` on the current local branch.
+- Source candidate: `codex-personal-dev-kit` version `0.2.3` on the current local branch.
 - Mother folder: `D:\开发\AGENTS.md` contains the detailed system. Workspace and project templates do not write any native subagent model, reasoning, concurrency, enablement, or interruption setting; Codex official defaults and user-owned configuration remain authoritative.
 - Standalone installation writes the short global `AGENTS.md`, nine Skills, central explicit safety scripts, and project/workspace templates. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
 - Installation records every fully managed Skill/runtime/template file and its SHA-256 hash in `managed-files.json`. Diagnosis detects missing or changed files; updates back up and remove only unchanged stale Dev Kit files while preserving user-modified stale files with a warning.
@@ -17,6 +17,9 @@ The Codex Personal Dev Kit 0.2.2 adds an explicitly authorized guarded remote ba
 - `docs/RESTORE.md` defines the supported new-computer path: fixed Git checkout, preview/apply installation, full Desktop restart, diagnostics, and separate project backups.
 - Formal-version creation verifies both `package.json.version` and a tracked root `VERSION` marker when present, preventing a Git tag from disagreeing with the distributed version.
 - Explicitly authorized remote backup now uses `feature_guard.py publish`: it requires a clean verified checkpoint, an exact matching remote URL, the checked-out branch, immutable documented formal tags, dry-run and atomic exact-ref push, and post-push remote verification. Raw/force push, remote-ref deletion, Release creation and deployment remain blocked.
+- Guarded `sync` fetches one exact authorized remote branch and only fast-forwards when history is linear; guarded `integrate` does the same for one exact local source branch. Divergence is preserved for a separately scoped conflict-resolution task.
+- Guarded `unstage` operates only on current-contract paths and preserves their working content. Guarded `remove-worktree` refuses current/locked/dirty/ignored/untracked Worktrees and any target with commits not already in the current history.
+- The safe-development Skill now bundles `install_global_tool.py`, which supports only explicitly confirmed winget package ID, exact version and scope, refuses implicit upgrades/downgrades, and verifies the installed version.
 
 ## Verified
 
@@ -42,8 +45,8 @@ The Codex Personal Dev Kit 0.2.2 adds an explicitly authorized guarded remote ba
 - Markdown anchor checking intentionally approximates common GitHub-style slugs; unusual renderer-specific extensions may still require manual review.
 - The current Codex task began before any future standalone update. A new task is required after an approved install so Codex reloads the short global instructions and Skills. Exact cross-model availability remains task- and desktop-version-dependent and cannot be guaranteed by repository configuration.
 - The public distribution uses MIT terms. Future direct copying or vendoring of third-party source would require a fresh license and attribution review beyond the current method-level acknowledgements.
-- Some raw commands remain intentionally blocked without a dedicated safe path. Dependency installation, Worktree cleanup, Git synchronization/integration and narrow restore operations should gain separate guarded workflows only after their invariants and rollback tests are defined; the assistant must not hand raw commands to the beginner as a workaround.
+- Complex divergent-history resolution, global-tool upgrade/downgrade, non-winget managers and production release/deployment remain outside these first guarded paths. They require separate invariants and tests; the assistant must not hand raw commands to the beginner as a workaround.
 
 ## Next Action
 
-Finish validation and the guarded v0.2.2 local version, synchronize the standalone installation, then use the authorized guarded publisher to verify remote `main`, `v0.2.0`, `v0.2.1`, and `v0.2.2` without creating a GitHub Release.
+Finish validation and create the guarded v0.2.3 local version, then synchronize the standalone installation. Do not update GitHub until the user separately authorizes this new remote state change.

@@ -10,7 +10,7 @@
 
 ## 必须先询问
 
-- 新增生产依赖、全局工具、外部付费服务或新账号。
+- 新增生产依赖、全局工具、外部付费服务或新账号。全局工具获批后应由 AI 使用固定 package/version/scope 的 guarded winget installer，而不是要求用户手动安装。
 - 访问项目范围外文件、私密目录、外部系统、密钥或真实用户数据。
 - 重大架构替换、公共 API 破坏、数据库结构迁移或大规模数据回填。
 - 修改全局 Codex 配置、安装 Skills、Hooks、Rules、Agents 或其他系统设置。
@@ -18,7 +18,7 @@
 
 ## 禁止自动执行
 
-- 原始 `git push`、force push、pull、merge、rebase、远程 release、删除/移动远程 refs、强制分支删除或历史重写。经用户接受的本地正式版本标签由 guard-managed `version` 创建；明确授权后的精确远程 branch/tag 备份只能由 guard-managed `publish` 执行。
+- 原始/force Git、远程 release、删除/移动远程 refs、强制分支删除或历史重写。经用户接受的正式标签、授权后的精确备份/快进同步、线性本地整合、撤销暂存和 Worktree 清理只能由对应 guard-managed command 执行；分叉历史不自动 merge/rebase。
 - `git reset --hard`、`git clean`、丢弃未确认的工作区修改。
 - release、deploy、包发布、生产迁移、基础设施 apply/destroy。
 - 删除生产数据、轮换密钥、关闭服务或不可恢复操作。

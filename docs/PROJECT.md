@@ -16,6 +16,7 @@ The primary user does not want to learn Git, Worktrees, task orchestration, test
 - Regression protection, local recovery points, concise project facts, and Codex-native configuration without replacing native agents or adding lifecycle Hooks/Rules.
 - A fixed, clean GitHub distribution that can reconstruct both AGENTS layers, standalone Skills, the central runtime, templates, and diagnostics on another Windows computer.
 - Public MIT-licensed distribution with bounded attribution for acknowledged external method sources and no bundled private configuration or project data.
+- Guarded beginner-safe paths for exact remote backup/synchronization, linear local integration, index correction, Worktree cleanup, and approved Windows tool installation.
 
 ## Non-Goals
 

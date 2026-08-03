@@ -1,6 +1,6 @@
 ---
 name: codex-safe-development
-description: 在 Git、测试、审查和权限保护下实施功能、修复、重构或配置变更，并创建本地分支和检查点提交。用户要求写代码、修 bug、重构、添加测试、修改依赖、数据库迁移、发布准备，或希望 AI 自动开发但可回滚时使用。
+description: 在 Git、测试、审查和权限保护下实施功能、修复、重构或配置变更，并创建本地检查点。用户要求写代码、修 bug、重构、添加测试、修改依赖、数据库迁移、发布准备、远程同步、分支整合、撤销暂存、清理 Worktree、安装 Windows 开发工具，或希望 AI 自动开发但可回滚时使用。
 ---
 
 # Codex Safe Development
@@ -19,7 +19,8 @@ description: 在 Git、测试、审查和权限保护下实施功能、修复、
 8. 审查最终 diff 后，用 feature guard `stage` 明确暂存任务文件，并用 `verify` 让门禁实际运行验证命令、记录退出码、功能 ID、Git tree 和内容指纹。最后运行 `complete`；自由文本不能代替成功命令。
 9. 每个独立且验证通过的切片必须在结束前运行 bundled `feature_guard.py checkpoint` 创建本地回退点。该命令只提交已验证的精确快照，使用一次性本地 Dev Kit 身份，不修改用户的全局 Git 配置，也不创建版本分支。不要在托管项目中直接运行 `git commit`。
 10. 用户把一个完整阶段称为 v1.2、正式版本、新版本或要求以后能按版本找回时，读取 [local-versions.md](references/local-versions.md)。先更新 `docs/VERSIONS.md` 和项目版本字段，把它们包含在最终验证检查点中，再用 guard-managed `version` 创建仅本地的不可移动标签；普通检查点不得冒充正式版本。
-11. 更新真正发生变化的架构、状态或运行说明，然后调用 `$manage-project-continuity` 完成交接。
+11. 用户要求同步远程、整合分支、撤销暂存、清理 Worktree 或安装 Windows 全局工具时，读取 [guarded-operations.md](references/guarded-operations.md)，只使用对应的精确受控命令。
+12. 更新真正发生变化的架构、状态或运行说明，然后调用 `$manage-project-continuity` 完成交接。
 
 ## 高风险路由
 
@@ -32,11 +33,11 @@ description: 在 Git、测试、审查和权限保护下实施功能、修复、
 
 ## 权限边界
 
-可自动执行：项目内编辑、已有测试和构建、本地分支、本地 Worktree、本地检查点提交。
+可自动执行：项目内编辑、已有测试和构建、本地分支、本地 Worktree、本地检查点提交，以及满足专用不变量的精确撤销暂存和已整合 Worktree 清理。
 
-先询问：生产依赖、付费服务、重大架构替换、数据库结构迁移、访问项目外数据、安装全局工具或修改全局 Codex 配置。
+先询问：生产依赖、付费服务、重大架构替换、数据库结构迁移、访问项目外数据、远程同步、安装全局工具或修改全局 Codex 配置。用户授权全局工具后，由 AI 使用精确版本的 guarded winget installer，不要求用户执行命令。
 
-禁止原始或未授权执行：`git push`、pull、merge、rebase、远程 release、deploy、包发布、生产迁移、基础设施 apply/destroy、强制 clean、`reset --hard` 和不可恢复数据操作。用户接受的正式里程碑允许通过 `feature_guard.py version` 创建本地语义版本标签；不得运行原始 `git tag`。用户明确授权精确远程、当前分支和正式标签后，由 AI 使用 `feature_guard.py publish` 完成受控远程备份，不把 Git 命令交给用户。
+禁止原始或未授权执行：raw Git push/pull/merge/rebase/restore/Worktree removal、远程 release、deploy、包发布、生产迁移、基础设施 apply/destroy、强制 clean、`reset --hard` 和不可恢复数据操作。已授权的发布、快进同步、线性分支整合、精确撤销暂存和 Worktree 清理必须走 guarded commands；分叉历史不会自动 merge/rebase。
 
 ## 完成标准
 

@@ -496,6 +496,25 @@ class FeatureGuardTests(unittest.TestCase):
         )
         self.assertIsNone(guard_command)
 
+    def test_new_guarded_operations_are_not_blocked_as_raw_git_commands(self) -> None:
+        commands = (
+            f"{sys.executable} {FEATURE_GUARD_PATH} sync --root . --remote origin --branch main --confirm-remote-url example",
+            f"{sys.executable} {FEATURE_GUARD_PATH} integrate --root . --source-branch feature",
+            f"{sys.executable} {FEATURE_GUARD_PATH} unstage --root . --path src/app.js",
+            f"{sys.executable} {FEATURE_GUARD_PATH} remove-worktree --root . --path ../worktree",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                decision = self.hook(
+                    {
+                        "cwd": str(self.root),
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": command},
+                    }
+                )
+                self.assertIsNone(decision)
+
     def test_formal_version_must_match_a_tracked_version_marker(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
@@ -572,6 +591,145 @@ class FeatureGuardTests(unittest.TestCase):
                 str(remote),
             )
             self.assertEqual(repeated, ["origin:main", "v1.0.0"])
+
+    def test_guarded_sync_only_fast_forwards_exact_authorized_remote(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'local-v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        first_checkpoint = feature_guard.create_checkpoint(self.root, "prepare synchronized baseline")
+
+        with tempfile.TemporaryDirectory() as remote_directory:
+            remote = Path(remote_directory) / "remote.git"
+            peer = Path(remote_directory) / "peer"
+            subprocess.run(["git", "init", "--bare", str(remote)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.git("remote", "add", "origin", str(remote))
+            self.git("push", "origin", "main")
+            subprocess.run(["git", "clone", str(remote), str(peer)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (peer / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'remote-v2';\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(peer), "add", "src/app.js"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(peer), "-c", "user.name=Codex Dev Kit",
+                    "-c", "user.email=codex-dev-kit@local.invalid", "commit", "-m", "checkpoint: peer update",
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            subprocess.run(["git", "-C", str(peer), "push", "origin", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            with self.assertRaisesRegex(feature_guard.GuardError, "confirmed remote URL"):
+                feature_guard.sync_authorized_branch(self.root, "origin", "main", str(remote) + "-wrong")
+            result = feature_guard.sync_authorized_branch(self.root, "origin", "main", str(remote))
+            self.assertEqual(result, "fast-forwarded")
+            self.assertNotEqual(self.git("rev-parse", "HEAD").stdout.strip(), first_checkpoint)
+            self.assertEqual((self.root / "src/app.js").read_text(encoding="utf-8").split("'")[1], "remote-v2")
+
+            # A local-only guarded checkpoint and a remote-only guarded checkpoint must not be auto-merged.
+            self.start()
+            (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'local-diverged';\n", encoding="utf-8")
+            (self.root / "docs/STATUS.md").write_text(
+                "# User draft\n\n## Milestone\n\nLocal divergence is under test.\n\n## Working State\n\nThe local line has one guarded change.\n\n## Verified\n\nThe executable feature check is available.\n\n## Current Risks\n\nThe remote line may diverge.\n\n## Next Action\n\nConfirm synchronization refuses divergence.\n",
+                encoding="utf-8",
+            )
+            self.stage("src/app.js", "docs/STATUS.md")
+            self.verify("F-001", "F-002")
+            feature_guard.complete_contract(self.root, [], [])
+            feature_guard.create_checkpoint(self.root, "create local divergence")
+            (peer / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'remote-diverged';\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(peer), "add", "src/app.js"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(peer), "-c", "user.name=Codex Dev Kit",
+                    "-c", "user.email=codex-dev-kit@local.invalid", "commit", "-m", "checkpoint: remote divergence",
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            subprocess.run(["git", "-C", str(peer), "push", "origin", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            with self.assertRaisesRegex(feature_guard.GuardError, "diverged"):
+                feature_guard.sync_authorized_branch(self.root, "origin", "main", str(remote))
+
+    def test_guarded_local_integration_only_accepts_linear_checkpoint_history(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'main-guarded';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "prepare integration baseline")
+
+        self.git("switch", "-c", "feature-linear")
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'feature-linear';\n", encoding="utf-8")
+        self.git("add", "src/app.js")
+        self.git(
+            "-c", "user.name=Codex Dev Kit", "-c", "user.email=codex-dev-kit@local.invalid",
+            "commit", "-m", "checkpoint: linear feature",
+        )
+        feature_head = self.git("rev-parse", "HEAD").stdout.strip()
+        self.git("switch", "main")
+        self.assertEqual(feature_guard.integrate_linear_branch(self.root, "feature-linear"), "fast-forwarded")
+        self.assertEqual(self.git("rev-parse", "HEAD").stdout.strip(), feature_head)
+
+        self.git("switch", "-c", "feature-diverged")
+        (self.root / "feature.txt").write_text("feature line\n", encoding="utf-8")
+        self.git("add", "feature.txt")
+        self.git(
+            "-c", "user.name=Codex Dev Kit", "-c", "user.email=codex-dev-kit@local.invalid",
+            "commit", "-m", "checkpoint: divergent feature",
+        )
+        self.git("switch", "main")
+        (self.root / "main.txt").write_text("main line\n", encoding="utf-8")
+        self.git("add", "main.txt")
+        self.git(
+            "-c", "user.name=Codex Dev Kit", "-c", "user.email=codex-dev-kit@local.invalid",
+            "commit", "-m", "checkpoint: divergent main",
+        )
+        with self.assertRaisesRegex(feature_guard.GuardError, "diverged"):
+            feature_guard.integrate_linear_branch(self.root, "feature-diverged")
+
+    def test_guarded_unstage_preserves_working_content_and_contract_scope(self) -> None:
+        self.start()
+        changed = "export const acceleration = true;\nexport const exportFile = 'unstaged-content';\n"
+        (self.root / "src/app.js").write_text(changed, encoding="utf-8")
+        contract = self.stage("src/app.js")
+        self.assertIn("src/app.js", contract["stagedPaths"])
+        updated = feature_guard.unstage_guarded_paths(self.root, ["src/app.js"])
+        self.assertNotIn("src/app.js", updated["stagedPaths"])
+        self.assertEqual((self.root / "src/app.js").read_text(encoding="utf-8"), changed)
+        self.assertNotIn("src/app.js", feature_guard._staged_files(self.root))
+        with self.assertRaisesRegex(feature_guard.GuardError, "Only paths staged"):
+            feature_guard.unstage_guarded_paths(self.root, ["tests/verify_features.py"])
+
+    def test_guarded_worktree_cleanup_requires_clean_integrated_content(self) -> None:
+        integrated_path = self.root / ".." / "integrated-worktree"
+        unique_path = self.root / ".." / "unique-worktree"
+        ignored_path = self.root / ".." / "ignored-worktree"
+        self.git("worktree", "add", "-b", "integrated-cleanup", str(integrated_path))
+        removed = feature_guard.remove_integrated_worktree(self.root, str(integrated_path))
+        self.assertEqual(Path(removed), integrated_path.resolve())
+        self.assertFalse(integrated_path.exists())
+
+        self.git("worktree", "add", "-b", "unique-cleanup", str(unique_path))
+        (unique_path / "unique.txt").write_text("keep me\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(unique_path), "add", "unique.txt"], check=True)
+        subprocess.run(
+            ["git", "-C", str(unique_path), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "unique"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        with self.assertRaisesRegex(feature_guard.GuardError, "commits not contained"):
+            feature_guard.remove_integrated_worktree(self.root, str(unique_path))
+        self.git("worktree", "remove", "--force", str(unique_path))
+
+        self.git("worktree", "add", "-b", "ignored-cleanup", str(ignored_path))
+        (ignored_path / ".codex/current-change.json").write_text("{}\n", encoding="utf-8")
+        with self.assertRaisesRegex(feature_guard.GuardError, "modified, untracked, or ignored"):
+            feature_guard.remove_integrated_worktree(self.root, str(ignored_path))
+        self.git("worktree", "remove", "--force", str(ignored_path))
 
     def test_rollback_refuses_unsaved_work_and_raw_git_revert(self) -> None:
         (self.root / "src/app.js").write_text("unsaved\n", encoding="utf-8")

@@ -36,10 +36,10 @@
 ## 远程发布与禁止操作
 
 - 默认不改变远程状态。用户用普通语言明确授权目标仓库、当前分支和正式版本后，由 AI 使用 `feature_guard.py publish` 精确推送一个分支和已验证的不可移动正式标签；必须先 dry-run、核对远程 URL，并在推送后验证远程 refs。
-- 原始 `git push`、force push、删除或移动远程 refs、远程 release、pull、merge、rebase，以及原始 `git tag` 仍禁止。受控发布不创建 GitHub Release、不部署，也不扩大到未授权分支或标签。
+- 原始 `git push/pull/merge/rebase/restore`、force push、删除或移动远程 refs、远程 release，以及原始 `git tag` 仍禁止。授权远程同步只走 guarded `sync` 并限于当前分支 fast-forward；本地线性分支只走 guarded `integrate`；分叉历史保留双方并另行解决。
 - `commit --amend`、强制分支删除、filter-branch/filter-repo。
-- `reset --hard`、clean、restore 或 checkout 丢弃未确认修改。
-- 删除 Worktree、stash 或 reflog 中可能仍需恢复的内容。
+- `reset --hard`、clean 或 checkout 丢弃未确认修改。误暂存只走 guarded `unstage`，已提交恢复只走 `rollback`/`restore-version`。
+- 原始删除 Worktree、stash 或 reflog 中可能仍需恢复的内容。Worktree 只通过 guarded `remove-worktree` 清理已整合且完全无文件的目标。
 
 ## 零基础回退
 

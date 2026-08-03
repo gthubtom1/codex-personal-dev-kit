@@ -84,6 +84,8 @@ foreach ($relative in @("scripts\feature_guard.py", "scripts\pre_tool_guard.py",
     $path = Join-Path $kitRoot $relative
     Add-Check "Standalone runtime $relative" (Test-Path -LiteralPath $path -PathType Leaf) $path
 }
+$globalToolGuard = Join-Path $codexHomePath "skills\codex-safe-development\scripts\install_global_tool.py"
+Add-Check "Guarded Windows global-tool installer" (Test-Path -LiteralPath $globalToolGuard -PathType Leaf) $globalToolGuard
 $manifestPath = Join-Path $kitRoot "managed-files.json"
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     try {

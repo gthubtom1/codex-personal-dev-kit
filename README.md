@@ -41,6 +41,8 @@
 - 普通验证切片自动保存为本地检查点；只有用户接受的完整里程碑才进入 `docs/VERSIONS.md` 并得到不可移动的本地 `vX.Y.Z` 标签。用户可以用“有 Boss 但还没有某功能”之类的能力描述寻找版本，不必记编号或提交哈希。
 - 恢复正式版本会创建新的恢复检查点，保留后来版本、标签和完整版本索引；本地标签不是 GitHub Release、发布或异地备份。
 - 你明确说“把这个正式版本备份到这个 GitHub 仓库”后，助手会核对精确远程、当前分支和正式标签，通过受控 dry-run/atomic push 完成并验证；不会要求你运行 Git，也不会 force push、删除远程版本或创建 Release。
+- 简单 Git 同步和分支整合由受控快进完成；两边历史分叉时保留双方并单独处理，不会悄悄 merge/rebase。误暂存可以精确撤销且保留文件内容；旧 Worktree 只有在无文件、无唯一提交时才会清理。
+- 你明确同意安装某个 Windows 开发工具后，助手可以通过 winget 官方源核对固定版本和作用范围，自行安装并验证；不会自动升级、降级或改用未知安装器。
 - 子代理只使用 Codex 当前任务内的原生 collaboration 能力；不会用侧边栏新任务、聊天、跨任务消息或 Handoff 假装子代理。
 - Dev Kit 只编排原生 subagent、任务、Worktree、Git 审查面板和 Appshots，不拦截 `Agent` 工具，也不注册另一套代理接口。
 - 一个 Codex 任务只负责一个连贯成果；启动、恢复或压缩后先得到有上限的当前事实包，再从短状态、功能地图、相关架构、测试和 Git 恢复。
@@ -101,7 +103,7 @@ python -m unittest discover -s tests -p test_*.py -v
 主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
-git clone --branch v0.2.2 --depth 1 <repository> codex-dev-kit
+git clone --branch v0.2.3 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 

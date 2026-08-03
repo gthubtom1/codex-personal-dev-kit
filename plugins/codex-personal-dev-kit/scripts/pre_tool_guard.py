@@ -116,6 +116,12 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
     if subcommand in {"push", "pull", "merge", "rebase", "clean", "restore", "filter-branch", "filter-repo"}:
         if subcommand == "push":
             return Decision(True, "Blocked raw git push. After explicit user authorization, use feature_guard.py publish with the exact remote URL, branch, and formal tags.")
+        if subcommand == "pull":
+            return Decision(True, "Blocked raw git pull. After explicit authorization, use feature_guard.py sync for an exact remote/current-branch fetch and fast-forward-only update.")
+        if subcommand in {"merge", "rebase"}:
+            return Decision(True, "Blocked raw branch integration. Use feature_guard.py integrate for a clean linear fast-forward; divergent histories require a separately scoped conflict-resolution task.")
+        if subcommand == "restore":
+            return Decision(True, "Blocked raw git restore. Use feature_guard.py unstage for exact guard-staged paths, rollback/restore-version for committed recovery, or a separately protected content edit.")
         return Decision(True, f"Blocked raw git {subcommand}. This operation needs an explicit, tested guarded workflow; do not hand the raw Git command to a beginner.")
     if subcommand == "reset" and any(arg in {"--hard", "--merge", "--keep"} for arg in lowered_args):
         return Decision(True, "Blocked destructive git reset. Use a new branch or reversible commit instead.")
@@ -130,7 +136,7 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
     if subcommand == "stash" and lowered_args and lowered_args[0] in {"drop", "clear"}:
         return Decision(True, "Blocked deletion of Git stash recovery data.")
     if subcommand == "worktree" and lowered_args and lowered_args[0] in {"remove", "prune"}:
-        return Decision(True, "Blocked raw Worktree removal. A guarded cleanup must first prove the Worktree is clean, integrated, and has no unique recovery data; do not hand this command to a beginner.")
+        return Decision(True, "Blocked raw Worktree removal. Use feature_guard.py remove-worktree; it requires an exact registered path, no modified/untracked/ignored files, and no unique commits.")
     if subcommand == "reflog" and lowered_args and lowered_args[0] in {"delete", "expire"}:
         return Decision(True, "Blocked deletion of Git reflog recovery history.")
     if subcommand == "gc" and any(arg.startswith("--prune") for arg in lowered_args):
@@ -160,7 +166,9 @@ def _classify_external(tokens: Sequence[str]) -> Decision:
         return Decision(True, "Blocked raw package upload. Publishing requires separate explicit authorization and a tested guarded release workflow.")
 
     if base in {"winget", "choco", "scoop"} and any(arg in {"install", "upgrade", "update"} for arg in args[:4]):
-        return Decision(True, "Blocked raw global software installation or upgrade. Stop and request authorization with scope, source, version, rollback, and necessity; do not delegate the command to a beginner.")
+        if base == "winget" and "install" in args[:4]:
+            return Decision(True, "Blocked raw winget installation. After explicit package/version/scope authorization, use codex-safe-development/scripts/install_global_tool.py for an exact source check, install, and post-install verification.")
+        return Decision(True, "Blocked raw global software installation or upgrade. Use the guarded exact-version winget installer when available; upgrades and other managers need a separately tested workflow.")
     if base in {"npm", "pnpm", "yarn", "bun"} and any(arg in {"install", "i", "add"} for arg in args[:4]) and any(arg in {"-g", "--global"} for arg in args):
         return Decision(True, "Blocked raw global JavaScript package installation. Prefer a project-local dependency; otherwise request scoped authorization and keep execution with the assistant.")
     if base == "yarn" and args[:2] == ["global", "add"]:

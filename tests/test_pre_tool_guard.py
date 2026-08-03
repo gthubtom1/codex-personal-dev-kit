@@ -35,6 +35,10 @@ class PreToolGuardTests(unittest.TestCase):
 
         push = pre_tool_guard.classify_command("git push origin main")
         self.assertIn("feature_guard.py publish", push.reason)
+        self.assertIn("feature_guard.py sync", pre_tool_guard.classify_command("git pull origin main").reason)
+        self.assertIn("feature_guard.py integrate", pre_tool_guard.classify_command("git merge feature").reason)
+        self.assertIn("feature_guard.py unstage", pre_tool_guard.classify_command("git restore --staged app.js").reason)
+        self.assertIn("feature_guard.py remove-worktree", pre_tool_guard.classify_command("git worktree remove ../old").reason)
 
     def test_blocks_publish_deploy_and_catastrophic_delete(self) -> None:
         for command in (
@@ -92,6 +96,9 @@ class PreToolGuardTests(unittest.TestCase):
                 self.assertNotIn("perform it manually", reason)
                 self.assertNotIn("user must", reason)
                 self.assertNotIn("ask the user to", reason)
+
+        winget = pre_tool_guard.classify_command("winget install --id Git.Git --exact")
+        self.assertIn("install_global_tool.py", winget.reason)
 
 
 if __name__ == "__main__":
