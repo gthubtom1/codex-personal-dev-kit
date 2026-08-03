@@ -173,10 +173,13 @@ function Copy-ManagedTree {
     )
 
     foreach ($file in Get-ChildItem -LiteralPath $SourceRoot -Recurse -Force -File) {
+        $relative = $file.FullName.Substring($SourceRoot.Length).TrimStart('\', '/').Replace('\', '/')
+        if ($relative -match '(?i)(?:^|/)__pycache__(?:/|$)' -or $file.Extension.ToLowerInvariant() -in @('.pyc', '.pyo')) {
+            continue
+        }
         if ($Extensions.Count -gt 0 -and $file.Extension.ToLowerInvariant() -notin $Extensions) {
             continue
         }
-        $relative = $file.FullName.Substring($SourceRoot.Length).TrimStart('\', '/')
         Set-ManagedTextFile -Target (Join-Path $TargetRoot $relative) -Content ([System.IO.File]::ReadAllText($file.FullName)) -Track
     }
 }

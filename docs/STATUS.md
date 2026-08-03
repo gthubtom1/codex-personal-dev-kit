@@ -2,11 +2,11 @@
 
 ## Milestone
 
-The Codex Personal Dev Kit 0.2.3 extends the guarded remote backup design with four beginner-safe execution paths: fast-forward synchronization/linear integration, exact unstaging, integrated Worktree cleanup, and exact-version Windows tool installation. The distribution remains standalone and does not ship the old Plugin/Hook/custom-agent runtime.
+The Codex Personal Dev Kit 0.2.4 is the clean-install correction for the v0.2.3 guarded operation set. It preserves fast-forward synchronization/linear integration, exact unstaging, integrated Worktree cleanup and exact-version Windows tool installation while permanently excluding Python cache artifacts from standalone installation.
 
 ## Working State
 
-- Source candidate: `codex-personal-dev-kit` version `0.2.3` on the current local branch.
+- Source candidate: `codex-personal-dev-kit` version `0.2.4` on the current local branch.
 - Mother folder: `D:\开发\AGENTS.md` contains the detailed system. Workspace and project templates do not write any native subagent model, reasoning, concurrency, enablement, or interruption setting; Codex official defaults and user-owned configuration remain authoritative.
 - Standalone installation writes the short global `AGENTS.md`, nine Skills, central explicit safety scripts, and project/workspace templates. It does not install a Plugin, lifecycle Hook, custom Agent, or Rules file.
 - Installation records every fully managed Skill/runtime/template file and its SHA-256 hash in `managed-files.json`. Diagnosis detects missing or changed files; updates back up and remove only unchanged stale Dev Kit files while preserving user-modified stale files with a warning.
@@ -20,6 +20,7 @@ The Codex Personal Dev Kit 0.2.3 extends the guarded remote backup design with f
 - Guarded `sync` fetches one exact authorized remote branch and only fast-forwards when history is linear; guarded `integrate` does the same for one exact local source branch. Divergence is preserved for a separately scoped conflict-resolution task.
 - Guarded `unstage` operates only on current-contract paths and preserves their working content. Guarded `remove-worktree` refuses current/locked/dirty/ignored/untracked Worktrees and any target with commits not already in the current history.
 - The safe-development Skill now bundles `install_global_tool.py`, which supports only explicitly confirmed winget package ID, exact version and scope, refuses implicit upgrades/downgrades, and verifies the installed version.
+- Standalone tree copying excludes every `__pycache__` segment and `.pyc`/`.pyo` file. Managed-file reconciliation removes a previously installed unchanged cache artifact rather than carrying interpreter output into future computers.
 
 ## Verified
 
@@ -49,4 +50,4 @@ The Codex Personal Dev Kit 0.2.3 extends the guarded remote backup design with f
 
 ## Next Action
 
-Finish validation and create the guarded v0.2.3 local version, then synchronize the standalone installation. Do not update GitHub until the user separately authorizes this new remote state change.
+Finish validation and create the guarded v0.2.4 local version, then reinstall standalone mode and verify the previously managed cache artifact is removed. Do not update GitHub until the user separately authorizes this new remote state change.

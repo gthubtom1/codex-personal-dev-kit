@@ -119,6 +119,7 @@ class InstallScriptTests(unittest.TestCase):
             self.assertTrue((codex_home / "skills/research-and-reuse/SKILL.md").is_file())
             self.assertTrue((codex_home / "skills/integrate-codex-projects/SKILL.md").is_file())
             self.assertTrue((codex_home / "skills/codex-safe-development/scripts/install_global_tool.py").is_file())
+            self.assertFalse((codex_home / "skills/codex-safe-development/scripts/__pycache__").exists())
             self.assertTrue((codex_home / "codex-dev-kit/scripts/feature_guard.py").is_file())
             self.assertTrue((codex_home / "codex-dev-kit/source.json").is_file())
             self.assertFalse((codex_home / "config.toml").exists())
@@ -127,6 +128,8 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(source["mode"], "standalone")
             self.assertEqual(source["ref"], head)
             self.assertEqual(source["version"], (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip())
+            manifest = json.loads((codex_home / "codex-dev-kit/managed-files.json").read_text(encoding="utf-8"))
+            self.assertFalse(any("__pycache__" in item["path"] or item["path"].endswith((".pyc", ".pyo")) for item in manifest["files"]))
 
             second = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
             agent_lines = [line for line in second.stdout.splitlines() if str(agents) in line]

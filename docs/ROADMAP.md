@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-- Prepare a clean MIT-licensed v0.2.3 checkout with guarded fast-forward synchronization/integration, exact unstaging, Worktree cleanup and fixed-version winget installation in addition to v0.2.2 remote backup.
+- Prepare a clean MIT-licensed v0.2.4 checkout with the v0.2.3 guarded operations and cache-free standalone installation.
 - Keep ignored stress-test output and interpreter caches outside the distribution while retaining repeatable tests.
 
 ## Next Milestone
