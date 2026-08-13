@@ -1206,5 +1206,19 @@ class FeatureGuardTests(unittest.TestCase):
         self.assertTrue((self.root / ".codex/current-change.json").is_file())
 
 
+class RepositoryFeatureMapTests(unittest.TestCase):
+    """Read this repository's own feature map, not a temporary one built by a test.
+
+    Every other test writes the map it then parses, so nothing ever looked at
+    `docs/FEATURES.md` itself. A duplicate ID there makes `start` fail before it
+    does anything, and one reached a branch unnoticed for exactly that reason:
+    a green suite says nothing about a file no test opens.
+    """
+
+    def test_this_repositorys_own_feature_map_is_readable(self) -> None:
+        catalog = feature_guard.read_feature_catalog(REPO_ROOT)
+        self.assertTrue(catalog, "docs/FEATURES.md declares no features")
+
+
 if __name__ == "__main__":
     unittest.main()
