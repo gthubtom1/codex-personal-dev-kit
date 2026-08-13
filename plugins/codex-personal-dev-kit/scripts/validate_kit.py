@@ -41,11 +41,8 @@ def _unit_test_timeout_seconds() -> int:
 UNIT_TEST_TIMEOUT_SECONDS = _unit_test_timeout_seconds()
 
 
-def main() -> int:
-    kit_root = Path(__file__).resolve().parents[1]
-    repo_root = kit_root.parents[1]
+def _check_obsolete_artifacts(kit_root: Path, repo_root: Path) -> list[str]:
     errors: list[str] = []
-
     obsolete_paths = [
         repo_root / ".agents/plugins/marketplace.json",
         kit_root / ".codex-plugin",
@@ -56,7 +53,11 @@ def main() -> int:
     for path in obsolete_paths:
         if path.exists():
             errors.append(f"Obsolete Plugin/Hook/Rules artifact remains: {path}")
+    return errors
 
+
+def _check_required_files(kit_root: Path, repo_root: Path) -> list[str]:
+    errors: list[str] = []
     version_path = repo_root / "VERSION"
     if not version_path.is_file() or not version_path.read_text(encoding="utf-8").strip():
         errors.append(f"Missing standalone VERSION marker: {version_path}")
@@ -78,6 +79,11 @@ def main() -> int:
     for relative in ("LICENSE", "THIRD_PARTY_NOTICES.md", "docs/INDEX.md", "docs/RESTORE.md", "docs/VERSIONS.md"):
         if not (repo_root / relative).is_file():
             errors.append(f"Missing Dev Kit distribution document: {repo_root / relative}")
+    return errors
+
+
+def _check_agents_templates(kit_root: Path) -> list[str]:
+    errors: list[str] = []
     legacy_agents = list((kit_root / "assets/global-profile/agents").glob("codex-kit-*.toml"))
     if legacy_agents:
         errors.append("Standalone mode must not ship required custom agent files: " + ", ".join(path.name for path in legacy_agents))
@@ -112,6 +118,11 @@ def main() -> int:
         for heading in ("## 1. 用户合同", "## 4. Skill 调度总表", "## 8. Git、检查点和回退（用户无需操作）", "## 12. Codex 桌面高级设置的零基础规则"):
             if heading not in workspace_agents_text:
                 errors.append(f"Detailed AGENTS template is missing canonical section: {heading}")
+    return errors
+
+
+def _check_config_templates(kit_root: Path, repo_root: Path) -> list[str]:
+    errors: list[str] = []
     for config_path in (
         repo_root / ".codex/config.toml",
         kit_root / "assets/global-profile/config.fragment.toml",
@@ -129,16 +140,33 @@ def main() -> int:
             errors.append(f"Managed templates must not configure native subagents: {config_path}")
         if re.search(r"(?m)^model\s*=", config_text):
             errors.append(f"Main conversation model must remain user-selectable: {config_path}")
+    return errors
 
+
+def _check_skill_set(kit_root: Path) -> list[str]:
+    errors: list[str] = []
     skill_root = kit_root / "skills"
     actual_skills = {path.name for path in skill_root.iterdir() if path.is_dir()}
     if actual_skills != SKILLS:
         errors.append(f"Unexpected skill set: {sorted(actual_skills)}")
+    return errors
 
+
+def _check_skill_contents(kit_root: Path) -> list[str]:
+    errors: list[str] = []
+    skill_root = kit_root / "skills"
     for name in sorted(SKILLS):
         root = skill_root / name
         skill_path = root / "SKILL.md"
         yaml_path = root / "agents/openai.yaml"
+        # Missing required skill files are reported as errors, not left to raise
+        # an unguarded read_text and abort the whole validator mid-way.
+        if not skill_path.is_file():
+            errors.append(f"{name}: missing SKILL.md")
+            continue
+        if not yaml_path.is_file():
+            errors.append(f"{name}: missing agents/openai.yaml")
+            continue
         skill_text = skill_path.read_text(encoding="utf-8")
         yaml_text = yaml_path.read_text(encoding="utf-8")
         frontmatter = re.match(r"^---\n(.*?)\n---\n", skill_text, flags=re.DOTALL)
@@ -157,7 +185,11 @@ def main() -> int:
         for relative in re.findall(r"\]\((references/[^)]+)\)", skill_text):
             if not (root / relative).is_file():
                 errors.append(f"{name}: missing linked reference {relative}")
+    return errors
 
+
+def _check_placeholders(repo_root: Path) -> list[str]:
+    errors: list[str] = []
     text_suffixes = {".md", ".yaml", ".yml", ".json", ".toml", ".py", ".ps1", ".rules"}
     unresolved_marker = "[" + "TODO:"
     for path in repo_root.rglob("*"):
@@ -166,14 +198,22 @@ def main() -> int:
         text = path.read_text(encoding="utf-8", errors="replace")
         if unresolved_marker in text or re.search(r"(?m)^TODO:\s", text):
             errors.append(f"Unresolved placeholder in {path}")
+    return errors
 
+
+def _check_toml(kit_root: Path) -> list[str]:
+    errors: list[str] = []
     if tomllib is not None:
         for path in kit_root.rglob("*.toml"):
             try:
                 tomllib.loads(path.read_text(encoding="utf-8"))
             except Exception as exc:
                 errors.append(f"Invalid TOML {path}: {exc}")
+    return errors
 
+
+def _check_unit_tests(repo_root: Path) -> list[str]:
+    errors: list[str] = []
     test_command = [
         sys.executable,
         "-m",
@@ -203,7 +243,62 @@ def main() -> int:
     else:
         if tests.returncode != 0:
             errors.append("Unit tests failed:\n" + tests.stdout)
+    return errors
 
+
+def build_check_groups(kit_root: Path, repo_root: Path) -> list:
+    """The ordered, numbered structural check groups.
+
+    Each check is a discrete named group so a crash in one is reported as that
+    group aborting with the rest not run, instead of a bare traceback that
+    cannot be told apart from "everything passed".
+    """
+    return [
+        ("obsolete-artifacts", lambda: _check_obsolete_artifacts(kit_root, repo_root)),
+        ("required-files", lambda: _check_required_files(kit_root, repo_root)),
+        ("agents-templates", lambda: _check_agents_templates(kit_root)),
+        ("config-templates", lambda: _check_config_templates(kit_root, repo_root)),
+        ("skill-set", lambda: _check_skill_set(kit_root)),
+        ("skill-contents", lambda: _check_skill_contents(kit_root)),
+        ("placeholders", lambda: _check_placeholders(repo_root)),
+        ("toml", lambda: _check_toml(kit_root)),
+        ("unit-tests", lambda: _check_unit_tests(repo_root)),
+    ]
+
+
+def run_checks(groups) -> tuple[list[str], str]:
+    """Run each check group in order, accounting for coverage.
+
+    A validator that dies half-way through has not found nothing -- it has
+    simply never run the rest of its checks. Track how many groups completed
+    and, on an unexpected exception, which group aborted and how many never ran,
+    so a crash can never be mistaken for a clean pass.
+    """
+    errors: list[str] = []
+    total = len(groups)
+    done = 0
+    aborted_in: str | None = None
+    for name, check in groups:
+        try:
+            errors.extend(check())
+        except Exception as exc:
+            aborted_in = name
+            errors.append(f"Check group '{name}' aborted before finishing: {exc!r}")
+            break
+        done += 1
+    not_run = total - done
+    if aborted_in is not None:
+        coverage = f"COVERAGE: {done}/{total}, aborted in {aborted_in}, {not_run} not run"
+    else:
+        coverage = f"COVERAGE: {done}/{total}, {not_run} not run"
+    return errors, coverage
+
+
+def main() -> int:
+    kit_root = Path(__file__).resolve().parents[1]
+    repo_root = kit_root.parents[1]
+    errors, coverage = run_checks(build_check_groups(kit_root, repo_root))
+    print(coverage)
     if errors:
         print("\n".join(f"ERROR: {item}" for item in errors))
         return 1
