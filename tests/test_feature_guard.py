@@ -52,7 +52,7 @@ class FeatureGuardTests(unittest.TestCase):
         (self.root / "src").mkdir()
         (self.root / "AGENTS.md").write_text("# Test project\n", encoding="utf-8")
         (self.root / ".codex/config.toml").write_text('sandbox_mode = "workspace-write"\n', encoding="utf-8")
-        (self.root / ".gitignore").write_text(".codex/current-change.json\n", encoding="utf-8")
+        (self.root / ".gitignore").write_text(".codex/current-change.json\n.codex/write-lock.json\n", encoding="utf-8")
         (self.root / "docs/FEATURES.md").write_text(FEATURES, encoding="utf-8")
         (self.root / "docs/VERSIONS.md").write_text(
             "# Versions\n\n| Version | User-visible result | Verification | Status |\n| --- | --- | --- | --- |\n| v1.0.0 | Baseline export | suite:all-tests | recoverable |\n",

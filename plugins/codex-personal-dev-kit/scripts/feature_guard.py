@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import hashlib
 import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +23,12 @@ import worktree_layout
 
 
 CONTRACT_RELATIVE = Path(".codex/current-change.json")
+WRITE_LOCK_RELATIVE = Path(".codex/write-lock.json")
+# The primary reclaim path is "the holding process is gone", which is exact and
+# immediate. This age limit is only the backstop for cases that cannot be probed
+# (a holder on another machine, or a recycled process id). It must stay long
+# enough that a slow-but-alive writer is never evicted mid-change.
+WRITE_LOCK_MAX_AGE_SECONDS = 12 * 3600
 FEATURE_MAP_RELATIVE = Path("docs/FEATURES.md")
 FEATURE_MAP_DIRECTORY_RELATIVE = Path("docs/features")
 STATUS_RELATIVE = Path("docs/STATUS.md")
@@ -329,6 +338,11 @@ def is_critical_feature(feature: Feature) -> bool:
     return _is_critical(feature)
 
 
+def _is_write_lock_path(relative: str) -> bool:
+    """The guard's own lock is bookkeeping, never user work to be reported or fingerprinted."""
+    return relative.replace("\\", "/") == WRITE_LOCK_RELATIVE.as_posix()
+
+
 def _changed_files(root: Path, baseline_head: str | None) -> set[str]:
     files: set[str] = set()
     if baseline_head:
@@ -342,7 +356,7 @@ def _changed_files(root: Path, baseline_head: str | None) -> set[str]:
     untracked = _run_git(root, "ls-files", "--others", "--exclude-standard")
     if untracked.returncode == 0:
         files.update(line.strip().replace("\\", "/") for line in untracked.stdout.splitlines() if line.strip())
-    return files
+    return {name for name in files if not _is_write_lock_path(name)}
 
 
 def _deleted_files(root: Path, baseline_head: str | None) -> set[str]:
@@ -357,14 +371,16 @@ def _deleted_files(root: Path, baseline_head: str | None) -> set[str]:
     result = _run_git(root, "status", "--porcelain=v1")
     if result.returncode != 0:
         return set()
-    return {line[3:].strip().replace("\\", "/") for line in result.stdout.splitlines() if line[:2] in {" D", "D "}}
+    deleted = {line[3:].strip().replace("\\", "/") for line in result.stdout.splitlines() if line[:2] in {" D", "D "}}
+    return {name for name in deleted if not _is_write_lock_path(name)}
 
 
 def _staged_files(root: Path) -> set[str]:
     result = _run_git(root, "diff", "--cached", "--name-only", "--diff-filter=ACDMRTUXB", "--")
     if result.returncode != 0:
         raise GuardError(result.stderr.strip() or "Unable to inspect the Git index.")
-    return {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
+    staged = {line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()}
+    return {name for name in staged if not _is_write_lock_path(name)}
 
 
 def _index_tree(root: Path) -> str:
@@ -387,6 +403,8 @@ def _content_fingerprint(root: Path) -> str:
         raise GuardError("Unable to fingerprint untracked project content.")
     for raw in sorted(item for item in untracked.stdout.split(b"\0") if item):
         relative = raw.decode("utf-8", errors="surrogateescape")
+        if _is_write_lock_path(relative):
+            continue
         path = root / relative
         digest.update(raw)
         try:
@@ -499,6 +517,8 @@ def _worktree_fingerprint(root: Path) -> str:
     if untracked.returncode == 0:
         for raw in sorted(item for item in untracked.stdout.split(b"\0") if item):
             relative = raw.decode("utf-8", errors="surrogateescape")
+            if _is_write_lock_path(relative):
+                continue
             path = root / relative
             digest.update(raw)
             try:
@@ -534,6 +554,363 @@ def _write_contract(root: Path, contract: dict) -> None:
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _write_lock_path(root: Path) -> Path:
+    return root / WRITE_LOCK_RELATIVE
+
+
+def _windows_process_is_running(pid: int) -> bool | None:
+    """Probe a Windows process without touching it.
+
+    os.kill(pid, 0) must never be used here: on Windows CPython routes every
+    signal except CTRL_C_EVENT/CTRL_BREAK_EVENT to TerminateProcess, so the
+    "harmless existence check" that works on POSIX actually kills the process.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:  # pragma: no cover - Windows always ships ctypes
+        return None
+
+    synchronize = 0x00100000
+    query_limited_information = 0x1000
+    wait_timeout = 0x00000102
+    error_invalid_parameter = 87
+    error_access_denied = 5
+
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = kernel32.OpenProcess(synchronize | query_limited_information, False, pid)
+    except (AttributeError, OSError, ValueError):  # pragma: no cover - defensive
+        return None
+    if not handle:
+        code = ctypes.get_last_error()
+        if code == error_invalid_parameter:
+            return False
+        if code == error_access_denied:
+            return True
+        return None
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _process_is_running(pid: object) -> bool | None:
+    """True/False when the answer is trustworthy, None when it cannot be decided."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    if os.name == "nt":
+        return _windows_process_is_running(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return None
+    return True
+
+
+def _process_start_marker(pid: object) -> str | None:
+    """Best-effort process start stamp so a recycled process id is not mistaken for a live holder."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            query_limited_information = 0x1000
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+            handle = kernel32.OpenProcess(query_limited_information, False, pid)
+            if not handle:
+                return None
+            try:
+                creation = wintypes.FILETIME()
+                exit_time = wintypes.FILETIME()
+                kernel_time = wintypes.FILETIME()
+                user_time = wintypes.FILETIME()
+                ok = kernel32.GetProcessTimes(
+                    handle,
+                    ctypes.byref(creation),
+                    ctypes.byref(exit_time),
+                    ctypes.byref(kernel_time),
+                    ctypes.byref(user_time),
+                )
+                if not ok:
+                    return None
+                return f"{creation.dwHighDateTime}:{creation.dwLowDateTime}"
+            finally:
+                kernel32.CloseHandle(handle)
+        except (AttributeError, ImportError, OSError, ValueError):  # pragma: no cover - defensive
+            return None
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as handle:
+            fields = handle.read().rsplit(b")", 1)[1].split()
+        return fields[19].decode("ascii")
+    except (IndexError, OSError, UnicodeDecodeError):
+        return None
+
+
+def _lock_session_label() -> str:
+    for name in ("CODEX_WRITE_LOCK_SESSION", "CODEX_SESSION_ID", "CURSOR_SESSION_ID"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value[:120]
+    return ""
+
+
+def _writer_identity() -> dict:
+    """Identify the *writing session*, not this short-lived guard process.
+
+    Every guard command is its own process, so a process-id holder would be
+    reclaimed by the very next command and the lock would protect nothing. The
+    stable identity is the session: an explicit label when the caller supplies
+    one, otherwise the parent process (the session's shell), which also gives an
+    exact liveness probe for free.
+    """
+    label = _lock_session_label()
+    host = socket.gethostname()
+    parent = os.getppid()
+    marker = _process_start_marker(parent)
+    if label:
+        writer = f"label:{label}"
+    else:
+        writer = f"process:{host}:{parent}:{marker or 'unknown'}"
+    try:
+        user = getpass.getuser()
+    except Exception:  # pragma: no cover - getuser can fail on odd environments
+        user = ""
+    return {
+        "writer": writer,
+        "pid": parent,
+        "pidStartedAt": marker,
+        "host": host,
+        "user": user,
+        "session": label,
+    }
+
+
+def _new_write_lock(objective: str) -> dict:
+    stamp = _now()
+    epoch = int(time.time())
+    return {
+        "schemaVersion": 1,
+        "holder": _writer_identity(),
+        "objective": " ".join((objective or "").split())[:200],
+        "acquiredAt": stamp,
+        "acquiredEpoch": epoch,
+        "renewedAt": stamp,
+        "renewedEpoch": epoch,
+    }
+
+
+def _read_write_lock(root: Path) -> dict | None:
+    path = _write_lock_path(root)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("holder"), dict):
+        return None
+    return data
+
+
+def _store_write_lock(root: Path, lock: dict) -> None:
+    path = _write_lock_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(lock, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _lock_is_mine(lock: dict) -> bool:
+    holder = lock.get("holder") or {}
+    writer = holder.get("writer")
+    return bool(writer) and writer == _writer_identity()["writer"]
+
+
+def _lock_age_seconds(lock: dict) -> int | None:
+    renewed = lock.get("renewedEpoch", lock.get("acquiredEpoch"))
+    if not isinstance(renewed, int) or isinstance(renewed, bool):
+        return None
+    return max(0, int(time.time()) - renewed)
+
+
+def _humanize_seconds(seconds: int | None) -> str:
+    if seconds is None:
+        return "an unknown time"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, remainder = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {remainder}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m"
+
+
+def _write_lock_reclaim_reason(lock: dict) -> str | None:
+    """Why this lock may be taken over, or None while it must be respected."""
+    holder = lock.get("holder") or {}
+    if holder.get("host") == socket.gethostname():
+        pid = holder.get("pid")
+        running = _process_is_running(pid)
+        if running is False:
+            return f"its process (pid {pid}) is no longer running"
+        if running is True:
+            recorded = holder.get("pidStartedAt")
+            current = _process_start_marker(pid)
+            if recorded and current and recorded != current:
+                return f"pid {pid} now belongs to a different process than the one that took the lock"
+    age = _lock_age_seconds(lock)
+    if age is not None and age > WRITE_LOCK_MAX_AGE_SECONDS:
+        return f"it has not been renewed for {_humanize_seconds(age)}"
+    return None
+
+
+def describe_write_lock(lock: dict) -> str:
+    holder = lock.get("holder") or {}
+    who = f"session {holder.get('writer', 'unknown')} (pid {holder.get('pid', '?')} on {holder.get('host', '?')}"
+    who += f", user {holder['user']})" if holder.get("user") else ")"
+    held = _humanize_seconds(_lock_age_seconds(lock))
+    lines = [
+        f"  holder: {who}",
+        f"  held:   {held} (acquired {lock.get('acquiredAt', 'unknown')}, last activity {lock.get('renewedAt', 'unknown')})",
+    ]
+    if lock.get("objective"):
+        lines.append(f"  doing:  {lock['objective']}")
+    return "\n".join(lines)
+
+
+def _write_lock_conflict(root: Path, lock: dict, action: str) -> GuardError:
+    holder = lock.get("holder") or {}
+    message = (
+        f"Refusing to {action}: another writer already holds the write lock for this checkout.\n"
+        + describe_write_lock(lock)
+        + "\nOne checkout has exactly one writer. Give this task its own Worktree, or wait for that"
+        + " session to finish and release the lock."
+    )
+    if str(holder.get("writer", "")).startswith("process:") and not _lock_session_label():
+        # Without a session label the holder is identified by its shell. Tooling that
+        # starts a fresh shell per command looks like a new writer every time.
+        message += (
+            "\nBoth sides are being identified by their shell process. If your tooling starts a new"
+            " shell per command, set CODEX_WRITE_LOCK_SESSION to one stable id per session so the"
+            " lock can tell your commands apart from another writer's."
+        )
+    return GuardError(
+        message
+        + "\nIf you are certain that session is gone, run:"
+        + f" feature_guard.py force-unlock --root {root} --confirm-holder {holder.get('pid', '?')}"
+    )
+
+
+def acquire_write_lock(root: Path, objective: str = "", action: str = "start writing") -> dict:
+    """Take the checkout's exclusive write lock. Failure is always a hard error."""
+    candidate = _new_write_lock(objective)
+    path = _write_lock_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(candidate, ensure_ascii=False, indent=2) + "\n"
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        descriptor = None
+    except OSError as exc:
+        raise GuardError(f"Could not create the write lock at {WRITE_LOCK_RELATIVE.as_posix()}: {exc}") from exc
+    if descriptor is not None:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+        return candidate
+
+    existing = _read_write_lock(root)
+    if existing is None:
+        # An unreadable lock file cannot protect anything; replace it but say so.
+        _store_write_lock(root, candidate)
+        return candidate
+    if _lock_is_mine(existing):
+        return _renew_write_lock(root, existing, objective)
+    if _write_lock_reclaim_reason(existing) is None:
+        raise _write_lock_conflict(root, existing, action)
+
+    abandoned = (existing.get("holder") or {}).get("writer", "an unknown writer")
+    _store_write_lock(root, candidate)
+    confirmed = _read_write_lock(root)
+    if confirmed is None or not _lock_is_mine(confirmed):
+        raise GuardError(
+            f"Refusing to {action}: the abandoned write lock left by {abandoned} was reclaimed by another"
+            " writer at the same moment. Re-run this command."
+        )
+    return confirmed
+
+
+def _renew_write_lock(root: Path, lock: dict, objective: str = "") -> dict:
+    lock = dict(lock)
+    lock["renewedAt"] = _now()
+    lock["renewedEpoch"] = int(time.time())
+    if objective:
+        lock["objective"] = " ".join(objective.split())[:200]
+    _store_write_lock(root, lock)
+    return lock
+
+
+def assert_write_lock(root: Path, action: str) -> dict:
+    """Require that this process owns the checkout's write lock, then refresh it."""
+    existing = _read_write_lock(root)
+    if existing is None:
+        return acquire_write_lock(root, action=action)
+    if _lock_is_mine(existing):
+        return _renew_write_lock(root, existing)
+    if _write_lock_reclaim_reason(existing) is None:
+        raise _write_lock_conflict(root, existing, action)
+    return acquire_write_lock(root, action=action)
+
+
+def release_write_lock(root: Path) -> bool:
+    existing = _read_write_lock(root)
+    if existing is None:
+        _write_lock_path(root).unlink(missing_ok=True)
+        return False
+    if not _lock_is_mine(existing) and _write_lock_reclaim_reason(existing) is None:
+        raise _write_lock_conflict(root, existing, "release the write lock")
+    _write_lock_path(root).unlink(missing_ok=True)
+    return True
+
+
+def force_release_write_lock(root: Path, confirm_holder: str) -> dict:
+    existing = _read_write_lock(root)
+    if existing is None:
+        raise GuardError("No write lock is held for this checkout.")
+    holder = existing.get("holder") or {}
+    recorded = str(holder.get("pid", ""))
+    if str(confirm_holder).strip() != recorded:
+        raise GuardError(
+            "Force-unlock must name the current holder so it cannot be run reflexively.\n"
+            + describe_write_lock(existing)
+            + f"\nRe-run with --confirm-holder {recorded} only after confirming that writer is really gone."
+        )
+    if _lock_is_mine(existing):
+        raise GuardError("This process holds the write lock; finish or cancel the change instead of forcing it open.")
+    running = _process_is_running(holder.get("pid")) if holder.get("host") == socket.gethostname() else None
+    if running is True:
+        raise GuardError(
+            "Refusing to force-unlock: that writer is still running.\n"
+            + describe_write_lock(existing)
+            + "\nStop that session first; breaking a live writer's lock is how two writers overwrite each other."
+        )
+    _write_lock_path(root).unlink(missing_ok=True)
+    return existing
 
 
 def _new_changes_exist(root: Path, contract: dict) -> bool:
@@ -1210,6 +1587,7 @@ def integrate_linear_branch(root: Path, source_branch: str) -> str:
 
 def unstage_guarded_paths(root: Path, paths: Sequence[str]) -> dict:
     """Remove only guard-staged paths from the index while preserving their working-tree content."""
+    assert_write_lock(root, "unstage guard-owned paths")
     contract = _read_contract(root)
     if not contract or contract.get("state") != "open":
         raise GuardError("Open or reopen the current change contract before unstaging task files.")
@@ -1338,6 +1716,7 @@ def restore_local_version(root: Path, version: str, message: str | None = None) 
 
 
 def create_checkpoint(root: Path, message: str | None = None) -> str:
+    assert_write_lock(root, "create a local recovery point")
     contract = _read_contract(root)
     if not contract:
         raise GuardError("No verified current change exists to save as a local recovery point.")
@@ -1364,10 +1743,15 @@ def _working_tree_status(root: Path) -> list[str]:
     result = _run_git(root, "status", "--porcelain=v1", "--untracked-files=all")
     if result.returncode != 0:
         raise GuardError(result.stderr.strip() or "Unable to inspect the Git working tree.")
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    return [
+        line
+        for line in result.stdout.splitlines()
+        if line.strip() and not _is_write_lock_path(line[3:].strip().strip('"'))
+    ]
 
 
 def rollback_last_checkpoint(root: Path, message: str | None = None) -> str:
+    assert_write_lock(root, "roll back to the previous version")
     contract = _read_contract(root)
     if contract:
         if contract.get("state") == "verified" and _verification_is_committed(root, contract):
@@ -1430,6 +1814,29 @@ def rollback_last_checkpoint(root: Path, message: str | None = None) -> str:
 
 
 def start_contract(
+    root: Path,
+    objective: str,
+    changed: Sequence[str],
+    verify: Sequence[str],
+    allowed_delete: Sequence[str],
+    owned_paths: Sequence[str] = (),
+) -> dict:
+    """Take the checkout's write lock, then open the change contract."""
+    existing_lock = _read_write_lock(root)
+    already_holding = existing_lock is not None and _lock_is_mine(existing_lock)
+    acquire_write_lock(root, objective, action="start a change")
+    started = False
+    try:
+        contract = _start_contract_unlocked(root, objective, changed, verify, allowed_delete, owned_paths)
+        started = True
+        return contract
+    finally:
+        # A start that never opened a contract must not leave the checkout locked.
+        if not started and not already_holding:
+            _write_lock_path(root).unlink(missing_ok=True)
+
+
+def _start_contract_unlocked(
     root: Path,
     objective: str,
     changed: Sequence[str],
@@ -1511,6 +1918,7 @@ def _clear_verification(contract: dict) -> None:
 
 
 def stage_paths(root: Path, paths: Sequence[str]) -> dict:
+    assert_write_lock(root, "stage task files")
     contract = _read_contract(root)
     if not contract or contract.get("state") != "open":
         raise GuardError("Open or reopen the current change contract before staging task files.")
@@ -1650,6 +2058,7 @@ def _verification_command_error(command: Sequence[str]) -> str | None:
 
 
 def run_verification(root: Path, feature_ids: Sequence[str], command: Sequence[str], timeout: int = 600) -> dict:
+    assert_write_lock(root, "record a verification run")
     contract = _read_contract(root)
     if not contract or contract.get("state") != "open":
         raise GuardError("Open or reopen the current change contract before running verification.")
@@ -1803,6 +2212,7 @@ def completion_blockers(root: Path, contract: dict | None) -> tuple[str, list[st
 
 
 def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[str]) -> dict:
+    assert_write_lock(root, "seal this change as verified")
     contract = _read_contract(root)
     if not contract:
         raise GuardError("No current change contract exists. Start one before editing.")
@@ -1848,6 +2258,7 @@ def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[st
 
 
 def reopen_contract(root: Path) -> dict:
+    assert_write_lock(root, "reopen this change for more edits")
     contract = _read_contract(root)
     if not contract:
         raise GuardError("No current change contract exists.")
@@ -1859,6 +2270,7 @@ def reopen_contract(root: Path) -> dict:
 
 
 def allow_deletions(root: Path, paths: Sequence[str]) -> dict:
+    assert_write_lock(root, "declare an intentional deletion")
     contract = _read_contract(root)
     if not contract or contract.get("state") != "open":
         raise GuardError("Open a current change contract before declaring intentional file deletions.")
@@ -1870,6 +2282,7 @@ def allow_deletions(root: Path, paths: Sequence[str]) -> dict:
 
 
 def declare_changed_features(root: Path, feature_ids: Sequence[str]) -> dict:
+    assert_write_lock(root, "declare additional changed features")
     contract = _read_contract(root)
     if not contract or contract.get("state") != "open":
         raise GuardError("Open or reopen the current change contract before declaring additional changed features.")
@@ -1895,16 +2308,21 @@ def declare_changed_features(root: Path, feature_ids: Sequence[str]) -> dict:
 def cancel_contract(root: Path) -> None:
     contract = _read_contract(root)
     if not contract:
+        release_write_lock(root)
         return
+    assert_write_lock(root, "cancel this change")
     if _new_changes_exist(root, contract):
         raise GuardError("Cannot cancel while the repository differs from the contract baseline. Preserve, commit, or restore the work first.")
     _contract_path(root).unlink(missing_ok=True)
+    release_write_lock(root)
 
 
 def close_contract(root: Path) -> None:
     contract = _read_contract(root)
     if not contract:
+        release_write_lock(root)
         return
+    assert_write_lock(root, "close this change")
     if contract.get("state") != "verified":
         raise GuardError("Cannot close an open change contract. Complete its regression verification first.")
     if not _verification_still_matches(root, contract):
@@ -1912,6 +2330,7 @@ def close_contract(root: Path) -> None:
     if not _verification_is_committed(root, contract):
         raise GuardError("Cannot close until the verified snapshot has a local checkpoint commit.")
     _contract_path(root).unlink(missing_ok=True)
+    release_write_lock(root)
 
 
 def _contract_summary(contract: dict) -> str:
@@ -2356,6 +2775,13 @@ def main() -> int:
     close = subparsers.add_parser("close", help="Remove a verified contract only when verification still matches")
     close.add_argument("--root", default=".")
 
+    lock_status = subparsers.add_parser("lock-status", help="Show who holds this checkout's write lock and for how long")
+    lock_status.add_argument("--root", default=".")
+
+    force_unlock = subparsers.add_parser("force-unlock", help="Break an abandoned write lock after naming its holder")
+    force_unlock.add_argument("--root", default=".")
+    force_unlock.add_argument("--confirm-holder", required=True, help="The holder pid printed by lock-status")
+
     subparsers.add_parser("hook", help="Answer one JSON Codex Hook event on stdin; only for a Hook the user wired themselves")
     args = parser.parse_args()
     if args.command == "hook":
@@ -2431,6 +2857,20 @@ def main() -> int:
         elif args.command == "close":
             close_contract(root)
             print("Verified current change contract closed.")
+        elif args.command == "lock-status":
+            lock = _read_write_lock(root)
+            if lock is None:
+                print("No write lock is held for this checkout.")
+            else:
+                mine = " (this session)" if _lock_is_mine(lock) else ""
+                reclaim = _write_lock_reclaim_reason(lock)
+                print(f"Write lock held{mine}:")
+                print(describe_write_lock(lock))
+                if reclaim:
+                    print(f"  stale:  reclaimable because {reclaim}")
+        elif args.command == "force-unlock":
+            broken = force_release_write_lock(root, args.confirm_holder)
+            print("Broke the abandoned write lock previously held by " + str((broken.get("holder") or {}).get("writer", "unknown")))
     except worktree_layout.WorktreeLayoutError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

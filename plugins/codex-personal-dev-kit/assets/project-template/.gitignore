@@ -65,3 +65,4 @@ Thumbs.db
 *.log
 .codex/current-change.json
 .codex/active-plan.md
+.codex/write-lock.json

@@ -78,3 +78,23 @@ python <dev-kit-root>/scripts/feature_guard.py close --root .
 契约还没验证、验证后内容又变了、或验证快照还没有检查点时它都会拒绝。两个命令都只删除契约文件，不修改工作区内容，也不删除任何提交。
 
 契约是 `.codex/current-change.json` 中的单个临时文件，Git 忽略它；新契约覆盖旧契约，不形成历史文档。
+
+## 一份 checkout 只有一个写入者（强制，不是约定）
+
+`start` 会为当前 checkout 取一把排他写锁 `.codex/write-lock.json`，此后所有会修改契约或仓库的命令（`stage`、`verify`、`declare-change`、`allow-delete`、`unstage`、`reopen`、`complete`、`checkpoint`、`rollback`、`cancel`、`close`）都要求持锁。**取不到锁是硬失败（退出码 1），没有"警告一声然后放行"这种模式。** 只读命令（`status`、`versions`、`lock-status`）永远不需要锁。
+
+被拒绝时错误信息会说明持锁者是谁、持了多久、在做什么：
+
+```text
+python <dev-kit-root>/scripts/feature_guard.py lock-status --root .
+```
+
+锁按 **checkout** 划分，不是按仓库。因此独立 Worktree 并行开发不受影响——那本来就是合法的并行方式，各自有各自的锁。
+
+持锁者是**写入会话**，不是执行命令的那个短命进程（每条 guard 命令都是新进程，若按进程标识锁，下一条命令就会把自己的锁回收掉，等于没锁）。会话身份优先取环境变量 `CODEX_WRITE_LOCK_SESSION`，没有则退回到父进程（会话的 shell）。**如果你的工具链为每条命令新开一个 shell，请为每个会话设置一个稳定的 `CODEX_WRITE_LOCK_SESSION`**，否则同一个会话会被当成不同写入者。
+
+会话崩溃不会把仓库永久锁死：持锁进程已经消失时，下一个写入者会自动接管；长时间无人续期的锁也会过期。确认对方确实已经消失、但自动回收没生效（例如持锁者在另一台机器上）时，才用显式的破锁命令，它必须点名当前持锁者，且对方进程仍在运行时会拒绝：
+
+```text
+python <dev-kit-root>/scripts/feature_guard.py force-unlock --root . --confirm-holder <pid>
+```

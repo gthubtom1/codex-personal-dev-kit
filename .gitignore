@@ -9,3 +9,4 @@ artifacts/
 test-output/
 .codex/current-change.json
 .codex/active-plan.md
+.codex/write-lock.json
