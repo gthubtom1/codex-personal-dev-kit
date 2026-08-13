@@ -57,4 +57,24 @@ python <dev-kit-root>/scripts/feature_guard.py checkpoint --root . --message "ch
 
 如果该检查点是用户接受的正式里程碑，必须先在同一验证快照中完成 21 维发布终审（覆盖写入 `docs/RELEASE-REVIEW.md`，见 release-readiness 参考）并更新 `docs/VERSIONS.md` 和已有版本字段；检查点完成后再运行 `feature_guard.py version --root . --name vX.Y.Z`。普通检查点不创建版本标签。
 
+## 放弃或收尾契约
+
+`checkpoint` 成功后会自动删除契约，正常流程不需要手工清理。只有下面两种情况需要显式命令，任何时候都不要手工删除 `.codex/current-change.json`。
+
+契约开错了、目标变了，或本次不再修改任何文件时用 `cancel`：
+
+```text
+python <dev-kit-root>/scripts/feature_guard.py cancel --root .
+```
+
+仓库内容与契约基线仍有差异时它会拒绝，因此不会丢弃已完成的工作。最常见的场景是先改了文件才发现没开契约：`start` 时漏掉 `--own-path`，`stage` 就会拒绝这些路径，而契约已存在又不能重开——此时先 `cancel`，再带上每个 `--own-path <file>` 重新 `start`。
+
+契约已经 `complete`、验证快照也已经有检查点，但契约文件还留着时用 `close`：
+
+```text
+python <dev-kit-root>/scripts/feature_guard.py close --root .
+```
+
+契约还没验证、验证后内容又变了、或验证快照还没有检查点时它都会拒绝。两个命令都只删除契约文件，不修改工作区内容，也不删除任何提交。
+
 契约是 `.codex/current-change.json` 中的单个临时文件，Git 忽略它；新契约覆盖旧契约，不形成历史文档。

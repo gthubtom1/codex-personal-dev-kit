@@ -1504,7 +1504,6 @@ def _clear_verification(contract: dict) -> None:
         "verifiedHead",
         "verifiedIndexTree",
         "verifiedContentFingerprint",
-        "verifiedWorktreeFingerprint",
     ):
         contract.pop(key, None)
 
@@ -1524,7 +1523,11 @@ def stage_paths(root: Path, paths: Sequence[str]) -> dict:
     owned = set(contract.get("taskOwnedPaths", []))
     mixed = (set(normalized) & baseline_changed) - owned
     if mixed:
-        raise GuardError("These paths already contained user work at contract start; declare --own-path before editing them: " + ", ".join(sorted(mixed)))
+        raise GuardError(
+            "These paths already contained user work at contract start; declare --own-path before editing them: "
+            + ", ".join(sorted(mixed))
+            + ". If this task owns them, run feature_guard.py cancel (allowed while the baseline is untouched) and start again with --own-path for each path."
+        )
 
     existing_staged = _staged_files(root)
     existing_allowed = set(contract.get("stagedPaths", [])) | owned
@@ -1720,13 +1723,7 @@ def run_verification(root: Path, feature_ids: Sequence[str], command: Sequence[s
     return run
 
 
-def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[str]) -> dict:
-    contract = _read_contract(root)
-    if not contract:
-        raise GuardError("No current change contract exists. Start one before editing.")
-    if contract.get("state") != "open":
-        raise GuardError("The current change contract is not open.")
-
+def _project_fact_errors(root: Path, contract: dict) -> tuple[list[str], list[str], set[str]]:
     errors, warnings, required = _evaluate(root, contract)
     if _source_changed(root, contract):
         baseline_status = contract.get("baselineStatusState", "")
@@ -1738,9 +1735,16 @@ def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[st
         errors.extend(_status_quality_errors(root))
     if contract.get("changedFeatureIds") or _source_changed(root, contract):
         errors.extend(_template_placeholder_errors(root))
-    if errors:
-        raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
-    index_tree, content_fingerprint = _require_staged_snapshot(root, contract)
+    return errors, warnings, required
+
+
+def _verification_coverage_errors(
+    contract: dict,
+    index_tree: str,
+    content_fingerprint: str,
+    required: set[str],
+    claimed: set[str],
+) -> tuple[list[str], list[dict]]:
     successful_runs = [
         run
         for run in contract.get("verificationRuns", [])
@@ -1749,20 +1753,67 @@ def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[st
         and run.get("indexTree") == index_tree
         and run.get("contentFingerprint") == content_fingerprint
     ]
-    actual_verified_ids = {
+    verified_ids = {
         feature_id
         for run in successful_runs
         for feature_id in run.get("featureIds", [])
     }
-    claimed_ids = set(_split_values(verified))
-    unsupported_claims = claimed_ids - actual_verified_ids
+    errors: list[str] = []
+    unsupported_claims = claimed - verified_ids
     if unsupported_claims:
         errors.append("Feature IDs were claimed without a successful recorded verification command: " + ", ".join(sorted(unsupported_claims)))
-    missing = required - actual_verified_ids
+    missing = required - verified_ids
     if missing:
         errors.append("Required feature verification lacks a successful recorded command for: " + ", ".join(sorted(missing)))
     if not successful_runs:
         errors.append("Run at least one verification command through feature_guard.py verify; free-form evidence text cannot seal a checkpoint.")
+    return errors, successful_runs
+
+
+def required_verification_ids(root: Path, contract: dict) -> list[str]:
+    """The feature IDs `complete` will demand a successful recorded run for."""
+    return sorted(_required_verification_ids(root, contract, read_feature_catalog(root)))
+
+
+def completion_blockers(root: Path, contract: dict | None) -> tuple[str, list[str]]:
+    """Report why `complete` would refuse right now, without changing anything.
+
+    `next_step.py` must not re-derive these conditions.  A guide that names a
+    different blocker than the gate sends a beginner into a loop of rerunning
+    verification while an un-updated docs/STATUS.md is what actually blocks the
+    checkpoint.  The returned stage is the earliest gate the contract fails, so
+    the caller can print the command that clears it.
+    """
+    if not contract or contract.get("state") != "open":
+        return "", []
+    errors, _warnings, required = _project_fact_errors(root, contract)
+    if errors:
+        return "facts", errors
+    snapshot = _snapshot_errors(root, contract)
+    if snapshot:
+        return "snapshot", snapshot
+    coverage, _runs = _verification_coverage_errors(
+        contract, _index_tree(root), _content_fingerprint(root), required, set()
+    )
+    if coverage:
+        return "verification", coverage
+    return "", []
+
+
+def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[str]) -> dict:
+    contract = _read_contract(root)
+    if not contract:
+        raise GuardError("No current change contract exists. Start one before editing.")
+    if contract.get("state") != "open":
+        raise GuardError("The current change contract is not open.")
+
+    errors, warnings, required = _project_fact_errors(root, contract)
+    if errors:
+        raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
+    index_tree, content_fingerprint = _require_staged_snapshot(root, contract)
+    errors, successful_runs = _verification_coverage_errors(
+        contract, index_tree, content_fingerprint, required, set(_split_values(verified))
+    )
     notes = [" ".join(item.split()) for item in evidence if item.strip()]
     if errors:
         raise GuardError("\n".join(errors + [f"WARNING: {item}" for item in warnings]))
@@ -1771,19 +1822,23 @@ def complete_contract(root: Path, verified: Sequence[str], evidence: Sequence[st
         f"exit 0: {run['command']} [features: {', '.join(run.get('featureIds', [])) or 'none'}]"
         for run in successful_runs
     ]
+    verified_ids = sorted({
+        feature_id
+        for run in successful_runs
+        for feature_id in run.get("featureIds", [])
+    })
 
     contract.update(
         {
             "state": "verified",
             "verifiedAt": _now(),
-            "verifiedFeatureIds": sorted(actual_verified_ids),
+            "verifiedFeatureIds": verified_ids,
             "verificationEvidence": evidence_items[-MAX_VERIFICATION_RUNS:],
             "verificationNotes": notes[:20],
             "verificationWarnings": warnings[:20],
             "verifiedHead": _git_head(root),
             "verifiedIndexTree": index_tree,
             "verifiedContentFingerprint": content_fingerprint,
-            "verifiedWorktreeFingerprint": content_fingerprint,
         }
     )
     _write_contract(root, contract)
@@ -2294,7 +2349,7 @@ def main() -> int:
     close = subparsers.add_parser("close", help="Remove a verified contract only when verification still matches")
     close.add_argument("--root", default=".")
 
-    subparsers.add_parser("hook", help=argparse.SUPPRESS)
+    subparsers.add_parser("hook", help="Answer one JSON Codex Hook event on stdin; only for a Hook the user wired themselves")
     args = parser.parse_args()
     if args.command == "hook":
         return hook_main()

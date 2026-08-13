@@ -97,30 +97,42 @@ def plan_next_steps(root: Path) -> list[str]:
         lines.append("NEXT: 新能力/新集成/陌生报错默认先查现成做法（$research-and-reuse），学写法不整包搬运。")
         return lines
 
-    state = contract.get("state", "open")
-    staged = contract.get("stagedPaths", [])
-    runs = contract.get("verificationRuns", [])
-    changed = contract.get("changedFeatureIds", [])
-    verify_ids = sorted(set(changed) | set(contract.get("explicitVerificationIds", [])))
-    feature_flags = " ".join(f"--feature {feature_id}" for feature_id in verify_ids) or "--feature <F-ID>"
-
-    if state == "verified":
+    if contract.get("state") != "open":
         lines.append("NOW: 契约已验证但还没有保存回退点，先创建检查点再做任何新修改：")
         lines.append(f"  command: {GUARD} checkpoint --root . --message \"checkpoint: <结果>\"")
         return lines
 
-    objective = contract.get("objective", "")
-    lines.append(f"NOW: 契约进行中：{objective}")
-    if not staged:
+    lines.append(f"NOW: 契约进行中：{contract.get('objective', '')}")
+    if not contract.get("stagedPaths"):
         lines.append("NEXT: 实现当前切片，然后只暂存本任务的精确文件：")
         lines.append(f"  command: {GUARD} stage --root . --path <file> [--path <file> ...]")
-    elif not runs:
-        lines.append("NEXT: 通过门禁真实运行验证命令并绑定功能：")
-        lines.append(f"  command: {GUARD} verify --root . {feature_flags} -- <真实测试命令>")
-    else:
+        return lines
+
+    gate, blockers = feature_guard.completion_blockers(root, contract)
+    if not blockers:
         lines.append("NEXT: 验证已记录。复查最终 diff 后封契约并保存回退点：")
         lines.append(f"  command: {GUARD} complete --root .")
         lines.append(f"  command: {GUARD} checkpoint --root . --message \"checkpoint: <结果>\"")
+        return lines
+
+    verify_ids = feature_guard.required_verification_ids(root, contract) or sorted(
+        set(contract.get("changedFeatureIds", [])) | set(contract.get("explicitVerificationIds", []))
+    )
+    feature_flags = " ".join(f"--feature {feature_id}" for feature_id in verify_ids) or "--feature <F-ID>"
+    verify_command = f"  command: {GUARD} verify --root . {feature_flags} -- <真实测试命令>"
+
+    lines.append("NEXT: complete 现在会拒绝，理由与门禁完全一致。逐条修掉再继续：")
+    for blocker in blockers:
+        for text in blocker.splitlines():
+            lines.append(f"  - {text.strip()}")
+    if gate == "verification":
+        lines.append(verify_command)
+    elif gate == "snapshot":
+        lines.append(f"  command: {GUARD} stage --root . --path <file> [--path <file> ...]")
+        lines.append(verify_command)
+    else:
+        lines.append("  action: 先修正上面的项目事实，再重新运行验证并封契约：")
+        lines.append(f"  command: {GUARD} complete --root .")
     return lines
 
 

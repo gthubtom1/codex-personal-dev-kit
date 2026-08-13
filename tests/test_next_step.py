@@ -36,6 +36,11 @@ STATUS_DONE = (
     "## Current Risks\n\nContinue checking adjacent behavior.\n\n## Next Action\n\nContinue the next slice.\n"
 )
 
+SECOND_FEATURE = (
+    "| F-002 | Export a result | Export button -> API -> downloaded file |"
+    " A valid file is downloaded. | test:tests/verify_features.py | standard | active |\n"
+)
+
 
 class NextStepTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -112,6 +117,52 @@ class NextStepTests(unittest.TestCase):
         output = self.plan()
         self.assertIn("checkpoint --root", output)
         self.assertIn("还没有保存回退点", output)
+
+    def commit(self, message: str) -> None:
+        self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", message)
+
+    def open_verified_slice(self, *, refresh_status: bool) -> None:
+        """Reach the state where one verification run is already recorded."""
+        feature_guard.start_contract(self.root, "Adjust acceleration", ["F-001"], [], [], [])
+        (self.root / "src/app.js").write_text("export const acceleration = 'v2';\n", encoding="utf-8")
+        staged = ["src/app.js"]
+        if refresh_status:
+            (self.root / "docs/STATUS.md").write_text(STATUS_DONE, encoding="utf-8")
+            staged.append("docs/STATUS.md")
+        feature_guard.stage_paths(self.root, staged)
+        feature_guard.run_verification(
+            self.root, ["F-001"], [sys.executable, "tests/verify_features.py"], timeout=30
+        )
+
+    def assertGateReasonIsReported(self, needle: str) -> str:
+        """The guide must name the reason the gate is about to raise, not a different one."""
+        with self.assertRaises(feature_guard.GuardError) as gate:
+            feature_guard.complete_contract(self.root, [], [])
+        self.assertIn(needle, str(gate.exception))
+        output = self.plan()
+        self.assertIn(needle, output)
+        return output
+
+    def test_names_the_status_blocker_instead_of_offering_complete(self) -> None:
+        self.scaffold()
+        self.open_verified_slice(refresh_status=False)
+        self.assertGateReasonIsReported("docs/STATUS.md")
+
+    def test_names_the_unverified_edit_that_landed_after_verification(self) -> None:
+        self.scaffold()
+        self.open_verified_slice(refresh_status=True)
+        (self.root / "src/app.js").write_text("export const acceleration = 'v3';\n", encoding="utf-8")
+        output = self.assertGateReasonIsReported("src/app.js")
+        self.assertIn("stage --root", output)
+
+    def test_names_the_active_feature_that_has_no_verification_run(self) -> None:
+        self.scaffold()
+        (self.root / "docs/FEATURES.md").write_text(FEATURES + SECOND_FEATURE, encoding="utf-8")
+        self.git("add", "docs/FEATURES.md")
+        self.commit("add a second active feature")
+        self.open_verified_slice(refresh_status=True)
+        output = self.assertGateReasonIsReported("F-002")
+        self.assertIn("verify --root", output)
 
     def test_suggests_version_command_when_review_is_ready(self) -> None:
         self.scaffold()

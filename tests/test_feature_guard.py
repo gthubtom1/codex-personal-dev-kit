@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -346,6 +347,58 @@ class FeatureGuardTests(unittest.TestCase):
 
         with self.assertRaisesRegex(feature_guard.GuardError, "not been saved as a local recovery point"):
             self.start()
+
+    def test_completed_contract_keeps_no_write_only_fingerprint_field(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        contract = feature_guard.complete_contract(self.root, ["F-002"], [])
+        self.assertIn("verifiedContentFingerprint", contract)
+        self.assertNotIn("verifiedWorktreeFingerprint", contract)
+
+    def test_help_publishes_every_subcommand_contract(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(FEATURE_GUARD_PATH), "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("SUPPRESS", result.stdout)
+        self.assertIn("hook", result.stdout)
+
+    def test_skill_documentation_covers_every_contract_subcommand(self) -> None:
+        skills = REPO_ROOT / "plugins/codex-personal-dev-kit/skills"
+        documented = "\n".join(path.read_text(encoding="utf-8") for path in sorted(skills.rglob("*.md")))
+        for command in (
+            "start",
+            "status",
+            "stage",
+            "declare-change",
+            "verify",
+            "complete",
+            "checkpoint",
+            "rollback",
+            "version",
+            "versions",
+            "restore-version",
+            "publish",
+            "sync",
+            "integrate",
+            "unstage",
+            "remove-worktree",
+            "reopen",
+            "allow-delete",
+            "cancel",
+            "close",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(
+                    re.search(rf"`[^`\n]*\b{re.escape(command)}\b[^`\n]*`", documented),
+                    f"A Skill-driven agent never learns feature_guard.py {command} exists.",
+                )
 
     def test_close_rejects_changes_after_verification(self) -> None:
         self.start()
