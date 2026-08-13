@@ -9,7 +9,7 @@
 > - 第 9 节的原生子代理工具名 `spawn_agent` / `list_agents`——见该节标注；
 > - 第 12 节整节「Codex 桌面高级设置」——Codex Desktop 专属 UI，非 Codex 宿主整节跳过；
 > - 全文出现的 `{{CODEX_HOME}}`（`~/.codex` 之类 Codex 主目录）、`resolve-skill.ps1`、`.system` 前缀、`agents/openai.yaml`——按映射表替换或跳过。
-> （`winget`、`feature_guard.py`、`validate-kit.ps1` 等是 Windows / 纯脚本工具，与 agent 无关，任何宿主照用，不属于此列。）
+> （`winget`、`feature_guard.py`、`validate_kit.py`、`next_step.py` 等是 Windows / 纯脚本工具，与 agent 无关，任何宿主照用，不属于此列。例外：`validate-kit.ps1` 是 Codex 专属封装——它调用 Codex 内置 `.system/skill-creator` 校验器，非 Codex 宿主改用 `python .../validate_kit.py` 加单元测试。）
 
 ## 1. 用户合同
 
@@ -218,7 +218,7 @@ Skill 是可复用的工作流程，不是新的 Agent、Hook、MCP 或 Plugin�
 - 每次编排只在主任务内存中记录代理编号、任务、任务接收确认、状态和精炼结果；不把子代理日志或聊天转录写进项目文档。
 - `spawn_agent` 是启动能力，`list_agents` 只是可选状态信息；并发、排队、模型和推理由原生工具实际接受情况决定。
 - 不把预期答案、怀疑的问题或修复方案泄漏给独立审查者；只提供必要的任务事实和原始材料。
-- 一个 checkout 只有一个写入者；审查 subagent 默认只读。并行写入必须使用隔离 Worktree 和明确整合顺序。
+- 一个 checkout 只有一个写入者；审查 subagent 默认只读。并行写入必须使用隔离 Worktree 和明确整合顺序。并行 Worktree 一律建到工作区外（用 guarded `worktree-path`，落在项目旁的 `../.<项目名>-worktrees/`），禁止建在工作区内部（如 `.local/`）——在有检查点快照/文件监视的宿主（Cursor / VSCode）里，工作区内的 Worktree 会被反复扫描与重打包，堆积后拖垮甚至冻结编辑器。
 - 不创建、fork、handoff 或消息联系可见 Codex 任务来伪装 subagent；可见任务用于用户长期上下文，结果/范围/模块改变时再开新任务。
 
 ## 10. 权限边界

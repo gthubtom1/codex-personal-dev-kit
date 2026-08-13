@@ -2,14 +2,14 @@
 
 ## Current Milestone
 
-- Finish the v0.2.7 candidate: 21-dimension release-review gate, research-by-default routing, read-only `next_step.py` entry, merged third-party review fixes (UTF-8 subprocess decoding, strict backfill, credential/large-file/lockfile staging protections, feature-bound verification), and the synchronized documents/templates.
-- Reinstall the standalone runtime and reconcile the live mother-folder rules with the updated canonical template so the effective layer matches the source again.
+- Ship v0.2.10: enforce worktree-outside-the-workspace on snapshot/file-watch hosts (Cursor `.cursor/hooks.json` `beforeShellExecution` guard), ship a `.vscode/settings.json` that excludes regenerated artifacts from the watcher/search, close the force-push classifier bypass, and correct the host-adaptation docs (short-block worktree mandate, `安装 AI 必读自检清单`, `validate-kit.ps1` marked Codex-only).
+- Complete the 21-dimension release review for v0.2.10, run the suite + `validate_kit`, then guarded `version` + `publish`.
 
 ## Next Milestone
 
-- v0.2.7: land the 21-dimension release-review gate, research-by-default routing, the read-only `next_step.py` entry, merged third-party review fixes, and the five small protections (per-checkpoint secret rescan, lockfile-drift gate, large-file warning, dependency-audit and disk-usage audit items); dogfood the release review on the kit itself.
-- Add focused regression tests for any real failure found during project use.
-- Keep Skills, global instructions, and project documents concise as Codex capabilities evolve.
+- Add focused regression tests for any real failure found during project use (the v0.2.10 guards each carry a red-when-broken test).
+- Ship the v0.3 multi-host installer (below) so the worktree hard-guard and short-block conventions are placed into each host's system-rule location automatically instead of by manual self-adaptation.
+- Keep Skills, global instructions, and project documents concise as host capabilities evolve.
 
 ## v0.3 Theme: Multi-Host Adaptation (Codex / Cursor / Claude)
 

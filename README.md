@@ -105,7 +105,7 @@ python -m unittest discover -s tests -p test_*.py -v
 主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
-git clone --branch v0.2.7 --depth 1 <repository> codex-dev-kit
+git clone --branch v0.2.10 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 
@@ -119,10 +119,10 @@ AI 自适配约定（按当前宿主执行）：
 
 1. 识别当前宿主的 Skills 目录：Codex 用 `~/.codex/skills`，Cursor 用 `~/.cursor/skills`，Claude 用 `~/.claude/skills`；把 `plugins/codex-personal-dev-kit/skills/` 下九个 Skill 目录连同 `references/` 原样复制过去。
 2. 中央运行时脚本（`plugins/codex-personal-dev-kit/scripts/`）复制到本机一个固定位置，Skill 正文里的 `<dev-kit-root>` 一律指向该位置；门禁脚本、测试和安全边界不得改写。
-3. 母目录与项目 `AGENTS.md` 模板照常安装并替换路径占位符；`AGENTS.md` 是跨 agent 事实标准，Cursor 和 Claude 都会读取。
+3. 母目录与项目 `AGENTS.md` 模板照常安装并替换路径占位符；`AGENTS.md` 是跨 agent 事实标准，Cursor 和 Claude 的**项目内**都会读取。但「跨所有项目始终生效」的全局规则各宿主机制不同：Cursor **没有全局 `.mdc`**，要全局常开就把短全局 `AGENTS.md` 的关键约定放进 **User Rules**（设置 → Customize → Rules，纯文字）；`.mdc` + `alwaysApply` 只对单个项目生效。Claude 用其全局 memory / `CLAUDE.md` 等价机制。规则内容是标准，**放置位置随宿主变**，不要照抄 Codex 的放法。
 4. 正文中的 `$skill-name` 调度理解为“读取对应 SKILL.md 并遵循”；宿主没有 `$` 语法时用自然语言路由，不需要 `agents/openai.yaml`。
 5. “原生子代理”章节替换为当前宿主的原生子代理能力（如 Cursor 的后台子任务、Claude 的 subagent）；宿主没有子代理时由主代理顺序完成并如实说明。
-6. 安装后验证与 Codex 相同：`validate-kit.ps1` 全绿加全量单元测试通过才算装好。
+6. 安装后验证：**非 Codex 宿主**用 `python plugins/codex-personal-dev-kit/scripts/validate_kit.py` 加 `python -m unittest discover -s tests -p "test_*.py"`（都是纯 Python，无 Codex 依赖）判定是否装好。`validate-kit.ps1` 是 **Codex 专属**——它调用 Codex Desktop 内置的 `.system/skill-creator` 校验器并假设 `~/.codex`，在 Cursor / Claude 上会直接报错，**不要**拿它当跨宿主通过标准。
 
 已实测：Cursor 宿主可完整走契约→暂存→验证→检查点门禁（本套件自身的多个开发切片就是在 Cursor 会话中按此流程完成的）。Claude 路径遵循同样约定，尚未实测。
 
@@ -140,6 +140,32 @@ AI 自适配约定（按当前宿主执行）：
 | 第 12 节「Codex 桌面高级设置」（本地环境 / 环境列表 / 工作树 / Git 高级设置 / 分支前缀 `codex/` / 代码评审交付 / 提交指令） | workspace-template `AGENTS.md` 第 12 节 | **整节跳过**：这是 Codex Desktop 客户端专属 UI，其他宿主没有等价物，跳过不影响前 11 节方法论。 |
 | “Codex Desktop / Local Project”措辞 | 少量 `SKILL.md` references | **翻译**：读作“当前宿主里一个长期项目对应一个工作区/项目”。 |
 | `winget` 固定版本安装器；`feature_guard.py` / `validate-kit.ps1` / `next_step.py` 等门禁脚本 | `AGENTS.md`、多个 `SKILL.md`、`scripts/` | **保持不变（非 Codex 专属）**：winget 是 Windows 包管理器，门禁是纯 Python / PowerShell，任何宿主照用——它们是本套件的强制核心，不要改写。 |
+
+### 宿主性能适配（有快照 / 文件监视的宿主，如 Cursor / VSCode）
+
+纯 Codex CLI 不监视工作区、也没有检查点快照；Cursor / VSCode 会对**整个工作区**做文件监视 + 索引，Cursor 还对每次改动做检查点快照（影子仓库把整个工作区重打包一次）。装到这类宿主时必须补一层性能适配，否则并行开发会把编辑器拖到卡死：
+
+- **并行 worktree 一律建到工作区外**：本套件 `worktree_layout.py` / `feature_guard.py worktree-path` 本就把副本放到项目旁的 `../.<项目名>-worktrees/`；**别手写 `git worktree add .local/...` 绕过它**——工作区内的 worktree 会被监视 / 快照 / 索引反复扫描，堆积后卡死（实测某工作区 100+ 个内建 worktree、检查点快照两天打了 9.65 GB，而项目自身 `.git` 只有几 MB）。
+- **自动重生的产物排除出监视 / 搜索**：把 `**/__pycache__/**`、`**/*.sqlite3*`、`**/*.db` 等加进宿主的 `files.watcherExclude` / `search.exclude`（Cursor / VSCode 的 `settings.json`）。这些是产物不是源码，排除不影响 AI 读写。
+- **把这条「减卡顿」规则放到宿主保证会读到的地方**：Cursor 用 **User Rules**（全局常开）或项目 `.cursor/rules/*.mdc`；长 / 项目 `AGENTS.md` 也可，只要该宿主确实每轮都读得到——放进宿主根本不常读的文件等于没放。
+
+一句话：本套件的规则内容是标准，**放置位置和性能适配随宿主变**；安装时按宿主的规则机制和快照 / 监视特性适配，不要照抄 Codex 的放法。
+
+### 安装 AI 必读自检清单（装完逐条自查，全部通过才算适配到位）
+
+把本套件装到一个新宿主后，安装的 AI **必须**逐条自查——任何一条不通过都意味着「装了但会误解 / 会卡」：
+
+- [ ] **宿主识别**：确认当前宿主是 Codex / Cursor / VSCode / Claude 中的哪个，并据此选规则放置位置与性能适配（见上文）。
+- [ ] **短规则进系统规则**：短全局规则已放进本宿主「必读 / 常加载」的位置（Codex `~/.codex/AGENTS.md`；Cursor **User Rules**，因为它没有全局 `.mdc`；Claude 全局 memory）。
+- [ ] **能读到完整规则**：短规则里「先读完整 `AGENTS.md`」的指针在本宿主真的会被执行；若本宿主不保证读到工作区外 / 祖先的完整 `AGENTS.md`，把关键约定（单写入者、worktree 外置、权限边界、完成标准）一并放进系统规则。
+- [ ] **worktree 外置**：并行 worktree 建到工作区外（`../.<项目名>-worktrees/`，用 guarded `worktree-path`），**没有**任何 `.local/wt-*` 之类的工作区内副本。
+- [ ] **worktree 硬门禁（有快照 / 监视的宿主）**：Cursor / VSCode 项目里有 `.cursor/hooks.json` + `.cursor/hooks/worktree_guard.py`，实测 `git worktree add <工作区内路径>` 被拦、外置路径放行。
+- [ ] **产物排除**：`.vscode/settings.json` 的 `files.watcherExclude` / `search.exclude` 覆盖了 `__pycache__`、`*.sqlite3*`、`*.db`；大体积数据没堆在工作区里被快照。
+- [ ] **9 个 Skills 可定位**：本宿主 skills 目录下能找到全部 9 个 `SKILL.md`；`$skill` 调度已理解为「读取对应 SKILL.md 并遵循」。
+- [ ] **门禁可用**：`python .../feature_guard.py --help` 正常；**非 Codex 宿主**用 `python .../validate_kit.py` 加 `python -m unittest discover -s tests -p "test_*.py"` 全绿（不要用 Codex 专属的 `validate-kit.ps1`）。
+- [ ] **Codex 专属内容已翻译 / 跳过**：按映射表处理了 `spawn_agent`、`.system`、`resolve-skill.ps1`、`{{CODEX_HOME}}`、`openai.yaml`、第 12 节桌面设置。
+
+一句话：**规则内容照搬，放置位置和性能适配按宿主翻译**；上面任一条没做到，就是「装了但会误解或会卡」。
 
 外部方法来源和归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。公开仓库不包含旧电脑的 Key、全局配置、项目源码、缓存或安装备份。
 

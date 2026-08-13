@@ -290,14 +290,35 @@ def _catastrophic_delete(command: str) -> Decision:
     return Decision(False)
 
 
-def classify_command(command: str) -> Decision:
+def _extract_substitutions(command: str) -> list[str]:
+    """Command substitutions hide a second command from a single-pass lexer."""
+    results: list[str] = []
+    results += re.findall(r"\$\(\s*(.+?)\s*\)", command, re.DOTALL)
+    results += re.findall(r"`\s*(.+?)\s*`", command, re.DOTALL)
+    return results
+
+
+def classify_command(command: str, _depth: int = 0) -> Decision:
     deletion = _catastrophic_delete(command)
     if deletion.blocked:
         return deletion
-    for segment in _segments(_lex(command)):
+    # A newline separates commands, but shlex(whitespace_split=True) folds it into
+    # ordinary whitespace and would hide every command after the first line
+    # (e.g. "git status\ngit push --force"). Normalize newlines to an explicit
+    # separator the segmenter already understands before lexing.
+    normalized = command.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ; ")
+    for segment in _segments(_lex(normalized)):
         decision = _classify_tokens(segment)
         if decision.blocked:
             return decision
+    # A nested command inside $( ... ) or backticks is invisible to the lexer above;
+    # classify each substitution body too, so `echo $(git push --force)` is caught.
+    if _depth < 4:
+        for nested in _extract_substitutions(command):
+            if nested.strip():
+                decision = classify_command(nested, _depth + 1)
+                if decision.blocked:
+                    return decision
     return Decision(False)
 
 

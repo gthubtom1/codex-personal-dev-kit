@@ -43,7 +43,7 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 1. 先定义主任务的 Goal、共享事实和不允许改变的边界。
 2. 使用原生 `spawn_agent` 启动有界任务；数量由真实任务需要和原生工具接受情况决定，不固定模型或数量。
 3. 优先并行只读工作：代码定位、架构分析、官方资料、安全审查、测试缺口和日志分析。
-4. 同一 checkout 默认只有主代理写入。并行写入必须使用不同 Worktree、分支、文件所有权和整合顺序。
+4. 同一 checkout 默认只有主代理写入。并行写入必须使用不同 Worktree、分支、文件所有权和整合顺序。**Worktree 一律建到打开的项目外面**：先用 `feature_guard.py worktree-path` 取路径（项目旁的 `../.<项目名>-worktrees/`）再 `git worktree add`，**绝不建在工作区内部（如 `.local/`）**——工作区内的副本会被编辑器监视/快照/索引，Worktree 一多就把编辑器拖到卡死（实测 `.local/wt-*` 堆到上百个、检查点快照两天 9.65 GB）；用完走 guarded `remove-worktree` 清理。
 5. 给子代理最少且充分的上下文，不发送预期答案。要求它先确认任务可读，再引用文件、命令或其他证据。
 6. 使用 [result-contract.md](references/result-contract.md) 约束精炼结果，主代理核对证据后再决定是否实施。
 7. 汇总后只把真正影响项目的事实写入代码、测试或精简文档，不创建可见任务来清理子代理。

@@ -1,0 +1,18 @@
+{
+  // 降低编辑器文件监视/搜索负载：下面都是「自动重生的产物」，不是源码，排除不影响 AI 读写源码。
+  // 有检查点快照/文件监视的宿主（Cursor / VSCode）尤其需要——多 worktree / 频繁测试下 __pycache__ 会疯狂重写，
+  // 堆积后拖慢甚至冻结编辑器。Codex CLI 无此机制，这份配置在它那边无副作用。
+  "files.watcherExclude": {
+    "**/__pycache__/**": true,
+    "**/*.pyc": true,
+    "**/*.sqlite3": true,
+    "**/*.sqlite3-wal": true,
+    "**/*.sqlite3-shm": true,
+    "**/*.sqlite3-journal": true,
+    "**/*.db": true
+  },
+  "search.exclude": {
+    "**/__pycache__/**": true,
+    "**/*.pyc": true
+  }
+}

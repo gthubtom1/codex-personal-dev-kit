@@ -6,7 +6,7 @@
 - 分支用于隔离并行工作或高风险实验，不是版本编号。不得为普通的“v1、v2、v3”存档不断创建 `codex/v*` 分支。
 - 只有隔离高风险实验、计划任务、真正独立的并行写入或用户明确要求时才创建额外分支或 Codex Worktree。
 - 并行写入默认避免；优先让子代理只读，主代理单独实现。
-- 使用 Codex Worktree 时优先通过桌面端 Handoff 把成果带回主工作区，不要求用户手工解决常规合并。
+- Worktree 一律建到打开的项目外面（用 `feature_guard.py worktree-path` 取路径，落在项目旁的 `../.<项目名>-worktrees/`），绝不建在工作区内部（如 `.local/`）——有检查点快照/文件监视的宿主（Cursor / VSCode）会反复扫描工作区内的副本，堆积后拖垮甚至冻结编辑器。成果通过 guarded `integrate`（仅快进）带回主分支，用完走 guarded `remove-worktree` 清理；不使用桌面端 Handoff（它可能产生未受控的 merge）。
 - 不切换、删除或重写用户正在使用的分支。
 
 ## 脏工作树

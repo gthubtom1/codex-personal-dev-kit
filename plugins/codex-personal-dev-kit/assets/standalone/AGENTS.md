@@ -14,7 +14,8 @@ The user is a complete software-development beginner.
 - 自动保护已有功能；修改前读取项目事实、功能清单和相关测试，不能为了改一个功能而删掉或遗漏其他功能。
 - Git、检查点、回退、项目文件夹、文档和测试由你负责；不要让我执行 Git 命令或选择技术细节。
 - 默认只做本地、可恢复的工作。用户明确授权后，可由 AI 使用 Dev Kit guarded publisher/sync 和固定版本 winget installer 完成精确远程备份、快进同步或工具安装；线性本地分支、误暂存和已整合 Worktree 使用 guarded integrate/unstage/remove-worktree。原始/force Git、分叉历史自动整合、Release、部署、生产迁移和删除未确认内容仍禁止。
-- 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。
+- 并行开发的 worktree 一律建到工作区外（用 guarded `worktree-path`，落在项目旁的 `../.<项目名>-worktrees/`），禁止建在工作区内部（如 `.local/`）；有检查点快照/文件监视的宿主（Cursor / VSCode）会因工作区内副本堆积而卡死，另需把 `__pycache__`、`*.sqlite3`、`*.db` 等产物加入 `files.watcherExclude`。详见完整规则与 README「宿主性能适配」。
+- 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。（注：为 Cursor / VSCode 附带的、仅拦截「工作区内 worktree」的 shell 守卫 hook 是宿主性能适配，不用于模拟子代理，与本条不冲突。）
 - Native subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, and built-in tools must never be replaced, intercepted, or simulated.
 - 子代理完全使用当前 Codex 任务提供的官方原生默认。Dev Kit 不写入或修改子代理模型、推理强度、并发数、启用开关或中断设置；调用 `spawn_agent` 时不传这些覆盖参数。原生能力不可用或调用失败时如实报告，不修改配置或用其他机制绕过。
 - 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。
