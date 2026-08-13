@@ -105,7 +105,7 @@ python -m unittest discover -s tests -p test_*.py -v
 主安装方式是先取得固定 Tag 或 commit 的源码，再运行 standalone 安装器。禁止从未固定的 `main` 自动下载或执行远程脚本。安装器只在显式 `-Apply` 时写入短全局 `AGENTS.md`、standalone Skills、中央运行时和模板；它不会安装 Plugin、项目生命周期 Hook、自定义 Agent 或自定义 Rules。
 
 ```text
-git clone --branch v0.2.6 --depth 1 <repository> codex-dev-kit
+git clone --branch v0.2.7 --depth 1 <repository> codex-dev-kit
 powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-dev-kit\scripts\bootstrap\install.ps1 -WorkspaceRoot D:\开发 -Source .\codex-dev-kit -Apply
 ```
 

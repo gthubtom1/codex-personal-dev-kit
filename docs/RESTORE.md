@@ -18,7 +18,7 @@
 3. 从私有 GitHub 克隆固定正式版本：
 
 ```powershell
-git clone --branch v0.2.6 --depth 1 <repository-url> D:\开发\codex-dev-kit
+git clone --branch v0.2.7 --depth 1 <repository-url> D:\开发\codex-dev-kit
 ```
 
 4. 先预览安装：

@@ -175,6 +175,48 @@ class NextStepTests(unittest.TestCase):
         self.assertIn("已有终审记录", output)
         self.assertIn("version --root . --name v1.0.0", output)
 
+    def test_prints_the_objective_search_triggers_in_every_state(self) -> None:
+        """The prompt to search must be a shape on the page, never a self-assessment.
+
+        An agent skips the search exactly when it feels sure, and feeling sure is
+        when it is most likely to be inventing.  So the list has to survive every
+        branch of the guide, including the ones where the script itself has no
+        idea what the agent is about to do.
+        """
+        shapes = (
+            "新能力",
+            "不熟悉的 API",
+            "陌生报错",
+            "凭印象",
+            "两个方案之间摇摆",
+            "正准备向用户提问",
+        )
+        states = {"no-baseline": self.plan()}
+        self.scaffold()
+        states["no-contract"] = self.plan()
+        self.open_verified_slice(refresh_status=False)
+        states["blocked-gate"] = self.plan()
+
+        for state, output in states.items():
+            with self.subTest(state=state):
+                self.assertIn("$research-and-reuse", output)
+                for shape in shapes:
+                    self.assertIn(shape, output)
+
+    def test_says_which_questions_searching_cannot_answer(self) -> None:
+        """Searching for our own current state returns a confident wrong answer."""
+        self.scaffold()
+        output = self.plan()
+        self.assertIn("自信的错误结论", output)
+        self.assertIn("读源码", output)
+
+    def test_search_triggers_do_not_displace_the_next_guarded_command(self) -> None:
+        self.scaffold()
+        self.open_verified_slice(refresh_status=False)
+        output = self.plan()
+        self.assertTrue(output.startswith("NOW:"), output)
+        self.assertLess(output.index("docs/STATUS.md"), output.index("陌生报错"), output)
+
     def test_flags_pending_formal_version_and_missing_release_review(self) -> None:
         self.scaffold()
         versions = "# Versions\n\n| Version | User-visible result | Verification | Status |\n| --- | --- | --- | --- |\n| v1.0.0 | Baseline | suite:all-tests | recoverable |\n"

@@ -4,6 +4,10 @@ Prose workflows get skimmed, reordered, and half-executed; a read-only script
 that prints the next command does not.  Run this whenever the next action is
 unclear.  It never modifies the project.
 
+Every run also prints the objective shapes that require looking up existing
+practice before writing anything, so that decision never rests on how confident
+the agent happens to feel.
+
 Usage:
     python next_step.py --root <project-root>
 """
@@ -20,6 +24,19 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import feature_guard  # noqa: E402
 
 GUARD = f'python "{SCRIPT_DIR / "feature_guard.py"}"'
+
+SEARCH_TRIGGERS = (
+    "要实现新能力、新集成、新算法，或对接不熟悉的 API / 标准",
+    "碰到陌生报错",
+    "发现自己正要凭印象给出关键结论",
+    "没有思路，或在两个方案之间摇摆",
+    "正准备向用户提问——先查完再问，用户该看到的是有证据的推荐方案，不是问题",
+)
+
+SEARCH_BLIND_SPOT = (
+    "SEARCH: 反过来，「我们这套东西现在是什么状态」（某函数的实际行为、测试到底过没过、"
+    "文件现在长什么样）搜不出来，搜索只会给出自信的错误结论——那类问题只能去跑、去读源码和 git。"
+)
 
 
 def _git_ok(root: Path) -> bool:
@@ -58,7 +75,26 @@ def _release_review_state(root: Path, version: str) -> str:
     return "present"
 
 
+def _search_first_reminder() -> list[str]:
+    """Print the search triggers on every run, in every state.
+
+    "Do I need to look this up" is the judgment an agent is worst at: it skips
+    the search exactly when it feels certain, which is when it is most likely to
+    be inventing.  So the triggers are observable shapes rather than a prompt to
+    self-assess, and they are not gated on which branch of the guide ran.
+    """
+    lines = ["SEARCH: 命中下面任一形状就先查现成做法再动手，按形状判断，不按自己有没有把握判断："]
+    lines.extend(f"  - {trigger}" for trigger in SEARCH_TRIGGERS)
+    lines.append("  action: 调用 $research-and-reuse 查官方文档与同类实现；学写法，不整包搬运。")
+    lines.append(SEARCH_BLIND_SPOT)
+    return lines
+
+
 def plan_next_steps(root: Path) -> list[str]:
+    return _plan_guarded_steps(root) + _search_first_reminder()
+
+
+def _plan_guarded_steps(root: Path) -> list[str]:
     lines: list[str] = []
     if not _git_ok(root):
         lines.append("NOW: 这个项目还没有可用的 Git 基线。先接入项目，不要直接改代码。")
@@ -94,7 +130,6 @@ def plan_next_steps(root: Path) -> list[str]:
                 reason = "docs/RELEASE-REVIEW.md 缺失" if state == "missing" else f"docs/RELEASE-REVIEW.md 记录的不是 {version}"
                 lines.append(f"NEXT: docs/VERSIONS.md 里的 {version} 还没有本地标签，且 {reason}。")
                 lines.append(f"  action: 按 release-readiness 参考完成 {version} 的 21 维终审并放进最终检查点，再运行 guarded version。")
-        lines.append("NEXT: 新能力/新集成/陌生报错默认先查现成做法（$research-and-reuse），学写法不整包搬运。")
         return lines
 
     if contract.get("state") != "open":
