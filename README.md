@@ -126,6 +126,21 @@ AI 自适配约定（按当前宿主执行）：
 
 已实测：Cursor 宿主可完整走契约→暂存→验证→检查点门禁（本套件自身的多个开发切片就是在 Cursor 会话中按此流程完成的）。Claude 路径遵循同样约定，尚未实测。
 
-本项目使用 [MIT License](LICENSE)。外部方法来源和归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。公开仓库不包含旧电脑的 Key、全局配置、项目源码、缓存或安装备份。
+### Codex 专属内容 → 宿主等价（逐节映射表）
+
+本套件的规则文件（两层 `AGENTS.md`、项目模板、九个 `SKILL.md`）主要为 Codex 宿主蒸馏，装到别的宿主后有一批 **Codex 专属内容**会变成死内容或误导。下表逐条给出在 Cursor / Claude 等宿主上的等价做法；核心方法论（用户合同、需求拓展、旧功能保护、文档记忆、权限边界、完成标准与证据分级）与 agent 无关，不需要翻译。安装后按此表把每一处翻译成当前宿主的做法，或按标注跳过。
+
+| Codex 专属内容 | 主要出现位置 | 其他宿主（Cursor / Claude 等）的等价做法 |
+|---|---|---|
+| `$skill-name` 调度语法（`$codex-development-assistant` 等 `$` 前缀） | workspace-template / standalone `AGENTS.md` 第 4 节、各 `SKILL.md` | **翻译**：把 `$skill-name` 读作“定位当前宿主 skills 目录下同名 `SKILL.md` 并遵循”，按用户意图用自然语言路由；无需 `$` 前缀。 |
+| 原生子代理工具名 `spawn_agent` / `list_agents`（及 wait / message / follow-up / interrupt） | `AGENTS.md` 第 9 节、`orchestrate-codex-team` 等 `SKILL.md` | **翻译**：换成当前宿主的原生子代理（Cursor 后台子任务 / Claude subagent）；宿主没有子代理时由主代理顺序执行并如实说明。单写入者、审查子代理只读等原则不变。 |
+| `agents/openai.yaml`（Skill 元数据 / 隐式触发策略） | 各 Skill 目录、`audit-codex-kit` 检查单 | **跳过**：Cursor / Claude 不需要该文件；用 `SKILL.md` 的 `description` 触发即可。 |
+| `.system` 前缀 与 `resolve-skill.ps1`（Skill 路径解析） | `AGENTS.md` 路径解析节、根 `AGENTS.md` | **翻译/跳过**：直接用当前宿主 skills 目录定位 `SKILL.md`；没有 `.system` 概念，无需该解析脚本。 |
+| `{{CODEX_HOME}}` / `~/.codex`（Codex 主目录假设） | standalone / workspace `AGENTS.md`、README | **翻译**：换成当前宿主主目录——Cursor `~/.cursor`、Claude `~/.claude`（Skills、运行时脚本路径同步替换）。 |
+| 第 12 节「Codex 桌面高级设置」（本地环境 / 环境列表 / 工作树 / Git 高级设置 / 分支前缀 `codex/` / 代码评审交付 / 提交指令） | workspace-template `AGENTS.md` 第 12 节 | **整节跳过**：这是 Codex Desktop 客户端专属 UI，其他宿主没有等价物，跳过不影响前 11 节方法论。 |
+| “Codex Desktop / Local Project”措辞 | 少量 `SKILL.md` references | **翻译**：读作“当前宿主里一个长期项目对应一个工作区/项目”。 |
+| `winget` 固定版本安装器；`feature_guard.py` / `validate-kit.ps1` / `next_step.py` 等门禁脚本 | `AGENTS.md`、多个 `SKILL.md`、`scripts/` | **保持不变（非 Codex 专属）**：winget 是 Windows 包管理器，门禁是纯 Python / PowerShell，任何宿主照用——它们是本套件的强制核心，不要改写。 |
+
+外部方法来源和归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。公开仓库不包含旧电脑的 Key、全局配置、项目源码、缓存或安装备份。
 
 完整设计见 `docs/DESIGN.md`。

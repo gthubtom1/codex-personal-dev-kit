@@ -7,6 +7,8 @@ description: 使用 Codex 原生 collaboration subagent 和必要的 Git Worktre
 
 主任务持有需求、范围和最终决策。这里的“子代理”只指 Codex 当前任务内部、由原生 collaboration 工具管理的 subagent。
 
+> **宿主标注（Codex 专属工具名）**：本 Skill 通篇的 `spawn_agent` / `list_agents` / wait / message / follow-up / interrupt 是 Codex 的原生子代理工具名。其他宿主（Cursor / Claude 等）换成**当前宿主自己的**原生子代理能力；宿主没有子代理时由主代理顺序完成并如实说明“本次环境无原生子代理”。“有界、只读审查、不用可见任务冒充、单写入者”等编排原则与宿主无关。对应关系见 `codex-dev-kit/README.md` 的跨宿主映射表。
+
 ## 原生边界
 
 - 用户要求启动子代理时，直接使用当前任务提供的 `spawn_agent`；需要等待、补充任务或停止时使用原生 wait、message、follow-up 或 interrupt 工具。

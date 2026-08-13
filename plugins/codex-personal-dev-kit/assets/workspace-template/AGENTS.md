@@ -2,6 +2,15 @@
 
 本文件是全局短版 `{{CODEX_HOME}}\AGENTS.md` 的详细执行版。它服务于 `{{WORKSPACE_ROOT}}` 母目录和其下的长期项目。用户只用普通语言表达想法；Codex 负责把它变成可维护、可验证、可恢复的软件。
 
+> **跨宿主适配须知（Codex 之外的 agent 必读）**
+> 本文件是为 **Codex 宿主**蒸馏的详细规则。其中的**核心方法论**——第 1、2、3、5、6、7、10、11 节（用户合同、项目边界、启动顺序、需求拓展、文档记忆、旧功能保护、权限边界、完成标准与证据分级）——与具体 agent 无关，任何宿主都照用，**不要改写**。
+> 但下列内容是 **Codex 宿主专属**，在其他宿主（Cursor / Claude 等）上是死内容或会误导，必须按 `codex-dev-kit/README.md` 的「其他 Agent 自适配安装」逐节映射表翻译成当前宿主的等价做法，或在无等价物时跳过：
+> - 第 4 节的 `$skill` 调度语法（`$codex-development-assistant` 等 `$` 前缀）——见该节下方的宿主标注；
+> - 第 9 节的原生子代理工具名 `spawn_agent` / `list_agents`——见该节标注；
+> - 第 12 节整节「Codex 桌面高级设置」——Codex Desktop 专属 UI，非 Codex 宿主整节跳过；
+> - 全文出现的 `{{CODEX_HOME}}`（`~/.codex` 之类 Codex 主目录）、`resolve-skill.ps1`、`.system` 前缀、`agents/openai.yaml`——按映射表替换或跳过。
+> （`winget`、`feature_guard.py`、`validate-kit.ps1` 等是 Windows / 纯脚本工具，与 agent 无关，任何宿主照用，不属于此列。）
+
 ## 1. 用户合同
 
 用户是完全零基础，不懂开发、Git、分支、Worktree、任务树、规划、架构、测试、依赖、部署、项目文档或回滚。
@@ -56,6 +65,8 @@
 ## 4. Skill 调度总表
 
 Skill 是可复用的工作流程，不是新的 Agent、Hook、MCP 或 Plugin。Codex 必须根据用户意图自动选择，不要求用户记忆 `$` 命令。优先使用已安装的 standalone Skill；没有安装时读取本地源码并报告缺少安装，不要自动下载。
+
+> **宿主标注（Codex 专属语法）**：本节的 `$skill-name` 调度（`$codex-development-assistant` 等 `$` 前缀）是 Codex 的调用约定。没有 `$` 语法的宿主（Cursor / Claude 等）把 `$skill-name` 理解为「读取当前宿主 skills 目录下同名 `SKILL.md` 并遵循」，用自然语言按意图路由，不需要 `agents/openai.yaml`。表格里“调度”“结果”两列的方法论不变，变的只是调用方式。详见 README 映射表。
 
 ### Skill 路径解析闸门
 
@@ -195,6 +206,8 @@ Skill 是可复用的工作流程，不是新的 Agent、Hook、MCP 或 Plugin�
 
 ## 9. 原生 subagent 和任务边界
 
+> **宿主标注（Codex 专属工具名）**：`spawn_agent` / `list_agents` 及等待、消息、follow-up、interrupt 是 Codex 的原生子代理工具名。其他宿主换成**当前宿主自己的**原生子代理能力（如 Cursor 的后台子任务、Claude 的 subagent）；宿主没有子代理时由主代理顺序完成并如实说明。本节“单写入者、审查子代理默认只读、不用可见任务/Plugin/Hook 冒充子代理”的原则与宿主无关，照用。详见 README 映射表。
+
 “子代理/智能体/subagent”只指 Codex 当前任务的原生 collaboration 工具：`spawn_agent`、等待、消息、follow-up 和 interrupt。
 
 - 简单工作由主代理完成；子代理只做有界独立探索、官方资料核对、测试执行、架构/安全/回归审查或答案盲测。
@@ -248,6 +261,8 @@ Skill 是可复用的工作流程，不是新的 Agent、Hook、MCP 或 Plugin�
 不得因为 Skill 缺失而创建替代 Plugin/Agent/Hook，也不得未经同意从 GitHub 自动下载。
 
 ## 12. Codex 桌面高级设置的零基础规则
+
+> **宿主标注（Codex 专属，整节）**：本节描述的是 Codex Desktop 客户端的高级工作区 UI（本地环境、环境列表、工作树、Git 高级设置、分支前缀 `codex/`、代码评审交付、提交/拉取请求指令）。这些是 Codex 客户端独有的界面设置，在 Cursor / Claude 等宿主上没有等价物——**非 Codex 宿主整节跳过即可**，不影响前 11 节的方法论。
 
 截图中的“本地环境、环境、工作树、Git”是 Codex 的高级工作区设置，不是用户必须学习的开发步骤。用户不需要手动配置它们，也不需要理解其中的命令。
 

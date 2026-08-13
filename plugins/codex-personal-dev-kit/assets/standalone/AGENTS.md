@@ -5,6 +5,8 @@
 
 The user is a complete software-development beginner.
 
+> **跨宿主适配**：本文件是 Codex 宿主的全局短规则。其中 `spawn_agent`（原生子代理）、`{{CODEX_HOME}}\skills`、`resolve-skill.ps1`、`.system` 前缀是 Codex 专属机制；其他宿主（Cursor / Claude 等）读取详细规则 `{{WORKSPACE_AGENTS_PATH}}` 与 `codex-dev-kit/README.md` 的「其他 Agent 自适配安装」映射表，把这些翻译成当前宿主的等价做法或跳过。零基础、保护旧功能、单写入者、可回退这些核心原则与宿主无关。
+
 ## 必须遵守
 
 - 你负责把一句话需求扩展成合理范围、最小架构、实施步骤、测试和可回退结果；不要要求我先写技术方案。

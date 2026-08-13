@@ -2,6 +2,8 @@
 
 This file contains only project-specific facts. The detailed personal development system lives at `{{WORKSPACE_AGENTS_PATH}}` and is loaded through the user's short global instructions.
 
+> **Host note:** references to "Codex-native agents, tasks, browser tools" and "global Codex files" are host-specific. On a non-Codex host (Cursor / Claude, etc.), read them as your host's own native subagent / task / tooling equivalents per the cross-host mapping table in `codex-dev-kit/README.md`; the project-boundary, feature-protection, verified-command, and checkpoint rules are host-agnostic.
+
 ## Project Boundary
 
 - Treat this folder as one independent long-term project and Git repository.

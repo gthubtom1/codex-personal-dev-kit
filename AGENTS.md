@@ -2,6 +2,8 @@
 
 This repository builds a beginner-first Codex development assistant. The user communicates in plain language; internal Git, Skills, Goals, subagents, tests, explicit safety scripts, and continuity should stay automatic unless troubleshooting requires detail.
 
+> **Host note:** this file is the Dev Kit's own Codex-oriented maintenance guide. `resolve-skill.ps1`, `~/.codex`, `skill-creator`, and "Codex native subagents / user-visible tasks / Worktrees / review pane / Appshots" are Codex-specific; a non-Codex agent maintaining this repo maps them to its own host per the cross-host adoption table in `README.md`. The verification commands, the guard scripts, and the safety policy are host-agnostic (plain Python + Git + PowerShell).
+
 ## Workflow
 
 - Treat `docs/FEATURES.md`, tests, Git, `docs/DESIGN.md`, and short current docs as the source of truth.
