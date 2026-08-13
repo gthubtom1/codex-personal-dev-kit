@@ -66,6 +66,27 @@ SOURCE_EXTENSIONS = {
     ".js", ".jsx", ".kt", ".php", ".py", ".rb", ".rs", ".scss", ".swift", ".ts",
     ".tsx", ".vue", ".mjs", ".cjs", ".svelte", ".astro", ".sql", ".graphql", ".gql",
     ".json", ".yaml", ".yml", ".toml", ".xml",
+    # Scripts change behavior just like compiled-language sources do; a
+    # Windows-first kit cannot treat its own PowerShell/batch layer as "not
+    # source".
+    ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".sh",
+}
+LARGE_FILE_WARN_BYTES = 5 * 1024 * 1024
+SECRET_PATTERNS: tuple[tuple[str, "re.Pattern[str]"], ...] = (
+    ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("GitHub token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{22,}\b")),
+    ("provider API key", re.compile(r"\bsk-[A-Za-z0-9_-]{24,}\b")),
+    ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("signed JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")),
+    ("URL with embedded credentials", re.compile(r"://[^/\s:@]{1,64}:[^@\s/]{6,}@")),
+)
+LOCKFILE_COMPANIONS: dict[str, tuple[str, ...]] = {
+    "package.json": ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"),
+    "pyproject.toml": ("poetry.lock", "uv.lock", "pdm.lock"),
+    "Cargo.toml": ("Cargo.lock",),
+    "Gemfile": ("Gemfile.lock",),
+    "composer.json": ("composer.lock",),
 }
 TEMPLATE_PLACEHOLDER_PATTERNS = {
     "AGENTS.md": (
@@ -161,12 +182,18 @@ def _split_values(values: Sequence[str] | None) -> list[str]:
 
 
 def _run_git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess:
+    # Git file content (for example the release review with Chinese dimension
+    # labels) is UTF-8. Without an explicit encoding, subprocess text mode
+    # decodes with the console code page (cp936 on Chinese Windows) in strict
+    # mode and crashes with UnicodeDecodeError instead of a GuardError.
+    kwargs: dict = {"encoding": "utf-8", "errors": "replace"} if text else {}
     return subprocess.run(
         ["git", "-C", str(root), *args],
         text=text,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+        **kwargs,
     )
 
 
@@ -814,31 +841,40 @@ def _plain_version_at(root: Path, revision: str) -> str | None:
     return value
 
 
-def _require_release_review_at(root: Path, revision: str, version: str) -> None:
-    """Require a completed 21-dimension release review inside the version tree.
-
-    The review lives in ``docs/RELEASE-REVIEW.md`` and is overwritten per
-    formal version; history stays recoverable through the tagged checkpoints.
-    Honest statuses are allowed (``not-verified`` with a reason passes), but a
-    missing file, another version's review, missing dimensions, unknown
-    statuses, or empty evidence must stop the tag.
-    """
+def _release_review_text_at(root: Path, revision: str) -> str | None:
     review = _run_git(root, "show", f"{revision}:{RELEASE_REVIEW_RELATIVE.as_posix()}")
     if review.returncode != 0:
+        return None
+    return review.stdout
+
+
+def _validate_release_review(text: str, version: str, where: str) -> None:
+    """Validate one completed 21-dimension release review.
+
+    Honest statuses are allowed (``not-verified`` with a reason passes), but a
+    missing version line, another version's review, duplicated rows, missing
+    dimensions, rewritten dimension keys, unknown statuses, or empty evidence
+    must stop the tag.
+    """
+    version_lines = re.findall(r"(?im)^\s*-\s*Version\s*:\s*(\S+)\s*$", text)
+    if not version_lines:
         raise GuardError(
-            f"docs/RELEASE-REVIEW.md with the completed 21-dimension release review for {version} "
-            "must be part of the selected checkpoint before creating a formal version. "
-            "Follow the release-readiness reference of the safe-development Skill."
+            f"docs/RELEASE-REVIEW.md {where} does not record its version. "
+            f"Add exactly one '- Version: {version}' line to the review."
         )
-    text = review.stdout
-    version_match = re.search(r"(?im)^\s*-\s*Version\s*:\s*(\S+)\s*$", text)
-    if not version_match or version_match.group(1).strip() != version:
-        recorded = version_match.group(1).strip() if version_match else "no version"
+    if len(version_lines) > 1:
         raise GuardError(
-            f"docs/RELEASE-REVIEW.md at the selected checkpoint records {recorded}, not {version}. "
+            f"docs/RELEASE-REVIEW.md {where} contains multiple '- Version:' lines; "
+            "keep exactly one so the review cannot be ambiguous."
+        )
+    recorded = version_lines[0].strip()
+    if recorded.lower() != version.lower():
+        raise GuardError(
+            f"docs/RELEASE-REVIEW.md {where} records {recorded}, not {version}. "
             "Complete the 21-dimension release review for this exact version first."
         )
     rows: dict[str, tuple[str, str, str]] = {}
+    duplicates: set[str] = set()
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped.startswith("|"):
@@ -846,7 +882,16 @@ def _require_release_review_at(root: Path, revision: str, version: str) -> None:
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
         if len(cells) < 4 or not re.fullmatch(r"\d{2}", cells[0]):
             continue
+        if cells[0] in rows:
+            duplicates.add(cells[0])
+            continue
         rows[cells[0]] = (cells[1], cells[2].lower(), cells[3])
+    if duplicates:
+        raise GuardError(
+            f"docs/RELEASE-REVIEW.md {where} repeats dimension row(s) "
+            + ", ".join(sorted(duplicates))
+            + "; keep exactly one row per dimension so a later row cannot silently override the review."
+        )
     problems: list[str] = []
     for number, slug in RELEASE_REVIEW_DIMENSIONS:
         row = rows.get(number)
@@ -868,7 +913,7 @@ def _require_release_review_at(root: Path, revision: str, version: str) -> None:
         shown = "; ".join(problems[:6])
         if len(problems) > 6:
             shown += f"; and {len(problems) - 6} more"
-        raise GuardError(f"docs/RELEASE-REVIEW.md is incomplete: {shown}.")
+        raise GuardError(f"docs/RELEASE-REVIEW.md {where} is incomplete: {shown}.")
 
 
 def create_local_version(
@@ -887,15 +932,29 @@ def create_local_version(
     versions_text = versions_path.read_text(encoding="utf-8", errors="replace")
     if not re.search(rf"(?im)^\|\s*{re.escape(normalized)}\s*\|", versions_text):
         raise GuardError(f"Record {normalized} in docs/VERSIONS.md before creating its local tag.")
-    try:
-        _require_release_review_at(root, target_commit, normalized)
-    except GuardError:
-        # Historical backfill cannot rewrite old checkpoints, so a completed
-        # review for that exact version inside the current verified checkpoint
-        # also satisfies the gate.
-        if target_commit == head:
-            raise
-        _require_release_review_at(root, head, normalized)
+    target_review = _release_review_text_at(root, target_commit)
+    if target_review is not None:
+        # A review inside the selected tree is authoritative; a conflicting or
+        # incomplete review there must never be masked by a HEAD fallback.
+        _validate_release_review(target_review, normalized, "at the selected checkpoint")
+    elif target_commit != head:
+        # Historical backfill cannot rewrite old checkpoints, so only a target
+        # tree without any review may borrow the completed review recorded in
+        # the current checkpoint.
+        head_review = _release_review_text_at(root, head)
+        if head_review is None:
+            raise GuardError(
+                f"docs/RELEASE-REVIEW.md with the completed 21-dimension release review for {normalized} "
+                "was found neither in the selected historical checkpoint nor in the current checkpoint. "
+                "Complete the review for that version in the current checkpoint before backfilling its tag."
+            )
+        _validate_release_review(head_review, normalized, "in the current checkpoint (historical backfill)")
+    else:
+        raise GuardError(
+            f"docs/RELEASE-REVIEW.md with the completed 21-dimension release review for {normalized} "
+            "must be part of the selected checkpoint before creating a formal version. "
+            "Follow the release-readiness reference of the safe-development Skill."
+        )
     package_version = _package_version_at(root, target_commit)
     if package_version and package_version != normalized[1:]:
         raise GuardError(f"package.json version {package_version} at the selected checkpoint does not match {normalized}.")
@@ -1491,12 +1550,63 @@ def stage_paths(root: Path, paths: Sequence[str]) -> dict:
         _run_git(root, "read-tree", previous_tree)
         raise GuardError("Pre-existing staged user work must be unstaged before this checkpoint: " + ", ".join(sorted(protected_staged)))
 
+    secret_findings = _staged_secret_findings(root, normalized)
+    if secret_findings:
+        _run_git(root, "read-tree", previous_tree)
+        raise GuardError(
+            "Refusing to stage likely credentials: "
+            + "; ".join(secret_findings)
+            + ". Move real secrets to an ignored local file, rotate them if they were exposed, then stage again."
+        )
+
     contract["state"] = "open"
     contract["stagedPaths"] = sorted(staged)
+    contract["stagingWarnings"] = _staging_warnings(root, normalized, staged)
     contract["verificationRuns"] = []
     _clear_verification(contract)
     _write_contract(root, contract)
     return contract
+
+
+def _staged_secret_findings(root: Path, paths: Sequence[str]) -> list[str]:
+    findings: list[str] = []
+    for relative in paths:
+        path = root / relative
+        if not path.is_file() or path.stat().st_size > 5 * 1024 * 1024:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for label, pattern in SECRET_PATTERNS:
+            if pattern.search(text):
+                findings.append(f"{relative} looks like it contains a {label}")
+                break
+    return findings
+
+
+def _staging_warnings(root: Path, paths: Sequence[str], staged: set[str]) -> list[str]:
+    warnings: list[str] = []
+    for relative in paths:
+        path = root / relative
+        if not path.is_file():
+            continue
+        size = path.stat().st_size
+        if size >= LARGE_FILE_WARN_BYTES:
+            warnings.append(
+                f"{relative} is {size / (1024 * 1024):.1f} MiB; large binaries permanently bloat Git history. "
+                "Confirm it really belongs in version control."
+            )
+        companions = LOCKFILE_COMPANIONS.get(Path(relative).name)
+        if companions:
+            parent = Path(relative).parent
+            existing = [(parent / name).as_posix() for name in companions if (root / parent / name).is_file()]
+            if existing and not any(item in staged for item in existing):
+                warnings.append(
+                    f"{relative} changed but its lockfile ({', '.join(existing)}) is not part of this slice; "
+                    "stage the refreshed lockfile or confirm dependencies did not change."
+                )
+    return warnings
 
 
 def _verification_command_error(command: Sequence[str]) -> str | None:
@@ -1540,6 +1650,11 @@ def run_verification(root: Path, feature_ids: Sequence[str], command: Sequence[s
         raise GuardError("Open or reopen the current change contract before running verification.")
     features = read_feature_catalog(root)
     verified_ids = _split_values(feature_ids)
+    if not verified_ids:
+        raise GuardError(
+            "Bind at least one feature ID with --feature; an unbound verification run proves nothing "
+            "and cannot seal a checkpoint."
+        )
     unknown = set(verified_ids) - set(features)
     if unknown:
         raise GuardError("Unknown verification feature ID(s): " + ", ".join(sorted(unknown)))
@@ -2194,6 +2309,8 @@ def main() -> int:
         elif args.command == "stage":
             contract = stage_paths(root, args.path)
             print("Guard-staged paths: " + ", ".join(contract.get("stagedPaths", [])))
+            for warning in contract.get("stagingWarnings", []):
+                print(f"WARNING: {warning}")
         elif args.command == "declare-change":
             contract = declare_changed_features(root, args.change)
             print("Intentionally changed feature IDs: " + ", ".join(contract.get("changedFeatureIds", [])))

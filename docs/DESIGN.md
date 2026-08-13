@@ -61,10 +61,12 @@ Mother Folder
 
 1. `onboard-codex-project`: 建立项目事实、模板和 Git 基线。
 2. `prepare-codex-goal`: 从一句话拓展需求并形成可验证 Goal。
-3. `orchestrate-codex-team`: 自适应选择主代理、Codex 原生 collaboration subagent 和必要 Worktree；不使用可见任务模拟子代理。
-4. `codex-safe-development`: 实现、测试、审查和本地检查点。
-5. `manage-project-continuity`: 新任务恢复、短状态和交接。
-6. `audit-codex-kit`: 只读巡检项目和助手本身。
+3. `research-and-reuse`: 新能力默认先做受控的官方/Web/GitHub 调研与复用决策。
+4. `orchestrate-codex-team`: 自适应选择主代理、Codex 原生 collaboration subagent 和必要 Worktree；不使用可见任务模拟子代理。
+5. `codex-safe-development`: 实现、测试、审查和本地检查点。
+6. `integrate-codex-projects`: 把明确指定来源项目的能力安全融合进当前项目。
+7. `manage-project-continuity`: 新任务恢复、短状态和交接。
+8. `audit-codex-kit`: 只读巡检项目和助手本身。
 
 ### Adaptive Team
 

@@ -497,6 +497,7 @@ $requiredInstalledPaths = @(
     (Join-Path $kitTargetRoot "source.json"),
     (Join-Path $kitTargetRoot "managed-files.json"),
     (Join-Path $kitTargetRoot "scripts\feature_guard.py"),
+    (Join-Path $kitTargetRoot "scripts\next_step.py"),
     (Join-Path $kitTargetRoot "scripts\pre_tool_guard.py"),
     (Join-Path $kitTargetRoot "scripts\resolve-skill.ps1"),
     (Join-Path $codexHomePath "skills\codex-development-assistant\SKILL.md"),

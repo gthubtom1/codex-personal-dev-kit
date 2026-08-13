@@ -19,7 +19,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import feature_guard  # noqa: E402
 
-GUARD = "python " + str(SCRIPT_DIR / "feature_guard.py")
+GUARD = f'python "{SCRIPT_DIR / "feature_guard.py"}"'
 
 
 def _git_ok(root: Path) -> bool:
@@ -88,7 +88,7 @@ def plan_next_steps(root: Path) -> list[str]:
         for version in _pending_versions(root):
             state = _release_review_state(root, version)
             if state == "present":
-                lines.append(f"NEXT: {version} 已有终审记录但还没有本地标签：")
+                lines.append(f"NEXT: {version} 已有终审记录但还没有本地标签（先确认终审和版本行已包含在最终检查点中）：")
                 lines.append(f"  command: {GUARD} version --root . --name {version}")
             else:
                 reason = "docs/RELEASE-REVIEW.md 缺失" if state == "missing" else f"docs/RELEASE-REVIEW.md 记录的不是 {version}"

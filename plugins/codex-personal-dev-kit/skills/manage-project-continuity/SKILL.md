@@ -19,7 +19,7 @@ description: 在 Codex 长期项目的任务开始、上下文变长、对话切
 
 1. 审查 diff，通过 change guard 明确暂存路径并实际运行最终验证；验证后又有改动时重新打开、暂存并复核。
 2. 在允许且有独立成果、change guard 已通过时，使用 bundled `feature_guard.py checkpoint` 创建本地检查点；不得直接运行 `git commit`，检查点形成前不清理已验证契约。
-3. 如果用户明确接受的是正式里程碑，确认 `docs/VERSIONS.md` 和项目版本字段已包含在该检查点，再使用 guarded `version` 创建本地标签；普通任务结束不创建版本。
+3. 如果用户明确接受的是正式里程碑，先按安全开发 Skill 的发布准备参考完成 21 维终审并覆盖更新 `docs/RELEASE-REVIEW.md`，确认它与 `docs/VERSIONS.md`、项目版本字段一起包含在该检查点，再使用 guarded `version` 创建本地标签；普通任务结束不创建版本。
 4. 按 [document-lifecycle.md](references/document-lifecycle.md) 覆盖更新当前状态：
    - `STATUS.md` 只保留当前里程碑、验证、问题和下一步。
    - `ROADMAP.md` 只保留当前及接下来 2 到 3 个里程碑。

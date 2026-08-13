@@ -28,11 +28,14 @@ SKILLS = {
 }
 
 def _unit_test_timeout_seconds() -> int:
-    raw = os.environ.get("CODEX_DEV_KIT_TEST_TIMEOUT_SECONDS", "300")
+    # The guard suite creates many real temporary repositories and full
+    # contract cycles; 300 seconds started failing healthy runs once the
+    # release-review and staging-protection tests landed.
+    raw = os.environ.get("CODEX_DEV_KIT_TEST_TIMEOUT_SECONDS", "900")
     try:
         return max(1, int(raw))
     except (TypeError, ValueError):
-        return 300
+        return 900
 
 
 UNIT_TEST_TIMEOUT_SECONDS = _unit_test_timeout_seconds()
@@ -59,6 +62,7 @@ def main() -> int:
         errors.append(f"Missing standalone VERSION marker: {version_path}")
     for relative in (
         "scripts/feature_guard.py",
+        "scripts/next_step.py",
         "scripts/pre_tool_guard.py",
         "scripts/resolve-skill.ps1",
         "scripts/audit_project.py",

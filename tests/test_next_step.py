@@ -113,6 +113,17 @@ class NextStepTests(unittest.TestCase):
         self.assertIn("checkpoint --root", output)
         self.assertIn("还没有保存回退点", output)
 
+    def test_suggests_version_command_when_review_is_ready(self) -> None:
+        self.scaffold()
+        versions = "# Versions\n\n| Version | User-visible result | Verification | Status |\n| --- | --- | --- | --- |\n| v1.0.0 | Baseline | suite:all-tests | recoverable |\n"
+        (self.root / "docs/VERSIONS.md").write_text(versions, encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text("# Release Review\n\n- Version: v1.0.0\n", encoding="utf-8")
+        self.git("add", "docs/VERSIONS.md", "docs/RELEASE-REVIEW.md")
+        self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "record version and review")
+        output = self.plan()
+        self.assertIn("已有终审记录", output)
+        self.assertIn("version --root . --name v1.0.0", output)
+
     def test_flags_pending_formal_version_and_missing_release_review(self) -> None:
         self.scaffold()
         versions = "# Versions\n\n| Version | User-visible result | Verification | Status |\n| --- | --- | --- | --- |\n| v1.0.0 | Baseline | suite:all-tests | recoverable |\n"

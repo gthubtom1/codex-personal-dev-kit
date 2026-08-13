@@ -62,6 +62,9 @@ class FeatureGuardTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = true;\n", encoding="utf-8")
+        (self.root / "tool.ps1").write_text("Write-Output 'baseline tool'\n", encoding="utf-8")
+        (self.root / "package.json").write_text('{\n  "name": "fixture",\n  "dependencies": {}\n}\n', encoding="utf-8")
+        (self.root / "package-lock.json").write_text('{\n  "name": "fixture",\n  "lockfileVersion": 3\n}\n', encoding="utf-8")
         (self.root / "tests").mkdir()
         (self.root / "tests/verify_features.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
         self.git("init", "-b", "main")
@@ -607,6 +610,196 @@ class FeatureGuardTests(unittest.TestCase):
 
         version, target = feature_guard.create_local_version(self.root, "v1.0", target=historical)
         self.assertEqual((version, target), ("v1.0.0", historical))
+
+    def test_formal_version_accepts_chinese_review_and_honest_statuses(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        content = release_review("v1.0.0")
+        content = content.replace("| 01 | requirements |", "| 01 | requirements 需求 |")
+        content = content.replace(
+            "| 16 | backup-recovery | verified | tests/verify_features.py exit 0 |",
+            "| 16 | backup-recovery 备份 | not-verified | 尚未演练恢复，风险已在 STATUS 记录 |",
+        )
+        content = content.replace(
+            "| 13 | performance | verified | tests/verify_features.py exit 0 |",
+            "| 13 | performance 性能 | not-applicable | 纯本地单用户工具，无并发面 |",
+        )
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(content, encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with an honest chinese review")
+        version, _ = feature_guard.create_local_version(self.root, "v1.0")
+        self.assertEqual(version, "v1.0.0")
+
+    def test_formal_version_rejects_renamed_dimension_key(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        content = release_review("v1.0.0").replace("| 06 | state-machine |", "| 06 | flow-machine |")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(content, encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with a renamed dimension key")
+        with self.assertRaisesRegex(feature_guard.GuardError, "must keep the fixed dimension key state-machine"):
+            feature_guard.create_local_version(self.root, "v1.0")
+
+    def test_formal_version_rejects_duplicate_rows_and_multiple_version_lines(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        content = release_review("v1.0.0") + "| 06 | state-machine | verified | duplicated appendix row |\n"
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(content, encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with a duplicated review row")
+        with self.assertRaisesRegex(feature_guard.GuardError, "repeats dimension row"):
+            feature_guard.create_local_version(self.root, "v1.0")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1b';\n", encoding="utf-8")
+        content = release_review("v1.0.0").replace(
+            "- Result: acceptable for a local formal version",
+            "- Result: acceptable for a local formal version\n- Version: v1.0.0",
+        )
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(content, encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nA second review slice is recorded.\n\n## Working State\n\nMain checkout carries the ambiguous review slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nThe review has two version lines.\n\n## Next Action\n\nKeep exactly one version line.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/RELEASE-REVIEW.md", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with two version lines")
+        with self.assertRaisesRegex(feature_guard.GuardError, "multiple '- Version:' lines"):
+            feature_guard.create_local_version(self.root, "v1.0")
+
+    def test_formal_version_backfill_requires_a_review_somewhere(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        historical = feature_guard.create_checkpoint(self.root, "deliver v1 without any review")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nA later slice exists without reviews.\n\n## Working State\n\nMain checkout carries the second slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nNo release review exists anywhere yet.\n\n## Next Action\n\nComplete the review before tagging.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v2 without any review")
+
+        with self.assertRaisesRegex(feature_guard.GuardError, "neither in the selected historical checkpoint"):
+            feature_guard.create_local_version(self.root, "v1.0", target=historical)
+
+    def test_formal_version_backfill_rejects_conflicting_target_review(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        historical = feature_guard.create_checkpoint(self.root, "deliver v1 with its own review")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        versions = self.root / "docs/VERSIONS.md"
+        versions.write_text(
+            versions.read_text(encoding="utf-8") + "| v2.0.0 | Second export | suite:all-tests | recoverable |\n",
+            encoding="utf-8",
+        )
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v2.0.0"), encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nThe second milestone review is recorded.\n\n## Working State\n\nMain checkout carries the v2 slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nThe historical checkpoint keeps its own review.\n\n## Next Action\n\nTag the correct checkpoints only.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/VERSIONS.md", "docs/RELEASE-REVIEW.md", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v2 with its own review")
+
+        with self.assertRaisesRegex(feature_guard.GuardError, "at the selected checkpoint records v1.0.0, not v2.0.0"):
+            feature_guard.create_local_version(self.root, "v2.0.0", target=historical)
+
+    def test_verification_requires_at_least_one_bound_feature(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        with self.assertRaisesRegex(feature_guard.GuardError, "Bind at least one feature ID"):
+            feature_guard.run_verification(self.root, [], [sys.executable, "tests/verify_features.py"], timeout=30)
+
+    def test_powershell_scripts_count_as_source(self) -> None:
+        self.start()
+        (self.root / "tool.ps1").write_text("Write-Output 'changed tool'\n", encoding="utf-8")
+        feature_guard.stage_paths(self.root, ["tool.ps1"])
+        self.verify("F-001", "F-002")
+        with self.assertRaisesRegex(feature_guard.GuardError, "docs/STATUS.md was not updated"):
+            feature_guard.complete_contract(self.root, [], [])
+
+    def test_staging_refuses_likely_credentials(self) -> None:
+        self.start()
+        fake_key = "AKIA" + "IOSFODNN7EXAMPLE"
+        (self.root / "src/config.js").write_text(f"export const uploader = '{fake_key}';\n", encoding="utf-8")
+        with self.assertRaisesRegex(feature_guard.GuardError, "likely credentials"):
+            feature_guard.stage_paths(self.root, ["src/config.js"])
+        self.assertEqual(self.git("diff", "--cached", "--name-only").stdout.strip(), "")
+
+    def test_staging_warns_about_large_files_and_lockfile_drift(self) -> None:
+        self.start()
+        (self.root / "assets").mkdir()
+        (self.root / "assets/big.bin").write_bytes(b"0" * (6 * 1024 * 1024))
+        (self.root / "package.json").write_text(
+            '{\n  "name": "fixture",\n  "dependencies": {\n    "left-pad": "^1.3.0"\n  }\n}\n',
+            encoding="utf-8",
+        )
+        contract = feature_guard.stage_paths(self.root, ["assets/big.bin", "package.json"])
+        warnings = contract.get("stagingWarnings", [])
+        self.assertTrue(any("assets/big.bin" in item for item in warnings), warnings)
+        self.assertTrue(any("package-lock.json" in item for item in warnings), warnings)
+
+    def test_guarded_publish_refuses_conflicting_remote_tag(self) -> None:
+        baseline = self.git("rev-parse", "HEAD").stdout.strip()
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver public v1")
+        feature_guard.create_local_version(self.root, "v1.0.0")
+
+        with tempfile.TemporaryDirectory() as remote_directory:
+            remote = Path(remote_directory) / "remote.git"
+            initialized = subprocess.run(
+                ["git", "init", "--bare", str(remote)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            self.git("remote", "add", "origin", str(remote))
+            self.git("push", "origin", "main")
+            conflicting = subprocess.run(
+                ["git", "-C", str(remote), "update-ref", "refs/tags/v1.0.0", baseline],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(conflicting.returncode, 0, conflicting.stderr)
+            with self.assertRaisesRegex(feature_guard.GuardError, "already exists at a different checkpoint"):
+                feature_guard.publish_authorized_refs(
+                    self.root,
+                    "origin",
+                    "main",
+                    ["v1.0.0"],
+                    str(remote),
+                )
 
     def test_formal_version_rejects_incomplete_release_review(self) -> None:
         self.start()

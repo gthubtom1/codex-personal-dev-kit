@@ -55,6 +55,6 @@ python <dev-kit-root>/scripts/feature_guard.py checkpoint --root . --message "ch
 
 该命令只保存 tree 与父提交都匹配验证快照的内容，并自动关闭契约。安全开发 Skill 在没有匹配回退点时不得声明任务完成；新契约也不能覆盖这种未保存状态。任务结束或开启新任务时，只清理已经形成匹配检查点的契约。
 
-如果该检查点是用户接受的正式里程碑，必须先在同一验证快照中更新 `docs/VERSIONS.md` 和已有版本字段；检查点完成后再运行 `feature_guard.py version --root . --name vX.Y.Z`。普通检查点不创建版本标签。
+如果该检查点是用户接受的正式里程碑，必须先在同一验证快照中完成 21 维发布终审（覆盖写入 `docs/RELEASE-REVIEW.md`，见 release-readiness 参考）并更新 `docs/VERSIONS.md` 和已有版本字段；检查点完成后再运行 `feature_guard.py version --root . --name vX.Y.Z`。普通检查点不创建版本标签。
 
 契约是 `.codex/current-change.json` 中的单个临时文件，Git 忽略它；新契约覆盖旧契约，不形成历史文档。

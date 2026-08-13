@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-- Prepare a clean MIT-licensed v0.2.6 checkout whose canonical portable template exactly reconstructs the complete Chinese mother-folder rules.
-- Detect local/template AGENTS drift without overwriting or exposing custom rules, while retaining blank-install and idempotence guarantees.
+- Finish the v0.2.7 candidate: 21-dimension release-review gate, research-by-default routing, read-only `next_step.py` entry, merged third-party review fixes (UTF-8 subprocess decoding, strict backfill, credential/large-file/lockfile staging protections, feature-bound verification), and the synchronized documents/templates.
+- Reinstall the standalone runtime and reconcile the live mother-folder rules with the updated canonical template so the effective layer matches the source again.
 
 ## Next Milestone
 
