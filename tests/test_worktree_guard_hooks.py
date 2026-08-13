@@ -27,6 +27,20 @@ class ForcePushBypassTests(unittest.TestCase):
         self.assertTrue(pre_tool_guard.classify_command("echo $(git push origin main)").blocked)
         self.assertTrue(pre_tool_guard.classify_command("echo `git push --force`").blocked)
 
+    def test_nested_substitution_push_is_blocked(self) -> None:
+        self.assertTrue(pre_tool_guard.classify_command("echo $(echo $(git push --force))").blocked)
+
+    def test_newline_hidden_destructive_delete_is_blocked(self) -> None:
+        # A catastrophic delete hidden after a newline must not slip past the
+        # deletion scan (it runs after newline normalization).
+        for command in (
+            "echo hi\nrm -rf /",
+            "echo x\nformat c:",
+            "ls\nRemove-Item -Recurse -Force C:\\",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(pre_tool_guard.classify_command(command).blocked)
+
     def test_ordinary_commands_still_allowed(self) -> None:
         self.assertFalse(pre_tool_guard.classify_command("git status\ngit diff").blocked)
         self.assertFalse(pre_tool_guard.classify_command("echo $(git rev-parse HEAD)").blocked)
@@ -112,8 +126,10 @@ class WorktreeRuleTextTests(unittest.TestCase):
         for relative in self.SURFACES:
             text = (REPO_ROOT / relative).read_text(encoding="utf-8")
             with self.subTest(surface=relative):
+                # Two mandate-specific tokens that both disappear if the rule is
+                # removed: the in-workspace anti-pattern and the guarded outside path.
                 self.assertIn(".local", text)
-                self.assertIn("worktree", text.lower())
+                self.assertIn("worktree-path", text)
 
 
 if __name__ == "__main__":

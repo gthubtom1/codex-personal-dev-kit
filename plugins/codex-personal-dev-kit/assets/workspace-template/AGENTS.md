@@ -218,14 +218,14 @@ Skill 是可复用的工作流程，不是新的 Agent、Hook、MCP 或 Plugin�
 - 每次编排只在主任务内存中记录代理编号、任务、任务接收确认、状态和精炼结果；不把子代理日志或聊天转录写进项目文档。
 - `spawn_agent` 是启动能力，`list_agents` 只是可选状态信息；并发、排队、模型和推理由原生工具实际接受情况决定。
 - 不把预期答案、怀疑的问题或修复方案泄漏给独立审查者；只提供必要的任务事实和原始材料。
-- 一个 checkout 只有一个写入者；审查 subagent 默认只读。并行写入必须使用隔离 Worktree 和明确整合顺序。并行 Worktree 一律建到工作区外（用 guarded `worktree-path`，落在项目旁的 `../.<项目名>-worktrees/`），禁止建在工作区内部（如 `.local/`）——在有检查点快照/文件监视的宿主（Cursor / VSCode）里，工作区内的 Worktree 会被反复扫描与重打包，堆积后拖垮甚至冻结编辑器。
+- 一个 checkout 只有一个写入者；审查 subagent 默认只读。并行写入必须使用隔离 Worktree 和明确整合顺序。并行 Worktree 一律建到工作区外（用 guarded `worktree-path`，落在项目旁的 `../.<项目名>-worktrees/`），禁止建在工作区内部（如 `.local/`）——在有检查点快照/文件监视的宿主（Cursor / VSCode）里，工作区内的 Worktree 会被反复扫描与重打包，堆积后拖垮甚至冻结编辑器。这类宿主还需把 `__pycache__`、`*.sqlite3*`、`*.db` 等自动重生的产物加入 `files.watcherExclude`/`search.exclude`（项目模板已自带 `.vscode/settings.json`）。
 - 不创建、fork、handoff 或消息联系可见 Codex 任务来伪装 subagent；可见任务用于用户长期上下文，结果/范围/模块改变时再开新任务。
 
 ## 10. 权限边界
 
 自动允许：读取和编辑当前项目、运行已有测试/构建/本地命令、初始化项目 Git、创建本地检查点、更新精简当前事实、使用 Codex 原生只读 subagent、公开 Web/GitHub 只读研究、只读比较用户明确指定的来源项目。
 
-必须先询问：下载或克隆外部仓库、复制外部源码、运行外部脚本、安装生产依赖或全局工具、访问私有仓库、读取未指定兄弟项目、修改来源项目、合并 Git 历史、付费服务、新账号、外部/私人数据、密钥、重大架构替换、公开 API 破坏、数据库迁移、全局 Codex 配置、Skills 安装、Rules、Agents、Plugins、Hooks、远程仓库、远程状态变化或外部消息。全局工具获批后，优先由 AI 使用 safe-development Skill 的固定 package/version/scope winget installer 完成并验证；不要求用户手动安装。
+必须先询问：下载或克隆外部仓库、复制外部源码、运行外部脚本、安装生产依赖或全局工具、访问私有仓库、读取未指定兄弟项目、修改来源项目、合并 Git 历史、付费服务、新账号、外部/私人数据、密钥、重大架构替换、公开 API 破坏、数据库迁移、全局 Codex 配置、Skills 安装、Rules、Agents、Plugins、Hooks、远程仓库、远程状态变化或外部消息。全局工具获批后，优先由 AI 使用 safe-development Skill 的固定 package/version/scope winget installer 完成并验证；不要求用户手动安装。（例外：快照/监视宿主的项目模板自带的 Cursor `beforeShellExecution` worktree shell 守卫属自动允许的宿主性能适配，只拦工作区内 `git worktree add`、fail-open，不是这里需要询问的那类 Hook。）
 
 永不原始、破坏性或越权执行：raw/force Git、分叉历史自动整合、Release、部署、生产变更、基础设施 apply/destroy、历史重写、远程 ref 删除、强制清理、删除未确认内容。明确授权的备份/同步、线性整合、撤销暂存、Worktree 清理和工具安装只能走对应 guarded path。
 

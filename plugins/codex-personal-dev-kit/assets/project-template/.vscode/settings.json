@@ -13,6 +13,8 @@
   },
   "search.exclude": {
     "**/__pycache__/**": true,
-    "**/*.pyc": true
+    "**/*.pyc": true,
+    "**/*.sqlite3": true,
+    "**/*.db": true
   }
 }

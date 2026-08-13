@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-- Ship v0.2.10: enforce worktree-outside-the-workspace on snapshot/file-watch hosts (Cursor `.cursor/hooks.json` `beforeShellExecution` guard), ship a `.vscode/settings.json` that excludes regenerated artifacts from the watcher/search, close the force-push classifier bypass, and correct the host-adaptation docs (short-block worktree mandate, `安装 AI 必读自检清单`, `validate-kit.ps1` marked Codex-only).
-- Complete the 21-dimension release review for v0.2.10, run the suite + `validate_kit`, then guarded `version` + `publish`.
+- v0.2.10 + v0.2.11 shipped: worktree-outside enforcement on Cursor (`.cursor/hooks.json` `beforeShellExecution` guard), `.vscode` watcher-exclude template, a HIGH classifier fix (newline-hidden destructive commands + nested `$()`), and the host-adaptation docs + a 10-agent audit follow-up.
+- Next up (v0.3): the multi-host installer AND existing-project migration — retro-add the hook + watcher-exclude to already-onboarded projects and relocate their in-workspace worktrees. This is the outstanding gap; v0.2.10/v0.2.11 only cover newly-created projects on Cursor.
 
 ## Next Milestone
 

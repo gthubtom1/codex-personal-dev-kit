@@ -125,7 +125,7 @@ Standalone 安装器不会把新系统叠加在旧 Plugin 上。它独立查询 
 
 ### Git Integration Errors
 
-正常顺序开发沿当前本地开发线创建小型检查点，不让零基础用户管理大量分支。验证完成后，安全开发 Skill 必须调用 guard-managed `checkpoint` 形成 Git 提交；没有检查点就不能声明完成。原生子代理默认只读，同一 checkout 一个写入者。Worktree 只用于真实隔离；Handoff 仅用于用户明确授权的 Worktree 交接，绝不用于模拟子代理。
+正常顺序开发沿当前本地开发线创建小型检查点，不让零基础用户管理大量分支。验证完成后，安全开发 Skill 必须调用 guard-managed `checkpoint` 形成 Git 提交；没有检查点就不能声明完成。原生子代理默认只读，同一 checkout 一个写入者。Worktree 只用于真实隔离，且一律建到工作区外；成果通过 guarded `integrate`（仅快进）带回、用完走 guarded `remove-worktree` 清理，不使用桌面端 Handoff（可能产生未受控 merge），也绝不用 Handoff 模拟子代理。
 
 ### Context Loss
 

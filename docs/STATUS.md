@@ -2,6 +2,8 @@
 
 ## Milestone
 
+The Codex Personal Dev Kit 0.2.11 is the follow-up fix release from a 10-agent audit of v0.2.10. It closes a HIGH-severity classifier gap (`_catastrophic_delete` now runs after newline normalization and `$()` extraction is balanced-paren, so `echo x\nrm -rf /`, `format c:`, and nested `$(...)` no longer slip past `classify_command`); resolves the dangerous documentation contradiction that told a maintaining agent the project installs no hooks (now qualified everywhere: the shipped `.cursor/hooks.json` is a fail-open host shell-guard, not a Codex lifecycle hook that alters native tool behavior, and must not be deleted); propagates the watcher-exclude half of the rule into both AGENTS layers and the project template; fixes stale docs (DESIGN Handoff→guarded `integrate`, README mapping-table rows for `validate-kit.ps1` Codex-only + the `.cursor`/`.vscode` host-adaptation files + the `$skill` standalone-§4 pointer, self-check scoped to Cursor); wires `tests/test_worktree_guard_hooks.py` into FEATURES DK-021; and strengthens the guard tests. Deliberately deferred to the v0.3 installer: retro-migrating the hook + watcher-exclude into already-onboarded projects and relocating their existing in-workspace worktrees.
+
 The Codex Personal Dev Kit 0.2.10 hardens parallel-worktree safety for snapshot / file-watch hosts (Cursor, VSCode). Worktrees already resolve outside the opened workspace in code; this version makes that *enforced* on Cursor via a shipped project-template `.cursor/hooks.json` `beforeShellExecution` guard (`.cursor/hooks/worktree_guard.py`) that refuses a `git worktree add` whose target resolves inside any watched workspace root (including the parent-folder-opened case), and it ships a `.vscode/settings.json` that keeps regenerated artifacts (`__pycache__`, `*.sqlite3*`, `*.db`) out of the watcher/search, so an editor no longer freezes as parallel-agent copies pile up (the incident that motivated it: 100+ in-workspace worktrees and a 9.65 GB checkpoint-snapshot blow-up). It also closes a force-push bypass in the command classifier (a second command hidden behind a newline or `$()` is now parsed and blocked), replaces the git-policy Desktop-Handoff line with the guarded fast-forward `integrate` flow, propagates the worktree-outside mandate into the short global block + README (with a new `安装 AI 必读自检清单` self-check list), and corrects the cross-host docs to state that `validate-kit.ps1` is Codex-only (non-Codex hosts verify with `python validate_kit.py` plus the unit suite). The v0.2.9 cross-host labelling and DK-001–DK-022 gates all still stand.
 
 ## Working State
@@ -42,6 +44,7 @@ The Codex Personal Dev Kit 0.2.10 hardens parallel-worktree safety for snapshot 
 
 ## Verified
 
+- v0.2.11 的审查跟进修复经 guard `verify` 实跑 `Ran 223 tests OK`（221 + 2 新守卫：换行删除、嵌套 `$()`，exit 0，绑定全 22 个 DK）；`classify_command` 对 `\nrm -rf /` / `format c:` / 嵌套 `$(...)` 以 11 组正反用例实测拦下；`validate_kit` 结构校验通过。本轮受控发布契约认领 13 个改动文件、绑定全 22 个 DK 特性验证。
 - v0.2.10 的 Cursor worktree 硬门禁（`.cursor/hooks.json` + `.cursor/hooks/worktree_guard.py`）、`.vscode/settings.json` 监视排除、以及 `pre_tool_guard.py` 的 force-push 分类器修复，经 guard `verify` 实跑 `Ran 221 tests OK`（211 顺延 + 10 条新守卫 `tests/test_worktree_guard_hooks.py`，exit 0，绑定 DK-021/DK-004/DK-003/DK-020/DK-022）；另以 8 组 stdin 载荷实测 `worktree_guard.py`（拦 `.local/`/相对内/换行藏/父文件夹；放行外置/status/list；处理 Windows 反斜杠）。
 - Nine standalone Skills pass the official Skill validator.
 - The complete local regression suite passes; the exact count is reported by the current validation run rather than stored as durable project state.
@@ -77,4 +80,4 @@ The Codex Personal Dev Kit 0.2.10 hardens parallel-worktree safety for snapshot 
 
 ## Next Action
 
-Cut the v0.2.10 formal version (Cursor worktree hard-guard + watcher exclusion + force-push classifier fix + host-adaptation docs): run the unit suite and `validate_kit`, complete the 21-dimension release review for v0.2.10, add the `docs/VERSIONS.md` row and bump `VERSION`, then guarded `version` and (on explicit authorization) guarded `publish`.
+Ship the v0.3 multi-host installer and existing-project migration: add the Cursor `.cursor/hooks.json` hook + `.vscode` watcher-exclude to already-onboarded projects and relocate their in-workspace `.local/wt-*` worktrees to `../.<project>-worktrees/`. v0.2.10/v0.2.11 deliberately protect only newly-created projects (template-time) and Cursor; the retro-migration for existing projects is the outstanding gap the audit flagged as the remaining real-world lag driver.

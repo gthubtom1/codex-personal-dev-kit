@@ -291,28 +291,51 @@ def _catastrophic_delete(command: str) -> Decision:
 
 
 def _extract_substitutions(command: str) -> list[str]:
-    """Command substitutions hide a second command from a single-pass lexer."""
+    """Command substitutions hide a second command from a single-pass lexer.
+
+    Uses balanced-paren scanning so a nested `$(echo $(git push))` yields the inner
+    command too; plus backticks.
+    """
     results: list[str] = []
-    results += re.findall(r"\$\(\s*(.+?)\s*\)", command, re.DOTALL)
-    results += re.findall(r"`\s*(.+?)\s*`", command, re.DOTALL)
+    i = 0
+    n = len(command)
+    while i < n:
+        if command[i] == "$" and i + 1 < n and command[i + 1] == "(":
+            depth = 0
+            j = i + 1
+            start = i + 2
+            while j < n:
+                if command[j] == "(":
+                    depth += 1
+                elif command[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        results.append(command[start:j])
+                        break
+                j += 1
+            i = j + 1
+        else:
+            i += 1
+    results += re.findall(r"`([^`]*)`", command, re.DOTALL)
     return results
 
 
 def classify_command(command: str, _depth: int = 0) -> Decision:
-    deletion = _catastrophic_delete(command)
-    if deletion.blocked:
-        return deletion
     # A newline separates commands, but shlex(whitespace_split=True) folds it into
     # ordinary whitespace and would hide every command after the first line
-    # (e.g. "git status\ngit push --force"). Normalize newlines to an explicit
-    # separator the segmenter already understands before lexing.
+    # (e.g. "git status\ngit push --force", or "echo x\nrm -rf /"). Normalize newlines
+    # to an explicit separator BEFORE both the catastrophic-delete scan and the
+    # segmenter, so a destructive command hidden after a newline is still caught.
     normalized = command.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ; ")
+    deletion = _catastrophic_delete(normalized)
+    if deletion.blocked:
+        return deletion
     for segment in _segments(_lex(normalized)):
         decision = _classify_tokens(segment)
         if decision.blocked:
             return decision
     # A nested command inside $( ... ) or backticks is invisible to the lexer above;
-    # classify each substitution body too, so `echo $(git push --force)` is caught.
+    # classify each substitution body too (balanced-paren handles nested $()).
     if _depth < 4:
         for nested in _extract_substitutions(command):
             if nested.strip():
