@@ -944,5 +944,44 @@ class InstallScriptTests(unittest.TestCase):
             self.assertFalse((codex_home / "codex-dev-kit/source.json").exists())
 
 
+class PowerShellEncodingTests(unittest.TestCase):
+    """Guard the portability invariant that non-ASCII PowerShell keeps a UTF-8 BOM.
+
+    Without a BOM, PowerShell 5.1 on a non-UTF-8 console code page (cp936 on a
+    Chinese Windows, the beginner audience's default) decodes a UTF-8 script
+    with the ANSI code page and garbles every Chinese message; the sibling
+    `exe-product-lifecycle` skill hit exactly this and it broke its layout
+    gate. Removing the BOM from any affected script must turn this test red.
+    """
+
+    SCRIPT_ROOT = REPO_ROOT / "plugins/codex-personal-dev-kit/scripts"
+
+    def test_non_ascii_powershell_scripts_start_with_utf8_bom(self) -> None:
+        offenders: list[str] = []
+        for script in sorted(self.SCRIPT_ROOT.rglob("*.ps1")):
+            data = script.read_bytes()
+            has_bom = data[:3] == b"\xef\xbb\xbf"
+            body = data[3:] if has_bom else data
+            has_non_ascii = any(byte > 0x7F for byte in body)
+            if has_non_ascii and not has_bom:
+                offenders.append(str(script.relative_to(self.SCRIPT_ROOT)))
+        self.assertEqual(
+            offenders,
+            [],
+            "These PowerShell scripts contain non-ASCII text but lack a UTF-8 BOM, "
+            "so PowerShell 5.1 on a cp936 console will garble them: "
+            + ", ".join(offenders),
+        )
+
+    def test_known_chinese_bootstrap_scripts_are_covered(self) -> None:
+        # If these scripts ever become pure ASCII the guard above no longer
+        # protects them; assert they still carry the Chinese content the guard
+        # is meant to keep decodable, so the protection cannot silently lapse.
+        for relative in ("bootstrap/diagnose.ps1", "bootstrap/install.ps1", "bootstrap/update.ps1"):
+            data = (self.SCRIPT_ROOT / relative).read_bytes()
+            self.assertEqual(data[:3], b"\xef\xbb\xbf", f"{relative} lost its UTF-8 BOM")
+            self.assertTrue(any(byte > 0x7F for byte in data[3:]), f"{relative} unexpectedly became ASCII-only")
+
+
 if __name__ == "__main__":
     unittest.main()

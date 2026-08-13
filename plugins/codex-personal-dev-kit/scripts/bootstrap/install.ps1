@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$CodexHome,
     [string]$WorkspaceRoot = "D:\开发",
