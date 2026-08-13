@@ -9,6 +9,7 @@ Start with the current status, then follow only the documents relevant to the ch
 - [Roadmap](ROADMAP.md): current and upcoming milestones.
 - [New-computer restore](RESTORE.md): clone, install, restart, diagnose, update, and recovery boundaries.
 - [Formal versions](VERSIONS.md): user-recognizable Dev Kit distribution milestones.
+- [Release review](RELEASE-REVIEW.md): the completed 21-dimension final review required before the current formal version.
 - [License](../LICENSE) and [third-party notices](../THIRD_PARTY_NOTICES.md): redistribution terms and acknowledged upstream method sources.
 - [Repository instructions](../AGENTS.md): contributor and validation rules.
 - [User-facing overview](../README.md): beginner workflow and installation overview.
