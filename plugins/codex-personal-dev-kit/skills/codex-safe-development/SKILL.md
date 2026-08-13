@@ -9,7 +9,7 @@ description: 在 Git、测试、审查和权限保护下实施功能、修复、
 
 ## 开发循环
 
-1. 读取当前范围内的 `AGENTS.md`、Goal、项目状态和相关源码。确认工作目录、Git 状态、分支或 Worktree，以及已有用户修改。
+1. 读取当前范围内的 `AGENTS.md`、Goal、项目状态和相关源码。确认工作目录、Git 状态、分支或 Worktree，以及已有用户修改。任何时候不确定当前该做哪一步，运行 bundled `scripts/next_step.py --root .`，按它打印的 NOW/NEXT 顺序执行，不要凭记忆重排流程。
 2. 对中大型任务先调用 `$prepare-codex-goal`。存在独立并行工作时再调用 `$orchestrate-codex-team`。
 3. 读取 [git-policy.md](references/git-policy.md)。默认沿当前本地开发线工作，绝不把“保存版本”实现成不断创建分支；只有隔离实验、后台任务或并行写入确实能降低冲突时才创建分支或 Worktree。不得把用户未提交的无关修改混入检查点。
 4. 读取 [feature-protection.md](references/feature-protection.md)。在已有 Dev Kit 项目第一次编辑前，用 bundled `scripts/feature_guard.py` 建立当前变更契约，声明本次改变的功能 ID、邻接验证、有意删除，以及确需接管的已有脏文件。没有契约不得直接修改源码。

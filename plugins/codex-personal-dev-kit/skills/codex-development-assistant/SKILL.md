@@ -26,7 +26,7 @@ description: 面向零基础用户的一句话软件开发入口，把“我想�
 
 ## 内部开发循环
 
-读取 [end-to-end-loop.md](references/end-to-end-loop.md)，然后按需要调用专业能力：
+读取 [end-to-end-loop.md](references/end-to-end-loop.md)，然后按需要调用专业能力。对已接入 Dev Kit 的项目，不确定下一步时运行 bundled `scripts/next_step.py --root .`，顺序以它打印的 NOW/NEXT 为准：
 
 1. 用 `$prepare-codex-goal` 把一句话扩展成用户、核心流程、必要状态、范围、非目标和验收。把扩展建议分级，不擅自全部实现。
 2. 先确认当前项目有独立 Git 仓库和至少一个本地基线。缺失时调用 `$onboard-codex-project` 自动建立；大量未提交文件先区分真实源码、生成物、密钥和用户数据，不能直接全部提交。

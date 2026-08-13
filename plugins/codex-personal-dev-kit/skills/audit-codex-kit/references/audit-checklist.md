@@ -16,6 +16,7 @@
 - STATUS 是否有一个具体下一步；FEATURES/ARCHITECTURE 是否需要按领域拆分并保留主索引。
 - 正式 `vX.Y.Z` 本地标签是否都有 `docs/VERSIONS.md` 能力说明；普通检查点是否被错误包装成版本；版本索引是否要求用户记 commit hash。
 - 每个正式标签的检查点树（或补建时的当时 HEAD）是否包含记录该版本号的 `docs/RELEASE-REVIEW.md` 21 维终审，且未把未验证维度伪造成 `verified`。
+- 抽查终审中 `verified` 行的证据是否可复现（命令、测试或文档真实存在且结果一致）；伪造 `verified` 按 P1 处理。
 - `docs/` 下是否存在任何超大文本文件，包括名称普通但实际是累计开发记录的文档；是否存在累计计划版本，或缺少索引和替代状态的 ADR 集合。
 
 ## Dev Kit 审计
