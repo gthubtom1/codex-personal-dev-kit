@@ -111,6 +111,21 @@ powershell -ExecutionPolicy Bypass -File .\codex-dev-kit\plugins\codex-personal-
 
 安装或更新后必须开启新 Codex 任务，让全局 `AGENTS.md` 和 Skills 重新加载。项目使用显式安全开发脚本和本地 Git 检查点，不依赖项目 Hook。
 
+## 其他 Agent 自适配安装（Cursor / Claude 等）
+
+本套件的强制核心——门禁脚本、测试、项目模板和两层 `AGENTS.md` 规则——是纯 Python + Git + Markdown，与具体 agent 无关；Codex 专属的只有 Skill 安装位置、`$skill` 调度语法、原生子代理调用和 `~/.codex` Home 假设。在正式的多宿主安装器（见 `docs/ROADMAP.md` 的 v0.3 主题）完成之前，其他 agent 的安装方式是：把本仓库链接交给你的 AI，直接说“按 README 的自适配指引把这套系统装到当前环境”。
+
+AI 自适配约定（按当前宿主执行）：
+
+1. 识别当前宿主的 Skills 目录：Codex 用 `~/.codex/skills`，Cursor 用 `~/.cursor/skills`，Claude 用 `~/.claude/skills`；把 `plugins/codex-personal-dev-kit/skills/` 下九个 Skill 目录连同 `references/` 原样复制过去。
+2. 中央运行时脚本（`plugins/codex-personal-dev-kit/scripts/`）复制到本机一个固定位置，Skill 正文里的 `<dev-kit-root>` 一律指向该位置；门禁脚本、测试和安全边界不得改写。
+3. 母目录与项目 `AGENTS.md` 模板照常安装并替换路径占位符；`AGENTS.md` 是跨 agent 事实标准，Cursor 和 Claude 都会读取。
+4. 正文中的 `$skill-name` 调度理解为“读取对应 SKILL.md 并遵循”；宿主没有 `$` 语法时用自然语言路由，不需要 `agents/openai.yaml`。
+5. “原生子代理”章节替换为当前宿主的原生子代理能力（如 Cursor 的后台子任务、Claude 的 subagent）；宿主没有子代理时由主代理顺序完成并如实说明。
+6. 安装后验证与 Codex 相同：`validate-kit.ps1` 全绿加全量单元测试通过才算装好。
+
+已实测：Cursor 宿主可完整走契约→暂存→验证→检查点门禁（本套件自身的多个开发切片就是在 Cursor 会话中按此流程完成的）。Claude 路径遵循同样约定，尚未实测。
+
 本项目使用 [MIT License](LICENSE)。外部方法来源和归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。公开仓库不包含旧电脑的 Key、全局配置、项目源码、缓存或安装备份。
 
 完整设计见 `docs/DESIGN.md`。
