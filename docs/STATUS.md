@@ -12,6 +12,7 @@ The Codex Personal Dev Kit 0.2.6 makes the complete Chinese mother-folder rule s
 - Installation records every fully managed Skill/runtime/template file and its SHA-256 hash in `managed-files.json`. Diagnosis detects missing or changed files; updates back up and remove only unchanged stale Dev Kit files while preserving user-modified stale files with a warning.
 - Legacy Plugin, custom-agent, and Dev Kit Hook detection remains only as an explicit migration/diagnostic path; it is not a runtime dependency.
 - Formal versions are recorded in `docs/VERSIONS.md`; the guard can mark the current verified checkpoint or safely backfill a verified ancestor during onboarding. Restoration creates a new checkpoint while preserving newer history, tags, and the complete index.
+- Formal versions additionally require a completed 21-dimension release review in `docs/RELEASE-REVIEW.md` (requirements through AI completion audit) recorded for that exact version inside the tagged checkpoint, or inside the current checkpoint when backfilling history. Missing files, mismatched versions, missing dimensions, unknown statuses, and empty evidence are refused; honest `not-verified` entries with reasons pass.
 - Raw Git tag creation, deletion, movement, and overwrite remain blocked; explicitly read-only tag listing and verification are allowed for audits.
 - The short global AGENTS template substitutes the selected Codex Home, so a different Windows username does not retain `C:\Users\Administrator` in installed Skill guidance.
 - `docs/RESTORE.md` defines the supported new-computer path: fixed Git checkout, preview/apply installation, full Desktop restart, diagnostics, and separate project backups.
@@ -50,4 +51,4 @@ The Codex Personal Dev Kit 0.2.6 makes the complete Chinese mother-folder rule s
 
 ## Next Action
 
-After the v0.2.6 formal tag and authorized remote backup, validate one future computer migration from a fresh fixed-tag checkout and keep future mother-rule changes template-first.
+Dogfood the 21-dimension release-review gate on the next accepted milestone (the kit's own v0.2.7 will need a completed `docs/RELEASE-REVIEW.md`), then validate one future computer migration from a fresh fixed-tag checkout and keep future mother-rule changes template-first.

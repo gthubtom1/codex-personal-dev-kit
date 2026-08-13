@@ -31,6 +31,35 @@ MAX_CHECKPOINT_MESSAGE_CHARS = 240
 CHECKPOINT_AUTHOR_NAME = "Codex Dev Kit"
 CHECKPOINT_AUTHOR_EMAIL = "codex-dev-kit@local.invalid"
 VERSIONS_RELATIVE = Path("docs/VERSIONS.md")
+RELEASE_REVIEW_RELATIVE = Path("docs/RELEASE-REVIEW.md")
+# Fixed final-review dimensions required before any local formal version.
+# The row numbers and slugs are a stable machine-readable contract shared with
+# the safe-development release-readiness reference; prose reviews cannot
+# replace them.
+RELEASE_REVIEW_DIMENSIONS: tuple[tuple[str, str], ...] = (
+    ("01", "requirements"),
+    ("02", "product-logic"),
+    ("03", "business-flow"),
+    ("04", "data-model"),
+    ("05", "data-integrity"),
+    ("06", "state-machine"),
+    ("07", "api-contract"),
+    ("08", "architecture"),
+    ("09", "code-quality"),
+    ("10", "security"),
+    ("11", "authorization"),
+    ("12", "error-handling"),
+    ("13", "performance"),
+    ("14", "deployment"),
+    ("15", "observability"),
+    ("16", "backup-recovery"),
+    ("17", "migration-rollback"),
+    ("18", "ux"),
+    ("19", "ui"),
+    ("20", "user-acceptance"),
+    ("21", "ai-completion-audit"),
+)
+RELEASE_REVIEW_STATUSES = {"verified", "partial", "not-verified", "not-applicable"}
 SEMVER_PATTERN = re.compile(r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$")
 SOURCE_EXTENSIONS = {
     ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".html", ".java",
@@ -785,6 +814,63 @@ def _plain_version_at(root: Path, revision: str) -> str | None:
     return value
 
 
+def _require_release_review_at(root: Path, revision: str, version: str) -> None:
+    """Require a completed 21-dimension release review inside the version tree.
+
+    The review lives in ``docs/RELEASE-REVIEW.md`` and is overwritten per
+    formal version; history stays recoverable through the tagged checkpoints.
+    Honest statuses are allowed (``not-verified`` with a reason passes), but a
+    missing file, another version's review, missing dimensions, unknown
+    statuses, or empty evidence must stop the tag.
+    """
+    review = _run_git(root, "show", f"{revision}:{RELEASE_REVIEW_RELATIVE.as_posix()}")
+    if review.returncode != 0:
+        raise GuardError(
+            f"docs/RELEASE-REVIEW.md with the completed 21-dimension release review for {version} "
+            "must be part of the selected checkpoint before creating a formal version. "
+            "Follow the release-readiness reference of the safe-development Skill."
+        )
+    text = review.stdout
+    version_match = re.search(r"(?im)^\s*-\s*Version\s*:\s*(\S+)\s*$", text)
+    if not version_match or version_match.group(1).strip() != version:
+        recorded = version_match.group(1).strip() if version_match else "no version"
+        raise GuardError(
+            f"docs/RELEASE-REVIEW.md at the selected checkpoint records {recorded}, not {version}. "
+            "Complete the 21-dimension release review for this exact version first."
+        )
+    rows: dict[str, tuple[str, str, str]] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 4 or not re.fullmatch(r"\d{2}", cells[0]):
+            continue
+        rows[cells[0]] = (cells[1], cells[2].lower(), cells[3])
+    problems: list[str] = []
+    for number, slug in RELEASE_REVIEW_DIMENSIONS:
+        row = rows.get(number)
+        if row is None:
+            problems.append(f"{number} {slug} is missing")
+            continue
+        dimension, status, evidence = row
+        if not re.search(rf"(?i)(?<![a-z0-9-]){re.escape(slug)}(?![a-z0-9-])", dimension):
+            problems.append(f"row {number} must keep the fixed dimension key {slug}")
+            continue
+        if status not in RELEASE_REVIEW_STATUSES:
+            problems.append(
+                f"{number} {slug} needs a status of verified, partial, not-verified, or not-applicable"
+            )
+            continue
+        if not re.search(r"[0-9A-Za-z\u4e00-\u9fff]", evidence):
+            problems.append(f"{number} {slug} needs real evidence or an explicit reason")
+    if problems:
+        shown = "; ".join(problems[:6])
+        if len(problems) > 6:
+            shown += f"; and {len(problems) - 6} more"
+        raise GuardError(f"docs/RELEASE-REVIEW.md is incomplete: {shown}.")
+
+
 def create_local_version(
     root: Path,
     version: str,
@@ -801,6 +887,15 @@ def create_local_version(
     versions_text = versions_path.read_text(encoding="utf-8", errors="replace")
     if not re.search(rf"(?im)^\|\s*{re.escape(normalized)}\s*\|", versions_text):
         raise GuardError(f"Record {normalized} in docs/VERSIONS.md before creating its local tag.")
+    try:
+        _require_release_review_at(root, target_commit, normalized)
+    except GuardError:
+        # Historical backfill cannot rewrite old checkpoints, so a completed
+        # review for that exact version inside the current verified checkpoint
+        # also satisfies the gate.
+        if target_commit == head:
+            raise
+        _require_release_review_at(root, head, normalized)
     package_version = _package_version_at(root, target_commit)
     if package_version and package_version != normalized[1:]:
         raise GuardError(f"package.json version {package_version} at the selected checkpoint does not match {normalized}.")

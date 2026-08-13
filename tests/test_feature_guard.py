@@ -27,6 +27,21 @@ FEATURES = """# Feature Map
 """
 
 
+def release_review(version: str) -> str:
+    lines = [
+        "# Release Review",
+        "",
+        f"- Version: {version}",
+        "- Result: acceptable for a local formal version",
+        "",
+        "| # | Dimension | Status | Evidence / reason |",
+        "| --- | --- | --- | --- |",
+    ]
+    for number, slug in feature_guard.RELEASE_REVIEW_DIMENSIONS:
+        lines.append(f"| {number} | {slug} | verified | tests/verify_features.py exit 0 |")
+    return "\n".join(lines) + "\n"
+
+
 class FeatureGuardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -389,7 +404,8 @@ class FeatureGuardTests(unittest.TestCase):
     def test_formal_versions_create_immutable_local_tags_and_are_listed(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
-        self.stage("src/app.js")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
         checkpoint = feature_guard.create_checkpoint(self.root, "deliver v1")
@@ -405,7 +421,8 @@ class FeatureGuardTests(unittest.TestCase):
     def test_formal_version_can_mark_a_verified_historical_checkpoint(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
-        self.stage("src/app.js")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
         historical = feature_guard.create_checkpoint(self.root, "deliver v1")
@@ -446,7 +463,8 @@ class FeatureGuardTests(unittest.TestCase):
     def test_restore_named_version_preserves_newer_history_and_complete_version_index(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
-        self.stage("src/app.js")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
         v1_checkpoint = feature_guard.create_checkpoint(self.root, "deliver v1")
@@ -460,11 +478,12 @@ class FeatureGuardTests(unittest.TestCase):
             versions.read_text(encoding="utf-8") + "| v1.1.0 | Improved export | suite:all-tests | recoverable |\n",
             encoding="utf-8",
         )
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.1.0"), encoding="utf-8")
         (self.root / "docs/STATUS.md").write_text(
             "# Current Status\n\n## Milestone\n\nFormal v1.1 export is verified.\n\n## Working State\n\nMain checkout contains the v1.1 slice.\n\n## Verified\n\nThe executable feature check passed for v1.1.\n\n## Current Risks\n\nKeep the earlier formal version recoverable.\n\n## Next Action\n\nConfirm the next milestone.\n",
             encoding="utf-8",
         )
-        feature_guard.stage_paths(self.root, ["src/app.js", "docs/VERSIONS.md", "docs/STATUS.md"])
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/VERSIONS.md", "docs/RELEASE-REVIEW.md", "docs/STATUS.md"])
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
         v2_checkpoint = feature_guard.create_checkpoint(self.root, "deliver v1.1")
@@ -519,7 +538,8 @@ class FeatureGuardTests(unittest.TestCase):
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
         (self.root / "VERSION").write_text("2.0.0\n", encoding="utf-8")
-        self.stage("src/app.js", "VERSION")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "VERSION", "docs/RELEASE-REVIEW.md")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
         feature_guard.create_checkpoint(self.root, "deliver mismatched marker")
@@ -527,10 +547,97 @@ class FeatureGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(feature_guard.GuardError, "VERSION marker 2.0.0"):
             feature_guard.create_local_version(self.root, "v1.0.0")
 
-    def test_guarded_publish_requires_exact_authorization_and_pushes_only_formal_refs(self) -> None:
+    def test_formal_version_requires_completed_release_review(self) -> None:
         self.start()
         (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
         self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 without review")
+        with self.assertRaisesRegex(feature_guard.GuardError, "RELEASE-REVIEW"):
+            feature_guard.create_local_version(self.root, "v1.0")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1b';\n", encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v9.9.9"), encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nA mismatched review slice is recorded.\n\n## Working State\n\nMain checkout carries the second export slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nThe review still records another version.\n\n## Next Action\n\nComplete the review for the real version.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/RELEASE-REVIEW.md", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with another version's review")
+        with self.assertRaisesRegex(feature_guard.GuardError, "records v9.9.9"):
+            feature_guard.create_local_version(self.root, "v1.0")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1c';\n", encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nThe completed review slice is verified.\n\n## Working State\n\nMain checkout carries the reviewed export slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nNone beyond normal regression coverage.\n\n## Next Action\n\nCreate the formal version tag.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/RELEASE-REVIEW.md", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with a completed review")
+        version, _ = feature_guard.create_local_version(self.root, "v1.0")
+        self.assertEqual(version, "v1.0.0")
+
+    def test_formal_version_backfill_accepts_a_current_review_for_that_version(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        self.stage("src/app.js")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        historical = feature_guard.create_checkpoint(self.root, "deliver v1 before the review gate existed")
+
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v2';\n", encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        (self.root / "docs/STATUS.md").write_text(
+            "# Current Status\n\n## Milestone\n\nThe historical milestone review is recorded.\n\n## Working State\n\nMain checkout carries the newer export slice.\n\n## Verified\n\nThe executable feature check passed.\n\n## Current Risks\n\nThe earlier checkpoint must stay identifiable.\n\n## Next Action\n\nBackfill the formal version tag.\n",
+            encoding="utf-8",
+        )
+        feature_guard.stage_paths(self.root, ["src/app.js", "docs/RELEASE-REVIEW.md", "docs/STATUS.md"])
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "record the backfilled review")
+
+        version, target = feature_guard.create_local_version(self.root, "v1.0", target=historical)
+        self.assertEqual((version, target), ("v1.0.0", historical))
+
+    def test_formal_version_rejects_incomplete_release_review(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        content = release_review("v1.0.0")
+        content = "\n".join(line for line in content.splitlines() if not line.startswith("| 06 |")) + "\n"
+        content = content.replace(
+            "| 13 | performance | verified | tests/verify_features.py exit 0 |",
+            "| 13 | performance | done | tests/verify_features.py exit 0 |",
+        )
+        content = content.replace(
+            "| 18 | ux | verified | tests/verify_features.py exit 0 |",
+            "| 18 | ux | verified | - |",
+        )
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(content, encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
+        self.verify("F-001", "F-002")
+        feature_guard.complete_contract(self.root, [], [])
+        feature_guard.create_checkpoint(self.root, "deliver v1 with an incomplete review")
+        with self.assertRaises(feature_guard.GuardError) as raised:
+            feature_guard.create_local_version(self.root, "v1.0")
+        message = str(raised.exception)
+        self.assertIn("06 state-machine is missing", message)
+        self.assertIn("13 performance needs a status", message)
+        self.assertIn("18 ux needs real evidence", message)
+
+    def test_guarded_publish_requires_exact_authorization_and_pushes_only_formal_refs(self) -> None:
+        self.start()
+        (self.root / "src/app.js").write_text("export const acceleration = true;\nexport const exportFile = 'v1';\n", encoding="utf-8")
+        (self.root / "docs/RELEASE-REVIEW.md").write_text(release_review("v1.0.0"), encoding="utf-8")
+        self.stage("src/app.js", "docs/RELEASE-REVIEW.md")
         self.verify("F-001", "F-002")
         feature_guard.complete_contract(self.root, [], [])
         checkpoint = feature_guard.create_checkpoint(self.root, "deliver public v1")
