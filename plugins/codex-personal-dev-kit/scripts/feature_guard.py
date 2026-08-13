@@ -72,6 +72,8 @@ SOURCE_EXTENSIONS = {
     ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".sh",
 }
 LARGE_FILE_WARN_BYTES = 5 * 1024 * 1024
+WORKTREE_DIRECTORY_SUFFIX = "-worktrees"
+WORKTREE_LABEL_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 SECRET_PATTERNS: tuple[tuple[str, "re.Pattern[str]"], ...] = (
     ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
@@ -1235,6 +1237,29 @@ def unstage_guarded_paths(root: Path, paths: Sequence[str]) -> dict:
     return contract
 
 
+def default_worktree_root(root: Path) -> Path:
+    """Derive the parallel work-copy directory beside the project so a new copy never lands inside the opened workspace."""
+    project = Path(root).expanduser().resolve()
+    parent = project.parent
+    if parent == project:
+        raise GuardError("A project directly at a filesystem root cannot host parallel work copies beside itself.")
+    return parent / f".{project.name}{WORKTREE_DIRECTORY_SUFFIX}"
+
+
+def plan_worktree_path(root: Path, name: str) -> Path:
+    """Return where one new parallel work copy belongs, without creating, moving, or touching any existing copy."""
+    project = Path(root).expanduser().resolve()
+    label = WORKTREE_LABEL_PATTERN.sub("-", name.strip()).strip("-.")
+    if not label:
+        raise GuardError("A parallel work copy needs a name containing letters, digits, '.', '_', or '-'.")
+    target = default_worktree_root(project) / label
+    if target == project or target.is_relative_to(project):
+        raise GuardError(f"A new parallel work copy must stay outside the opened project: {target}")
+    if target.exists() and not (target.is_dir() and not any(target.iterdir())):
+        raise GuardError(f"Another parallel work copy already occupies this path; choose a different name: {target}")
+    return target
+
+
 def _registered_worktrees(root: Path) -> dict[Path, dict[str, str]]:
     result = _run_git(root, "worktree", "list", "--porcelain")
     if result.returncode != 0:
@@ -2052,8 +2077,8 @@ def _is_guard_command(command: str) -> bool:
         return False
     return tokens[script_index + 1].lower() in {
         "start", "status", "stage", "verify", "complete", "checkpoint", "rollback",
-        "version", "versions", "restore-version", "publish", "sync", "integrate", "unstage", "remove-worktree",
-        "reopen", "allow-delete", "cancel", "close",
+        "version", "versions", "restore-version", "publish", "sync", "integrate", "unstage",
+        "worktree-path", "remove-worktree", "reopen", "allow-delete", "cancel", "close",
     }
 
 
@@ -2332,6 +2357,10 @@ def main() -> int:
     unstage.add_argument("--root", default=".")
     unstage.add_argument("--path", action="append", required=True)
 
+    worktree_path = subparsers.add_parser("worktree-path", help="Print where one new parallel work copy belongs, always outside the opened project")
+    worktree_path.add_argument("--root", default=".")
+    worktree_path.add_argument("--name", required=True)
+
     remove_worktree = subparsers.add_parser("remove-worktree", help="Remove one clean Worktree whose commits are already integrated")
     remove_worktree.add_argument("--root", default=".")
     remove_worktree.add_argument("--path", required=True)
@@ -2408,6 +2437,8 @@ def main() -> int:
         elif args.command == "unstage":
             contract = unstage_guarded_paths(root, args.path)
             print("Remaining guard-staged paths: " + (", ".join(contract.get("stagedPaths", [])) or "none"))
+        elif args.command == "worktree-path":
+            print(plan_worktree_path(root, args.name))
         elif args.command == "remove-worktree":
             removed = remove_integrated_worktree(root, args.path)
             print(f"Guarded Worktree removed: {removed}")

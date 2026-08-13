@@ -26,6 +26,14 @@
 - 只修改 Git index，工作区内容保持不变；清除旧验证证据，之后重新 stage/verify。
 - 恢复已提交版本使用 `rollback` 或 `restore-version`；不得用 raw restore 丢弃未确认内容。
 
+## Worktree 位置
+
+新建并行工作副本前，用 `feature_guard.py worktree-path --root . --name <label>` 取路径，再交给 `git worktree add`。
+
+- 路径在运行时按当前项目推导（项目旁边的 `.<项目名>-worktrees/<label>`），不写死任何机器或目录名。
+- 副本一律建在打开的项目外面：被忽略规则盖住的路径 AI 自己读不了，而副本是它还要读写的。
+- 只规划新副本；目标已被占用时报错换名，不移动、不覆盖任何已存在的副本。
+
 ## Worktree 清理
 
 使用 `feature_guard.py remove-worktree --root . --path <exact-registered-path>`。

@@ -9,6 +9,7 @@ import re
 import shlex
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, Sequence
 
 
@@ -21,6 +22,7 @@ class Decision:
 SEPARATORS = {";", "&", "&&", "|", "||"}
 SHELL_WRAPPERS = {"bash", "sh", "zsh", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 PRIVILEGE_WRAPPERS = {"sudo", "doas"}
+WORKTREE_ADD_VALUE_FLAGS = {"-b", "-B", "--reason"}
 
 
 def _basename(token: str) -> str:
@@ -96,6 +98,41 @@ def _git_subcommand(tokens: Sequence[str]) -> tuple[str | None, list[str]]:
     return None, []
 
 
+def _worktree_add_target(args: Sequence[str]) -> str | None:
+    index = 1
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            index += 1
+            continue
+        if token.startswith("-"):
+            index += 2 if token in WORKTREE_ADD_VALUE_FLAGS else 1
+            continue
+        return token
+    return None
+
+
+def _project_root() -> Path:
+    """Locate the opened project at runtime instead of assuming any machine-specific layout."""
+
+    current = Path.cwd().resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return current
+
+
+def _resolves_inside_project(target: str) -> bool:
+    try:
+        candidate = Path(os.path.expanduser(target.strip("\"'")))
+        absolute = candidate if candidate.is_absolute() else Path.cwd() / candidate
+        resolved = Path(os.path.normpath(str(absolute)))
+        root = _project_root()
+    except (OSError, ValueError):
+        return False
+    return resolved == root or root in resolved.parents
+
+
 def _classify_git(tokens: Sequence[str]) -> Decision:
     subcommand, args = _git_subcommand(tokens)
     lowered_args = [arg.lower() for arg in args]
@@ -137,6 +174,10 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
         return Decision(True, "Blocked deletion of Git stash recovery data.")
     if subcommand == "worktree" and lowered_args and lowered_args[0] in {"remove", "prune"}:
         return Decision(True, "Blocked raw Worktree removal. Use feature_guard.py remove-worktree; it requires an exact registered path, no modified/untracked/ignored files, and no unique commits.")
+    if subcommand == "worktree" and lowered_args and lowered_args[0] == "add":
+        target = _worktree_add_target(args)
+        if target and _resolves_inside_project(target):
+            return Decision(True, "Blocked a new parallel work copy inside the opened project. Ignore rules hide such a copy from the assistant that still has to read and write it. Take the path from feature_guard.py worktree-path --root . --name <label>, which derives a directory beside the project, and pass that to git worktree add.")
     if subcommand == "reflog" and lowered_args and lowered_args[0] in {"delete", "expire"}:
         return Decision(True, "Blocked deletion of Git reflog recovery history.")
     if subcommand == "gc" and any(arg.startswith("--prune") for arg in lowered_args):

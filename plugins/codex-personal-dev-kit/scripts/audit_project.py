@@ -42,6 +42,8 @@ ACTIVE_PLAN_RELATIVE = Path(".codex/active-plan.md")
 ACTIVE_PLAN_STALE_DAYS = 14
 OVERSIZED_HISTORY_BYTES = 64 * 1024
 OVERSIZED_DOCUMENT_BYTES = 128 * 1024
+LARGE_UNIGNORED_FILE_BYTES = 50 * 1024 * 1024
+LARGE_UNIGNORED_FILE_REPORT_LIMIT = 10
 TEXT_DOCUMENT_SUFFIXES = {".md", ".markdown", ".txt", ".rst", ".adoc"}
 HISTORY_NAME_PATTERN = re.compile(
     r"(?:development[-_ ]?(?:log|notes?|history|journal|document)|dev[-_ ]?(?:log|notes?|history)|chat[-_ ]?(?:log|history|transcript)|conversation[-_ ]?(?:log|history|transcript)|session[-_ ]?(?:log|notes?|history)|progress[-_ ]?log|ai[-_ ]?history|开发(?:日志|记录|文档|笔记|历史)|聊天(?:记录|日志|历史)|对话(?:记录|日志|历史)|会话(?:记录|日志|历史)|进度日志)",
@@ -269,7 +271,54 @@ def _audit_markdown_navigation(root: Path) -> tuple[list[dict], dict]:
     }
 
 
-def audit(root: Path) -> dict:
+def _unignored_relative_paths(root: Path, is_git_repository: bool) -> list[str]:
+    """List the paths no ignore rule covers, which is what a clone, checkpoint, or whole-project scan actually carries."""
+
+    if not is_git_repository:
+        return [path.relative_to(root).as_posix() for path in iter_files(root)]
+    names: list[str] = []
+    for arguments in (("ls-files",), ("ls-files", "--others", "--exclude-standard")):
+        code, output = git(root, "-c", "core.quotePath=false", *arguments)
+        if code != 0:
+            continue
+        names.extend(line for line in output.splitlines() if line)
+    return names
+
+
+def _audit_large_unignored_files(root: Path, threshold_bytes: int, is_git_repository: bool) -> tuple[list[dict], dict]:
+    """Report heavy files before they slow down a clone or a scan, without touching them or any ignore rule."""
+
+    measured: list[tuple[int, str]] = []
+    for relative in dict.fromkeys(_unignored_relative_paths(root, is_git_repository)):
+        path = root / relative
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > threshold_bytes:
+            measured.append((size, relative))
+    measured.sort(reverse=True)
+    reported = measured[:LARGE_UNIGNORED_FILE_REPORT_LIMIT]
+    findings = [
+        finding(
+            "P2",
+            "large-unignored-file",
+            f"This {size}-byte file is above the {threshold_bytes}-byte report threshold and no ignore rule covers it, so every clone, checkpoint, and whole-project scan carries it. Confirm it belongs in the project before it becomes a recovery or context problem.",
+            relative,
+        )
+        for size, relative in reported
+    ]
+    metrics = {
+        "large_unignored_file_threshold_bytes": threshold_bytes,
+        "large_unignored_file_count": len(measured),
+        "large_unignored_files": [{"path": relative, "bytes": size} for size, relative in reported],
+    }
+    return findings, metrics
+
+
+def audit(root: Path, large_file_bytes: int = LARGE_UNIGNORED_FILE_BYTES) -> dict:
     findings: list[dict] = []
     metrics: dict = {}
     required_docs = [
@@ -477,6 +526,10 @@ def audit(root: Path) -> dict:
         if plan_ignore_code != 0:
             findings.append(finding("P1", "active-plan-not-ignored", ".codex/active-plan.md must stay temporary and out of Git history.", ".gitignore"))
 
+    large_findings, large_metrics = _audit_large_unignored_files(root, large_file_bytes, metrics["is_git_repository"])
+    findings.extend(large_findings)
+    metrics.update(large_metrics)
+
     findings.sort(key=lambda item: (SEVERITY_ORDER[item["severity"]], item["code"], item.get("path", "")))
     return {"root": str(root), "findings": findings, "metrics": metrics}
 
@@ -486,6 +539,12 @@ def main() -> int:
     parser.add_argument("--root", required=True, help="Explicit project root to audit")
     parser.add_argument("--json", action="store_true", help="Emit JSON only")
     parser.add_argument("--fail-on", choices=("P0", "P1", "P2", "P3"), help="Return nonzero when this severity or worse is present")
+    parser.add_argument(
+        "--large-file-bytes",
+        type=int,
+        default=LARGE_UNIGNORED_FILE_BYTES,
+        help="Report every file above this size that no ignore rule covers",
+    )
     args = parser.parse_args()
 
     root = Path(args.root).expanduser().resolve()
@@ -493,8 +552,10 @@ def main() -> int:
         parser.error(f"Project root does not exist: {root}")
     if root == Path(root.anchor):
         parser.error("Refusing to audit a filesystem root; select one project directory")
+    if args.large_file_bytes <= 0:
+        parser.error("--large-file-bytes must be a positive number of bytes")
 
-    report = audit(root)
+    report = audit(root, args.large_file_bytes)
     if args.json:
         json.dump(report, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")

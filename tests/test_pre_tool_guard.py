@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -39,6 +41,22 @@ class PreToolGuardTests(unittest.TestCase):
         self.assertIn("feature_guard.py integrate", pre_tool_guard.classify_command("git merge feature").reason)
         self.assertIn("feature_guard.py unstage", pre_tool_guard.classify_command("git restore --staged app.js").reason)
         self.assertIn("feature_guard.py remove-worktree", pre_tool_guard.classify_command("git worktree remove ../old").reason)
+
+    def test_new_worktrees_must_be_created_outside_the_project(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / ".git").mkdir()
+            previous = Path.cwd()
+            os.chdir(root)
+            try:
+                inside = pre_tool_guard.classify_command("git worktree add -b wt/alpha .local/wt-alpha")
+                self.assertTrue(inside.blocked)
+                self.assertIn("feature_guard.py worktree-path", inside.reason)
+                self.assert_blocked(f"git worktree add {(root / 'wt-beta').as_posix()}")
+                self.assert_allowed("git worktree add ../wt-gamma -b wt/gamma")
+                self.assert_allowed(f"git worktree add {(root.parent / 'wt-delta').as_posix()} main")
+            finally:
+                os.chdir(previous)
 
     def test_blocks_publish_deploy_and_catastrophic_delete(self) -> None:
         for command in (

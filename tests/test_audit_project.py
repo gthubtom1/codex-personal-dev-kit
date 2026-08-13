@@ -256,6 +256,44 @@ See [the public reference](https://example.com).
             incomplete = audit_project.audit(root)
             self.assertIn("versions-index-incomplete", {item["code"] for item in incomplete["findings"]})
 
+    def test_reports_large_files_that_no_ignore_rule_covers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / ".codex").mkdir()
+            (root / "assets").mkdir()
+            (root / "local").mkdir()
+            (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+            (root / "docs/STATUS.md").write_text("# Status\n\n## Next Action\n\nContinue.\n", encoding="utf-8")
+            (root / "docs/FEATURES.md").write_text(
+                "# Features\n\n| ID | User capability | Entry points / connected path | Expected result | Verification | Criticality | Status |\n| --- | --- | --- | --- | --- | --- | --- |\n| F-001 | Run | index | Works | test:tests/check.py | critical | active |\n",
+                encoding="utf-8",
+            )
+            (root / ".gitignore").write_text(
+                ".codex/current-change.json\n.codex/active-plan.md\nlocal/\n",
+                encoding="utf-8",
+            )
+            (root / "assets/sample.bin").write_bytes(b"x" * 4096)
+            (root / "local/scratch.bin").write_bytes(b"x" * 8192)
+            (root / "docs/notes.md").write_text("# Notes\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "-b", "main"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            report = audit_project.audit(root, large_file_bytes=1024)
+            reported = {item["path"] for item in report["findings"] if item["code"] == "large-unignored-file"}
+            self.assertIn("assets/sample.bin", reported)
+            self.assertNotIn("local/scratch.bin", reported)
+            self.assertNotIn("docs/notes.md", reported)
+            self.assertEqual(report["metrics"]["large_unignored_file_count"], 1)
+            self.assertEqual(report["metrics"]["large_unignored_file_threshold_bytes"], 1024)
+
+            unchanged = audit_project.audit(root)
+            self.assertEqual([item for item in unchanged["findings"] if item["code"] == "large-unignored-file"], [])
+            self.assertEqual((root / "assets/sample.bin").stat().st_size, 4096)
+            self.assertEqual(
+                (root / ".gitignore").read_text(encoding="utf-8"),
+                ".codex/current-change.json\n.codex/active-plan.md\nlocal/\n",
+            )
+
     def test_status_checkpoint_hash_is_reported_as_volatile_memory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

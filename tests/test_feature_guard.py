@@ -1056,6 +1056,31 @@ class FeatureGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(feature_guard.GuardError, "Only paths staged"):
             feature_guard.unstage_guarded_paths(self.root, ["tests/verify_features.py"])
 
+    def test_new_parallel_work_copies_are_planned_outside_the_project(self) -> None:
+        project = self.root.resolve()
+        planned = feature_guard.plan_worktree_path(self.root, "wt/c4 audit")
+
+        self.assertFalse(planned.is_relative_to(project))
+        self.assertEqual(planned.parent, feature_guard.default_worktree_root(self.root))
+        self.assertEqual(planned.parent.parent, project.parent)
+        self.assertEqual(planned.name, "wt-c4-audit")
+        self.assertFalse(planned.exists())
+
+        with self.assertRaisesRegex(feature_guard.GuardError, "needs a name"):
+            feature_guard.plan_worktree_path(self.root, " -- ")
+
+        occupied = planned.parent / "taken"
+        occupied.mkdir(parents=True)
+        (occupied / "in-use.txt").write_text("someone is working here\n", encoding="utf-8")
+        try:
+            with self.assertRaisesRegex(feature_guard.GuardError, "already occupies"):
+                feature_guard.plan_worktree_path(self.root, "taken")
+            self.assertTrue((occupied / "in-use.txt").is_file())
+        finally:
+            (occupied / "in-use.txt").unlink()
+            occupied.rmdir()
+            occupied.parent.rmdir()
+
     def test_guarded_worktree_cleanup_requires_clean_integrated_content(self) -> None:
         integrated_path = self.root / ".." / "integrated-worktree"
         unique_path = self.root / ".." / "unique-worktree"
