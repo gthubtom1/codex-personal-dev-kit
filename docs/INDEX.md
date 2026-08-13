@@ -8,6 +8,7 @@ Start with the current status, then follow only the documents relevant to the ch
 - [Design](DESIGN.md): system architecture, standalone installation, and workflow boundaries.
 - [Roadmap](ROADMAP.md): current and upcoming milestones.
 - [New-computer restore](RESTORE.md): clone, install, restart, diagnose, update, and recovery boundaries.
+- [Working-tree snapshots](WORKSPACE-SNAPSHOT.md): the index-safe safety net for just-lost edits, its retention window, and what it is not.
 - [Formal versions](VERSIONS.md): user-recognizable Dev Kit distribution milestones.
 - [Release review](RELEASE-REVIEW.md): the completed 21-dimension final review required before the current formal version.
 - [License](../LICENSE) and [third-party notices](../THIRD_PARTY_NOTICES.md): redistribution terms and acknowledged upstream method sources.

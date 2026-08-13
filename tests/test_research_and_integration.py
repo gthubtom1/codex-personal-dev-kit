@@ -62,6 +62,32 @@ class ResearchAndIntegrationTests(unittest.TestCase):
         self.assertIn("未明确指定的其他项目", short)
         self.assertLess(len(short.splitlines()), 45)
 
+    def test_workspace_rules_trigger_research_on_shapes_not_on_self_assessment(self):
+        """The mother rules must not leave "do I need to look this up" to a feeling.
+
+        An agent skips the search exactly when it feels certain, so the trigger
+        has to be an observable shape.  These lines existed only on one machine
+        once; a fixed GitHub checkout shipped without them.
+        """
+        workspace = (PLUGIN / "assets/workspace-template/AGENTS.md").read_text(encoding="utf-8")
+        required = (
+            # Observable shapes, so the trigger never depends on feeling unsure.
+            "发现自己在猜",
+            "没思路",
+            "方案摇摆",
+            "凭印象给出关键结论",
+            "两个方案之间摇摆",
+            # The three kinds of uncertainty go three different ways.
+            "外面的世界是怎样的",
+            "我们自己这套东西现在什么状态",
+            "用户到底想要什么",
+            "搜索在这里没用且会得出自信的错误结论",
+            "关键结论不能只靠自评",
+        )
+        missing = [phrase for phrase in required if phrase not in workspace]
+        if missing:
+            self.fail("workspace-template/AGENTS.md no longer states: " + " | ".join(missing))
+
     def test_install_validation_and_diagnosis_include_all_nine_skills(self):
         validate_py = (PLUGIN / "scripts/validate_kit.py").read_text(encoding="utf-8")
         validate_ps = (PLUGIN / "scripts/validate-kit.ps1").read_text(encoding="utf-8")
