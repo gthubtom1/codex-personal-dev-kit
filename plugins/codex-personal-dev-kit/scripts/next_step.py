@@ -174,12 +174,16 @@ def _plan_guarded_steps(root: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".")
+    parser.add_argument("--mode", choices=("full", "light"), default="full")
     args = parser.parse_args()
     root = Path(args.root).resolve()
     try:
         sys.stdout.reconfigure(errors="replace")
     except AttributeError:
         pass
+    if args.mode == "light":
+        print("LIGHT: 轻量模式——先开个草稿仓库（随时能回到上一版），然后边做边改、跑起来演示，收尾说人话。不做契约/门禁/终审仪式。")
+        return 0
     for line in plan_next_steps(root):
         print(line)
     return 0

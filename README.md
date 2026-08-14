@@ -57,7 +57,7 @@
 - 九个 Codex standalone Skills：一个普通语言入口和八个专业能力，包括受控外部研究/源码复用与多项目能力融合，不依赖 Plugin 才能使用。
 - 中央运行时 `~/.codex/codex-dev-kit/`：Git 检查、诊断、模板和脚本；项目只引用已验证的中央运行时，不复制整套框架。
 - 母文件夹和项目 `.codex/config.toml`：模板只设置通用审批、sandbox 和 Goal，不写入任何子代理模型、推理强度、并发数、启用开关或中断设置。原生 `spawn_agent` 使用当前 Codex 任务和用户已有配置的官方默认行为。
-- 不使用 Dev Kit Plugin、会改 Codex 原生行为的生命周期 Hook 或自定义 Agent；Codex 原生能力和 standalone Skills 是唯一运行入口。（快照/文件监视宿主如 Cursor/VSCode 例外：项目模板附带一个 fail-open 的 Cursor `beforeShellExecution` shell 守卫 `.cursor/hooks/worktree_guard.py`，只拦工作区内的 `git worktree add`，属宿主性能适配、非 Codex 生命周期 Hook，别当违规 Hook 删。）
+- 不使用 Dev Kit Plugin、会改 Codex 原生行为的生命周期 Hook 或自定义 Agent；Codex 原生能力和 standalone Skills 是唯一运行入口。（快照/文件监视宿主如 Cursor/VSCode 的减卡顿适配是散文规则 + 宿主自身设置，本套件不注入任何项目内 hook 或配置文件。）
 
 ## 本地开发
 
@@ -141,7 +141,7 @@ AI 自适配约定（按当前宿主执行）：
 | “Codex Desktop / Local Project”措辞 | 少量 `SKILL.md` references | **翻译**：读作“当前宿主里一个长期项目对应一个工作区/项目”。 |
 | `winget` 固定版本安装器；`feature_guard.py` / `validate_kit.py` / `next_step.py` 等门禁脚本 | `AGENTS.md`、多个 `SKILL.md`、`scripts/` | **保持不变（非 Codex 专属）**：winget 是 Windows 包管理器，门禁是纯 Python / PowerShell，任何宿主照用——它们是本套件的强制核心，不要改写。 |
 | `validate-kit.ps1`（校验封装） | `scripts/`、README 安装步骤 6 | **Codex 专属**：它调用 Codex 内置 `.system/skill-creator` 校验器并假设 `~/.codex`，非 Codex 宿主会报错——改用 `python .../validate_kit.py` 加 `python -m unittest discover -s tests -p test_*.py`。 |
-| 宿主性能适配文件 `.cursor/hooks.json` / `.cursor/hooks/worktree_guard.py` / `.vscode/settings.json` | `assets/project-template/` | **仅快照/监视宿主用**：Cursor 用 `.cursor/hooks.json`（`beforeShellExecution` 拦工作区内 worktree）；VSCode 无该 hook 机制，仅靠 `.vscode/settings.json` 的 `files.watcherExclude` + 散文规则；Codex CLI 无快照/监视，三者皆惰性、可跳过。 |
+| 宿主性能适配（`.cursor/hooks.json` / `.vscode/settings.json`） | 已移除：本套件不再向项目模板注入任何 host hook 或配置文件 | **散文适配**：worktree 外置与产物排除写进规则文本；Cursor 的快照/监视减负由用户在宿主的 User Rules / settings 中自行配置（见下） |
 
 ### 宿主性能适配（有快照 / 文件监视的宿主，如 Cursor / VSCode）
 
@@ -161,8 +161,8 @@ AI 自适配约定（按当前宿主执行）：
 - [ ] **短规则进系统规则**：短全局规则已放进本宿主「必读 / 常加载」的位置（Codex `~/.codex/AGENTS.md`；Cursor **User Rules**，因为它没有全局 `.mdc`；Claude 全局 memory）。
 - [ ] **能读到完整规则**：短规则里「先读完整 `AGENTS.md`」的指针在本宿主真的会被执行；若本宿主不保证读到工作区外 / 祖先的完整 `AGENTS.md`，把关键约定（单写入者、worktree 外置、权限边界、完成标准）一并放进系统规则。
 - [ ] **worktree 外置**：并行 worktree 建到工作区外（`../.<项目名>-worktrees/`，用 guarded `worktree-path`），**没有**任何 `.local/wt-*` 之类的工作区内副本。
-- [ ] **worktree 硬门禁（Cursor）**：Cursor 项目里有 `.cursor/hooks.json` + `.cursor/hooks/worktree_guard.py`，实测 `git worktree add <工作区内路径>` 被拦、外置路径放行。（VSCode 无 `beforeShellExecution` hook 机制，只靠 `.vscode/settings.json` + 散文规则；Codex CLI 无快照/监视，跳过。）
-- [ ] **产物排除**：`.vscode/settings.json` 的 `files.watcherExclude` / `search.exclude` 覆盖了 `__pycache__`、`*.sqlite3*`、`*.db`；大体积数据没堆在工作区里被快照。
+- [ ] **worktree 外置（Cursor）**：规则文本已声明"worktree 一律建到工作区外"；Cursor 无 beforeShellExecution 硬拦时靠散文规则 + 用户把减卡顿规则放进 User Rules（本套件不再注入项目内 hook / 配置文件）。
+- [ ] **产物排除**：宿主的 `files.watcherExclude` / `search.exclude`（Cursor / VSCode 的 settings.json 或等价位置）覆盖了 `__pycache__`、`*.sqlite3*`、`*.db`；大体积数据没堆在工作区里被快照。
 - [ ] **9 个 Skills 可定位**：本宿主 skills 目录下能找到全部 9 个 `SKILL.md`；`$skill` 调度已理解为「读取对应 SKILL.md 并遵循」。
 - [ ] **门禁可用**：`python .../feature_guard.py --help` 正常；**非 Codex 宿主**用 `python .../validate_kit.py` 加 `python -m unittest discover -s tests -p "test_*.py"` 全绿（不要用 Codex 专属的 `validate-kit.ps1`）。
 - [ ] **Codex 专属内容已翻译 / 跳过**：按映射表处理了 `spawn_agent`、`.system`、`resolve-skill.ps1`、`{{CODEX_HOME}}`、`openai.yaml`、第 12 节桌面设置。

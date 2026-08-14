@@ -27,8 +27,6 @@
 project/
 ├── AGENTS.md
 ├── README.md
-├── .codex/
-│   └── config.toml
 ├── docs/
 │   ├── PROJECT.md
 │   ├── FEATURES.md

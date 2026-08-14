@@ -67,12 +67,10 @@ def _check_required_files(kit_root: Path, repo_root: Path) -> list[str]:
         "scripts/pre_tool_guard.py",
         "scripts/resolve-skill.ps1",
         "scripts/audit_project.py",
-        "scripts/merge-codex-config.ps1",
         "scripts/bootstrap/resolve-codex-cli.ps1",
         "assets/project-template/docs/INDEX.md",
         "assets/project-template/docs/VERSIONS.md",
         "assets/project-template/docs/adr/INDEX.md",
-        "assets/workspace-template/.codex/config.toml",
     ):
         if not (kit_root / relative).is_file():
             errors.append(f"Missing required runtime file: {relative}")
@@ -123,21 +121,23 @@ def _check_agents_templates(kit_root: Path) -> list[str]:
 
 def _check_config_templates(kit_root: Path, repo_root: Path) -> list[str]:
     errors: list[str] = []
-    for config_path in (
-        repo_root / ".codex/config.toml",
-        kit_root / "assets/global-profile/config.fragment.toml",
-        kit_root / "assets/workspace-template/.codex/config.toml",
-        kit_root / "assets/project-template/.codex/config.toml",
+    for shipped_path in (
+        kit_root / "assets/global-profile",
+        kit_root / "assets/workspace-template/.codex",
+        kit_root / "assets/project-template/.codex",
+        kit_root / "assets/project-template/.cursor",
+        kit_root / "assets/project-template/.vscode",
     ):
-        if not config_path.is_file():
-            errors.append(f"Missing native Codex config template: {config_path}")
-            continue
+        if shipped_path.exists():
+            errors.append(f"Standalone mode must not ship native config or hook templates: {shipped_path}")
+    config_path = repo_root / ".codex/config.toml"
+    if config_path.is_file():
         config_text = config_path.read_text(encoding="utf-8")
         if re.search(r"(?m)^\s*\[agents\]\s*$", config_text) or re.search(
             r"(?m)^\s*(default_subagent_model|default_subagent_reasoning_effort|max_concurrent_threads_per_session|interrupt_message|multi_agent)\s*=",
             config_text,
         ):
-            errors.append(f"Managed templates must not configure native subagents: {config_path}")
+            errors.append(f"Repository dev config must not configure native subagents: {config_path}")
         if re.search(r"(?m)^model\s*=", config_text):
             errors.append(f"Main conversation model must remain user-selectable: {config_path}")
     return errors

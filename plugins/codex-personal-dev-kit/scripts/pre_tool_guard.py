@@ -150,16 +150,14 @@ def _classify_git(tokens: Sequence[str]) -> Decision:
         if read_only_mode and not mutating:
             return Decision(False, "")
         return Decision(True, "Blocked raw git tag mutation. Formal local versions must use feature_guard.py version so the tag matches a verified checkpoint and docs/VERSIONS.md.")
-    if subcommand in {"push", "pull", "merge", "rebase", "clean", "restore", "filter-branch", "filter-repo"}:
+    if subcommand in {"push", "merge", "rebase", "clean", "restore", "filter-branch", "filter-repo"}:
         if subcommand == "push":
             return Decision(True, "Blocked raw git push. After explicit user authorization, use feature_guard.py publish with the exact remote URL, branch, and formal tags.")
-        if subcommand == "pull":
-            return Decision(True, "Blocked raw git pull. After explicit authorization, use feature_guard.py sync for an exact remote/current-branch fetch and fast-forward-only update.")
         if subcommand in {"merge", "rebase"}:
             return Decision(True, "Blocked raw branch integration. Use feature_guard.py integrate for a clean linear fast-forward; divergent histories require a separately scoped conflict-resolution task.")
         if subcommand == "restore":
             return Decision(True, "Blocked raw git restore. Use feature_guard.py unstage for exact guard-staged paths, rollback/restore-version for committed recovery, or a separately protected content edit.")
-        return Decision(True, f"Blocked raw git {subcommand}. This operation needs an explicit, tested guarded workflow; do not hand the raw Git command to a beginner.")
+        return Decision(True, f"Blocked raw git {subcommand}. This operation needs an explicit, tested guarded workflow.")
     if subcommand == "reset" and any(arg in {"--hard", "--merge", "--keep"} for arg in lowered_args):
         return Decision(True, "Blocked destructive git reset. Use a new branch or reversible commit instead.")
     if subcommand == "commit" and "--amend" in lowered_args:
@@ -214,15 +212,11 @@ def _classify_external(tokens: Sequence[str]) -> Decision:
         return Decision(True, "Blocked raw global JavaScript package installation. Prefer a project-local dependency; otherwise request scoped authorization and keep execution with the assistant.")
     if base == "yarn" and args[:2] == ["global", "add"]:
         return Decision(True, "Blocked automatic global JavaScript package installation.")
-    if base in {"pip", "pip3", "pipx"} and any(arg in {"install", "upgrade", "uninstall"} for arg in args[:4]):
-        return Decision(True, "Blocked ambiguous system-level Python package installation. Use an explicit project virtual environment or request scoped authorization; do not hand the command to a beginner.")
-    if base in {"python", "python3", "py"} and len(args) >= 3 and args[:2] == ["-m", "pip"] and any(arg in {"install", "uninstall"} for arg in args[2:6]):
-        explicit_venv = "/.venv/" in executable or "/venv/" in executable
-        if not explicit_venv:
-            return Decision(True, "Blocked Python package installation outside an explicit project virtual environment.")
+    if base == "pipx" and any(arg in {"install", "upgrade", "uninstall"} for arg in args[:4]):
+        return Decision(True, "Blocked automatic pipx tool installation. Use an explicit project virtual environment or request scoped authorization.")
 
     if base == "gh" and (args[:2] == ["pr", "merge"] or args[:1] == ["release"] or args[:2] == ["repo", "delete"]):
-        return Decision(True, "Blocked raw GitHub mutation. It requires separate explicit authorization and a tested guarded PR/release/repository workflow; do not hand the command to a beginner.")
+        return Decision(True, "Blocked raw GitHub mutation. It requires separate explicit authorization and a tested guarded PR/release/repository workflow.")
     if base in {"npm", "pnpm"} and args[:1] == ["publish"]:
         return Decision(True, "Blocked raw package publishing. It requires separate explicit authorization and a tested guarded release workflow.")
     if base == "yarn" and (args[:2] == ["npm", "publish"] or args[:1] == ["publish"]):

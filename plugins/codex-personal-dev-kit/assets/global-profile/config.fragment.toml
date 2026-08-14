@@ -1,8 +1,0 @@
-# Review this fragment before merging it into ~/.codex/config.toml.
-# The installer intentionally does not edit config.toml automatically.
-
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-
-[features]
-goals = true

@@ -1,6 +1,6 @@
 ---
 name: codex-safe-development
-description: 在 Git、测试、审查和权限保护下实施功能、修复、重构或配置变更，并创建本地检查点。用户要求写代码、修 bug、重构、添加测试、修改依赖、数据库迁移、发布准备、远程同步、分支整合、撤销暂存、清理 Worktree、安装 Windows 开发工具，或希望 AI 自动开发但可回滚时使用。
+description: 在 Git、测试、审查和权限保护下实施功能、修复、重构或配置变更，并创建本地检查点。用户要求写代码、修 bug、重构、添加测试、修改依赖、数据库变更、分支整合、撤销暂存、清理 Worktree、安装 Windows 开发工具，或希望 AI 自动开发但可回滚时使用。
 ---
 
 # Codex Safe Development

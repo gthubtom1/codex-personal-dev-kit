@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} Project Instructions
+﻿# {{PROJECT_NAME}} Project Instructions
 
 This file contains only project-specific facts. The detailed personal development system lives at `{{WORKSPACE_AGENTS_PATH}}` and is loaded through the user's short global instructions.
 

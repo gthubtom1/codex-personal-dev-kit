@@ -1,15 +1,45 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ProjectRoot = (Get-Location).Path,
     [string]$WorkspaceRoot,
     [string]$CodexHome,
+    [string]$TaskId,
+    [switch]$Lightweight,
     [switch]$Apply,
     [switch]$InitializeGit,
     [switch]$CreateBaselineCheckpoint
 )
 
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "merge-codex-config.ps1")
+
+function Test-RouteGateMark {
+    param([Parameter(Mandatory = $true)][string]$TaskId)
+
+    $gateDir = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".route-gate"
+    if (Test-Path -LiteralPath (Join-Path $gateDir "DISABLED")) {
+        return
+    }
+    $activePath = Join-Path $gateDir "active.json"
+    if (-not (Test-Path -LiteralPath $activePath -PathType Leaf)) {
+        Write-Output "这个活还没走分派，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
+        exit 1
+    }
+    try {
+        $decision = Get-Content -Raw -Encoding UTF8 -LiteralPath $activePath | ConvertFrom-Json
+    }
+    catch {
+        Write-Output "分派标记读不出来，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
+        exit 1
+    }
+    if ([string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "dev-kit") {
+        Write-Output "这个任务的分派结果不是走我这条流程。先运行 route.ps1 确认分派，它会告诉你走哪条流程。"
+        exit 1
+    }
+}
+
+if ($PSBoundParameters.ContainsKey('TaskId')) {
+    Test-RouteGateMark -TaskId $TaskId
+}
 
 function Get-SafeFullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -167,15 +197,16 @@ if (-not (Test-Path -LiteralPath $workspaceAgentsPath -PathType Leaf)) {
     throw "Detailed mother-folder AGENTS.md is required before project onboarding: $workspaceAgentsPath"
 }
 
-$templateFiles = Get-ChildItem -LiteralPath $templateRoot -Recurse -Force -File
+$templateFiles = Get-ChildItem -LiteralPath $templateRoot -Recurse -Force -File | Where-Object {
+    if (-not $Lightweight) { return $true }
+    $relative = $_.FullName.Substring($templateRoot.Length).TrimStart('\', '/').Replace('\', '/')
+    return $relative -in @('.gitignore', '.worktreeinclude')
+}
 $actions = foreach ($source in $templateFiles) {
     $relative = $source.FullName.Substring($templateRoot.Length).TrimStart('\', '/')
     $destination = Join-Path $projectPath $relative
     $action = if (-not (Test-Path -LiteralPath $destination)) {
         "create"
-    }
-    elseif ($relative.Replace('\', '/') -eq ".codex/config.toml") {
-        "merge"
     }
     else {
         "keep"
@@ -202,14 +233,6 @@ if (-not $Apply) {
 New-Item -ItemType Directory -Path $projectPath -Force | Out-Null
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($action in $actions) {
-    if ($action.Action -eq "merge") {
-        $existing = [System.IO.File]::ReadAllText($action.Path)
-        $merged = Merge-CodexProjectDefaults -Content $existing
-        if ($merged -ne $existing) {
-            [System.IO.File]::WriteAllText($action.Path, $merged, $utf8NoBom)
-        }
-        continue
-    }
     if ($action.Action -ne "create") {
         continue
     }

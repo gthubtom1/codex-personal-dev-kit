@@ -1,17 +1,47 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$ProjectName,
     [string]$WorkspaceRoot = (Get-Location).Path,
+    [string]$TaskId,
     [switch]$Apply
 )
 
 $ErrorActionPreference = "Stop"
+
+function Test-RouteGateMark {
+    param([Parameter(Mandatory = $true)][string]$TaskId)
+
+    $gateDir = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".route-gate"
+    if (Test-Path -LiteralPath (Join-Path $gateDir "DISABLED")) {
+        return
+    }
+    $activePath = Join-Path $gateDir "active.json"
+    if (-not (Test-Path -LiteralPath $activePath -PathType Leaf)) {
+        Write-Output "这个活还没走分派，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
+        exit 1
+    }
+    try {
+        $decision = Get-Content -Raw -Encoding UTF8 -LiteralPath $activePath | ConvertFrom-Json
+    }
+    catch {
+        Write-Output "分派标记读不出来，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
+        exit 1
+    }
+    if ([string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "dev-kit") {
+        Write-Output "这个任务的分派结果不是走我这条流程。先运行 route.ps1 确认分派，它会告诉你走哪条流程。"
+        exit 1
+    }
+}
+
+if ($PSBoundParameters.ContainsKey('TaskId')) {
+    Test-RouteGateMark -TaskId $TaskId
+}
+
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $workspaceConfigPath = Join-Path $workspacePath "workspace.json"
 $requiredWorkspacePaths = @(
     $workspaceConfigPath,
-    (Join-Path $workspacePath "AGENTS.md"),
-    (Join-Path $workspacePath ".codex\config.toml")
+    (Join-Path $workspacePath "AGENTS.md")
 )
 $workspaceNeedsRepair = @($requiredWorkspacePaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -gt 0
 if ($workspaceNeedsRepair) {

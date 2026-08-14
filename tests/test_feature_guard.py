@@ -75,6 +75,14 @@ class FeatureGuardTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def test_project_is_managed_without_codex_config_file(self) -> None:
+        (self.root / ".codex/config.toml").unlink()
+        self.assertEqual(feature_guard._resolve_project_root(self.root, require_managed=True), self.root.resolve())
+
+    def test_project_without_feature_map_is_not_managed(self) -> None:
+        (self.root / "docs/FEATURES.md").unlink()
+        self.assertIsNone(feature_guard._resolve_project_root(self.root, require_managed=True))
+
     def git(self, *args: str) -> subprocess.CompletedProcess:
         result = subprocess.run(
             ["git", "-C", str(self.root), *args],

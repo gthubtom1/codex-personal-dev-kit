@@ -77,11 +77,8 @@ class WorkspaceScriptTests(unittest.TestCase):
             self.assertNotIn("{{DEV_KIT_SKILLS_ROOT}}", agents_text)
             self.assertNotIn("{{CODEX_HOME}}", agents_text)
             workspace_config = workspace / ".codex/config.toml"
-            self.assertTrue(workspace_config.is_file())
-            config_text = workspace_config.read_text(encoding="utf-8")
-            self.assertNotIn("[agents]", config_text)
-            self.assertNotIn("multi_agent", config_text)
-            self.assertIn("goals = true", config_text)
+            self.assertFalse(workspace_config.exists(), "bootstrap must not write .codex/config.toml")
+            self.assertFalse((workspace / ".codex").exists(), "bootstrap must not create a .codex directory")
             agents.write_text(agents.read_text(encoding="utf-8") + "\nCUSTOM-WORKSPACE-RULE\n", encoding="utf-8")
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-CodexHome", str(codex_home), "-Apply")
             self.assertIn("CUSTOM-WORKSPACE-RULE", agents.read_text(encoding="utf-8"))
@@ -166,7 +163,7 @@ class WorkspaceScriptTests(unittest.TestCase):
                 "-Apply",
             )
             self.assertTrue((workspace / "AGENTS.md").is_file())
-            self.assertTrue((workspace / ".codex/config.toml").is_file())
+            self.assertFalse((workspace / ".codex").exists())
             self.assertTrue((workspace / "projects/first-app").is_dir())
 
     def test_bootstrap_project_stops_when_mother_agents_is_missing(self) -> None:
@@ -185,24 +182,24 @@ class WorkspaceScriptTests(unittest.TestCase):
             )
             self.assertIn(str(root / "AGENTS.md"), result.stdout)
 
-    def test_existing_agent_settings_are_untouched_when_merging_config(self) -> None:
+    def test_existing_agent_settings_are_untouched_when_bootstrapping(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory) / "custom"
             (workspace / ".codex").mkdir(parents=True)
-            (workspace / ".codex/config.toml").write_text(
+            original_config = (
                 '[agents]\n'
                 'enabled = false\n'
                 'default_subagent_model = "gpt-5.6-sol"\n'
-                'default_subagent_reasoning_effort = "high"\n',
+                'default_subagent_reasoning_effort = "high"\n'
+            )
+            (workspace / ".codex/config.toml").write_text(
+                original_config,
                 encoding="utf-8",
             )
             self.run_script("bootstrap-workspace.ps1", "-WorkspaceRoot", str(workspace), "-Apply")
             config = (workspace / ".codex/config.toml").read_text(encoding="utf-8")
-            self.assertIn("enabled = false", config)
-            self.assertIn('default_subagent_model = "gpt-5.6-sol"', config)
-            self.assertIn('default_subagent_reasoning_effort = "high"', config)
-            self.assertNotIn("max_concurrent_threads_per_session", config)
-            self.assertIn("goals = true", config)
+            self.assertEqual(config, original_config)
+            self.assertNotIn("goals = true", config)
 
     def test_existing_subagent_model_is_never_migrated_by_workspace_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

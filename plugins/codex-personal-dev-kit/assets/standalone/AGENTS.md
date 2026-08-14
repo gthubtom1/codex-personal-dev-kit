@@ -1,4 +1,4 @@
-<!-- codex-dev-kit:start -->
+﻿<!-- codex-dev-kit:start -->
 # Codex 全局短规则：零基础用户
 
 我是完全零基础用户：不会 Git、分支、Worktree、任务树、规划、架构、测试、依赖、部署或项目文档。请把我当作只会用普通语言描述目标的人。
@@ -7,25 +7,30 @@ The user is a complete software-development beginner.
 
 > **跨宿主适配**：本文件是 Codex 宿主的全局短规则。其中 `spawn_agent`（原生子代理）、`{{CODEX_HOME}}\skills`、`resolve-skill.ps1`、`.system` 前缀是 Codex 专属机制；其他宿主（Cursor / Claude 等）读取详细规则 `{{WORKSPACE_AGENTS_PATH}}` 与 `codex-dev-kit/README.md` 的「其他 Agent 自适配安装」映射表，把这些翻译成当前宿主的等价做法或跳过。零基础、保护旧功能、单写入者、可回退这些核心原则与宿主无关。
 
-## 必须遵守
+## 定位与激活条件
 
+本套件是通用开发辅助（配角）：仅在用户的任务属于通用开发（编程/写代码/做应用）时提供工作方法；产品域（EXE 二次发行/定制/授权/发布）与逆向域任务由路由文件分派给对应专业流程，本套件不抢触发、不介入，被那些流程按名调用时才提供能力。
+
+## 必须遵守（通用开发任务内）
 - 你负责把一句话需求扩展成合理范围、最小架构、实施步骤、测试和可回退结果；不要要求我先写技术方案。
 - 先说明你理解的目标和推荐默认方案，只询问会改变产品行为、成本、隐私、外部服务、兼容性或不可逆风险的问题。
 - 自动保护已有功能；修改前读取项目事实、功能清单和相关测试，不能为了改一个功能而删掉或遗漏其他功能。
 - Git、检查点、回退、项目文件夹、文档和测试由你负责；不要让我执行 Git 命令或选择技术细节。
-- 默认只做本地、可恢复的工作。用户明确授权后，可由 AI 使用 Dev Kit guarded publisher/sync 和固定版本 winget installer 完成精确远程备份、快进同步或工具安装；线性本地分支、误暂存和已整合 Worktree 使用 guarded integrate/unstage/remove-worktree。原始/force Git、分叉历史自动整合、Release、部署、生产迁移和删除未确认内容仍禁止。
+- 默认只做本地、可恢复的工作。用户明确授权后，可由 AI 使用 Dev Kit guarded publisher/sync 和固定版本 winget installer 完成精确远程备份、快进同步或工具安装；线性本地分支、误暂存和已整合 Worktree 使用 guarded integrate/unstage/remove-worktree。
 - 并行开发的 worktree 一律建到工作区外（用 guarded `worktree-path`，落在项目旁的 `../.<项目名>-worktrees/`），禁止建在工作区内部（如 `.local/`）；有检查点快照/文件监视的宿主（Cursor / VSCode）会因工作区内副本堆积而卡死，另需把 `__pycache__`、`*.sqlite3`、`*.db` 等产物加入 `files.watcherExclude`。详见完整规则与 README「宿主性能适配」。
-- 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。（注：为 Cursor / VSCode 附带的、仅拦截「工作区内 worktree」的 shell 守卫 hook 是宿主性能适配，不用于模拟子代理，与本条不冲突。）
+- 只使用 Codex 原生 subagent；不得创建可见任务、替代 Plugin 或强制 Hook 来模拟它。除非用户明确要求，不自动创建自定义 Agent 文件。
 - Native subagents use `spawn_agent` inside the current task; visible tasks, Worktrees, and built-in tools must never be replaced, intercepted, or simulated.
 - 子代理完全使用当前 Codex 任务提供的官方原生默认。Dev Kit 不写入或修改子代理模型、推理强度、并发数、启用开关或中断设置；调用 `spawn_agent` 时不传这些覆盖参数。原生能力不可用或调用失败时如实报告，不修改配置或用其他机制绕过。
-- 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。
-- 遇到陌生/时效性技术、外部 API、明显可复用的通用能力或用户要求参考同类方案时，先做公开只读研究并检查许可证、安全、兼容性和退出方案；下载、安装、复制外部源码、访问私有仓库或读取/融合未明确指定的其他项目必须先询问。
-- 子代理启动后必须确认任务正文可读、范围正确；缺失或不可读时补充一次，仍失败就停止并报告。主代理只在内存中记录任务、状态和精炼结果，不把子代理日志写进项目文档。
+- 不把聊天记录、长日志、完整 diff 或无限开发日记当作项目记忆；用代码、测试、Git 和精简项目文档保存事实。子代理启动后必须确认任务正文可读、范围正确；缺失或不可读时补充一次，仍失败就停止并报告。主代理只在内存中记录任务、状态和精炼结果，不把子代理日志写进项目文档。遇到陌生/时效性技术、外部 API、明显可复用的通用能力或用户要求参考同类方案时，先做公开只读研究并检查许可证、安全、兼容性和退出方案；下载、安装、复制外部源码、访问私有仓库或读取/融合未明确指定的其他项目必须先询问。
 - 第一个功能检查点前必须消除项目模板中的 `Not yet confirmed` 占位内容；每个 active Feature 的 Verification 必须包含 `test:<path>`、`suite:<name>` 或等价机器可读标记。
 
-## 详细规则入口
+## 禁止触碰清单
 
-读取并遵守 `{{WORKSPACE_AGENTS_PATH}}`；即使当前工作目录已经是某个项目，也必须先读取它，再读取项目级 `AGENTS.md` 和 `docs`。如果该文件不存在，停止自动安装并报告缺失路径，不要下载或编造替代规则。
+以下位置归其他系统独占管理，本套件不读写：`~/.codex/config.toml`、`hooks.json`、keysmith 指令 MD 与 `.codex-keysmith-manifest.json`、`.codex-keysmith/`、任何 skills 目录、产品档案目录（`product-state/`、`knowledge/`）。涉及这些位置的需求，按对应系统的规则处理。
+
+## 详细规则入口（被调用时读取）
+
+通用开发任务需要完整工作方法时，读取并遵守 `{{WORKSPACE_AGENTS_PATH}}`；即使当前工作目录已经是某个项目，也必须先读取它，再读取项目级 `AGENTS.md` 和 `docs`。如果该文件不存在，停止自动安装并报告缺失路径，不要下载或编造替代规则。
 
 ## Skill 路径解析
 

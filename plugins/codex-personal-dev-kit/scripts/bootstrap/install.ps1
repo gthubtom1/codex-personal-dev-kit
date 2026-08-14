@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [string]$CodexHome,
+    [string]$ClaudeHome,
     [string]$WorkspaceRoot = "D:\开发",
     [switch]$Apply,
     [switch]$MigrateLegacy,
@@ -21,7 +22,16 @@ if ([string]::IsNullOrWhiteSpace($CodexHome)) {
 
 $codexHomePath = [System.IO.Path]::GetFullPath($CodexHome)
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
-foreach ($path in @($codexHomePath, $workspacePath)) {
+if ([string]::IsNullOrWhiteSpace($ClaudeHome)) {
+    $ClaudeHome = if (-not [string]::IsNullOrWhiteSpace($env:CLAUDE_HOME)) {
+        $env:CLAUDE_HOME
+    }
+    else {
+        Join-Path ([Environment]::GetFolderPath("UserProfile")) ".claude"
+    }
+}
+$claudeHomePath = [System.IO.Path]::GetFullPath($ClaudeHome)
+foreach ($path in @($codexHomePath, $claudeHomePath, $workspacePath)) {
     $filesystemRoot = [System.IO.Path]::GetPathRoot($path)
     if ($path.TrimEnd('\', '/') -eq $filesystemRoot.TrimEnd('\', '/')) {
         throw "Refusing to use a filesystem root: $path"
@@ -54,8 +64,7 @@ else {
 $workspaceTemplateRoot = Join-Path $kitSourceRoot "assets\workspace-template"
 $requiredWorkspaceTemplatePaths = @(
     (Join-Path $workspaceTemplateRoot "AGENTS.md"),
-    (Join-Path $workspaceTemplateRoot "workspace.json"),
-    (Join-Path $workspaceTemplateRoot ".codex\config.toml")
+    (Join-Path $workspaceTemplateRoot "workspace.json")
 )
 $missingWorkspaceTemplatePaths = @($requiredWorkspaceTemplatePaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingWorkspaceTemplatePaths.Count -gt 0) {
@@ -115,10 +124,8 @@ $workspaceAgentsContent = $workspaceAgentsContent.Replace("{{CODEX_HOME}}", $cod
 $workspaceTargets = @(
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "projects") },
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "archives") },
-    [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath ".codex") },
     [pscustomobject]@{ Type = "file"; Path = $workspaceAgents; Source = (Join-Path $workspaceTemplateRoot "AGENTS.md") },
-    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "workspace.json"); Source = (Join-Path $workspaceTemplateRoot "workspace.json") },
-    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath ".codex\config.toml"); Source = (Join-Path $workspaceTemplateRoot ".codex\config.toml") }
+    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "workspace.json"); Source = (Join-Path $workspaceTemplateRoot "workspace.json") }
 )
 if (Test-Path -LiteralPath $workspacePath -PathType Leaf) {
     throw "WorkspaceRoot points to a file instead of a directory: $workspacePath"
@@ -177,7 +184,12 @@ function Backup-ExistingFile {
     if (-not (Test-Path -LiteralPath $Target -PathType Leaf)) {
         return
     }
-    $relative = $Target.Substring($codexHomePath.Length).TrimStart('\', '/')
+    if ($Target.StartsWith($codexHomePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $Target.Substring($codexHomePath.Length).TrimStart('\', '/')
+    }
+    else {
+        $relative = ($Target -replace ':', '').TrimStart('\', '/')
+    }
     $backup = Join-Path $backupRoot $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $backup) -Force | Out-Null
     Copy-Item -LiteralPath $Target -Destination $backup -Force
@@ -193,7 +205,7 @@ function Set-ManagedTextFile {
     $existing = if (Test-Path -LiteralPath $Target -PathType Leaf) { [System.IO.File]::ReadAllText($Target) } else { $null }
     $action = if ($null -eq $existing) { "create" } elseif ($existing -eq $Content) { "unchanged" } else { "update" }
     $planned.Add([pscustomobject]@{ Action = $action; Path = $Target })
-    if ($Track) {
+    if ($Track -and $Target.StartsWith($codexHomePath, [System.StringComparison]::OrdinalIgnoreCase)) {
         $relative = $Target.Substring($codexHomePath.Length).TrimStart('\', '/').Replace('\', '/')
         $managedFileRecords.Add([pscustomobject]@{ path = $relative; sha256 = (Get-TextSha256 -Content $Content) })
     }
@@ -361,22 +373,13 @@ if ($legacyPluginSelectors.Count -gt 0) {
     }
 }
 
-$agentsTemplate = [System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "assets\standalone\AGENTS.md"))
-$agentsBlock = $agentsTemplate.Replace("{{WORKSPACE_AGENTS_PATH}}", $workspaceAgents).Replace("{{CODEX_HOME}}", $codexHomePath)
-$agentsTarget = Join-Path $codexHomePath "AGENTS.md"
-$currentAgents = if (Test-Path -LiteralPath $agentsTarget -PathType Leaf) { [System.IO.File]::ReadAllText($agentsTarget) } else { "" }
-$startMarker = "<!-- codex-dev-kit:start -->"
-$endMarker = "<!-- codex-dev-kit:end -->"
-$startMarkerCount = ([regex]::Matches($currentAgents, [regex]::Escape($startMarker))).Count
-$endMarkerCount = ([regex]::Matches($currentAgents, [regex]::Escape($endMarker))).Count
-if ($startMarkerCount -ne $endMarkerCount -or $startMarkerCount -gt 1) {
-    throw "Global AGENTS.md has incomplete or duplicate Codex Dev Kit managed markers. Restore or remove the damaged managed block before installation: $agentsTarget"
-}
-$startIndex = $currentAgents.IndexOf($startMarker, [System.StringComparison]::Ordinal)
-$endIndex = $currentAgents.IndexOf($endMarker, [System.StringComparison]::Ordinal)
-if ($startMarkerCount -eq 1 -and $endIndex -le $startIndex) {
-    throw "Global AGENTS.md has Codex Dev Kit managed markers in the wrong order. Restore the file before installation: $agentsTarget"
-}
+# This kit no longer writes any global AGENTS.md. The global instruction slot of
+# every host is owned by the routing layer (see the my-agent-hub routing file);
+# the standalone short rules above ship only inside this kit for hosts that read
+# them when the kit is invoked.
+
+$kitTargetRoot = Join-Path $codexHomePath "codex-dev-kit"
+Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "VERSION") -Content ($version + [Environment]::NewLine) -Track
 
 if ($Apply) {
     New-Item -ItemType Directory -Path $workspacePath -Force | Out-Null
@@ -403,31 +406,6 @@ if ($Apply) {
     }
 }
 
-if ($startIndex -ge 0 -and $endIndex -gt $startIndex) {
-    $afterEnd = $endIndex + $endMarker.Length
-    $newline = if ($currentAgents.Contains("`r`n")) { "`r`n" } else { "`n" }
-    $prefix = $currentAgents.Substring(0, $startIndex)
-    $suffix = $currentAgents.Substring($afterEnd).TrimStart("`r", "`n")
-    $managedBlock = $agentsBlock.TrimEnd("`r", "`n")
-    $mergedAgents = if ([string]::IsNullOrWhiteSpace($suffix)) {
-        $prefix + $managedBlock + $newline
-    }
-    else {
-        $prefix + $managedBlock + $newline + $newline + $suffix
-    }
-}
-elseif ([string]::IsNullOrWhiteSpace($currentAgents)) {
-    $mergedAgents = $agentsBlock
-}
-else {
-    $mergedAgents = $currentAgents.TrimEnd() + [Environment]::NewLine + [Environment]::NewLine + $agentsBlock
-}
-Set-ManagedTextFile -Target $agentsTarget -Content $mergedAgents
-
-$kitTargetRoot = Join-Path $codexHomePath "codex-dev-kit"
-Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "VERSION") -Content ($version + [Environment]::NewLine) -Track
-Set-ManagedTextFile -Target (Join-Path $kitTargetRoot "config.fragment.toml") -Content ([System.IO.File]::ReadAllText((Join-Path $kitSourceRoot "assets\global-profile\config.fragment.toml"))) -Track
-
 $sourceConfig = [ordered]@{
     schemaVersion = 2
     mode = "standalone"
@@ -443,6 +421,23 @@ Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "scripts") -TargetRoot (J
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\project-template") -TargetRoot (Join-Path $kitTargetRoot "assets\project-template")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "assets\workspace-template") -TargetRoot (Join-Path $kitTargetRoot "assets\workspace-template")
 Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "skills") -TargetRoot (Join-Path $codexHomePath "skills")
+
+$claudeSkillsRoot = Join-Path $claudeHomePath "skills"
+foreach ($skillDir in Get-ChildItem -LiteralPath (Join-Path $kitSourceRoot "skills") -Directory) {
+    $claudeTarget = Join-Path $claudeSkillsRoot $skillDir.Name
+    if (-not (Test-Path -LiteralPath $claudeTarget -PathType Container)) {
+        continue
+    }
+    $existingSkill = Join-Path $claudeTarget "SKILL.md"
+    $sourceSkill = Join-Path $skillDir.FullName "SKILL.md"
+    if (-not (Test-Path -LiteralPath $existingSkill -PathType Leaf)) {
+        throw "A different skill already occupies $claudeTarget; rename it before installing the Dev Kit skills."
+    }
+    if ((Get-FileSha256 -Path $existingSkill) -ne (Get-FileSha256 -Path $sourceSkill)) {
+        throw "A different version of skill $($skillDir.Name) already exists at $claudeTarget; reconcile it before installing."
+    }
+}
+Copy-ManagedTree -SourceRoot (Join-Path $kitSourceRoot "skills") -TargetRoot $claudeSkillsRoot
 
 $desiredManagedPaths = @{}
 foreach ($record in $managedFileRecords) {
@@ -484,15 +479,13 @@ if ($workspaceAgentsDrift.Count -gt 0) {
     Write-Warning "Existing detailed workspace AGENTS.md differs from this fixed Dev Kit template and was preserved. Reconcile it deliberately, then rerun diagnosis; the installer will not overwrite custom rules."
 }
 if (-not $Apply) {
-    Write-Host "Preview only. Re-run with -Apply to install the short global AGENTS block, standalone Skills, central runtime, and templates."
+    Write-Host "Preview only. Re-run with -Apply to install the standalone Skills (Codex + Claude homes), central runtime, and templates."
     exit 0
 }
 
 $requiredInstalledPaths = @(
-    $agentsTarget,
     $workspaceAgents,
     (Join-Path $workspacePath "workspace.json"),
-    (Join-Path $workspacePath ".codex\config.toml"),
     (Join-Path $kitTargetRoot "VERSION"),
     (Join-Path $kitTargetRoot "source.json"),
     (Join-Path $kitTargetRoot "managed-files.json"),
@@ -503,7 +496,11 @@ $requiredInstalledPaths = @(
     (Join-Path $codexHomePath "skills\codex-development-assistant\SKILL.md"),
     (Join-Path $codexHomePath "skills\orchestrate-codex-team\SKILL.md"),
     (Join-Path $codexHomePath "skills\research-and-reuse\SKILL.md"),
-    (Join-Path $codexHomePath "skills\integrate-codex-projects\SKILL.md")
+    (Join-Path $codexHomePath "skills\integrate-codex-projects\SKILL.md"),
+    (Join-Path $claudeSkillsRoot "codex-development-assistant\SKILL.md"),
+    (Join-Path $claudeSkillsRoot "orchestrate-codex-team\SKILL.md"),
+    (Join-Path $claudeSkillsRoot "research-and-reuse\SKILL.md"),
+    (Join-Path $claudeSkillsRoot "integrate-codex-projects\SKILL.md")
 )
 $missingInstalledPaths = @($requiredInstalledPaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingInstalledPaths.Count -gt 0) {
@@ -566,8 +563,8 @@ if ($MigrateLegacy) {
 
 Write-Host "Standalone Codex Dev Kit installed at $kitTargetRoot"
 Write-Host "Detailed workspace instructions are available at $workspaceAgents"
-Write-Host "No Plugin, global Hook, custom agent file, or global config.toml change was installed."
+Write-Host "No Plugin, global Hook, custom agent file, global AGENTS.md, or config.toml change was installed."
 Write-Host "Backups of changed managed files, if any, are under $backupRoot"
 Write-Host "The Dev Kit does not install or merge any native subagent model, reasoning, concurrency, or enablement setting."
-Write-Host "Fully exit Codex Desktop and reopen it, then create a new task so the short global instructions and standalone Skills reload."
+Write-Host "Fully exit Codex Desktop and reopen it, then create a new task so the standalone Skills reload. The opencode/Claude host reads its copy from the Claude skills home without a restart."
 Write-Host "Creating a task inside an already-running app-server may keep an older Skill catalog; disk files alone do not prove that the task discovered the Skill."

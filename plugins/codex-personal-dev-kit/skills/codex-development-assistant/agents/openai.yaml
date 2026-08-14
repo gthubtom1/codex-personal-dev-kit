@@ -1,4 +1,4 @@
-interface:
+﻿interface:
   display_name: "Codex Development Assistant"
-  short_description: "Turn one-sentence ideas into reliable software"
+  short_description: "Develop one-sentence software ideas into reliable applications"
   default_prompt: "Use $codex-development-assistant to turn my idea into a working, maintainable project."

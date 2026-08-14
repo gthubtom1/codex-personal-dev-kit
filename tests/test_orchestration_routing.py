@@ -11,9 +11,6 @@ class NativeOrchestrationTests(unittest.TestCase):
     def test_managed_configs_do_not_set_native_subagent_options(self):
         paths = (
             ROOT / ".codex/config.toml",
-            PLUGIN / "assets/global-profile/config.fragment.toml",
-            PLUGIN / "assets/workspace-template/.codex/config.toml",
-            PLUGIN / "assets/project-template/.codex/config.toml",
         )
         forbidden = re.compile(
             r"(?m)^\s*(\[agents\]|default_subagent_model\s*=|"
@@ -24,6 +21,18 @@ class NativeOrchestrationTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotRegex(text, forbidden, path)
             self.assertIn("goals = true", text)
+
+    def test_standalone_mode_ships_no_config_or_hook_templates(self):
+        plugin = PLUGIN
+        for relative in (
+            "assets/global-profile",
+            "assets/workspace-template/.codex",
+            "assets/project-template/.codex",
+            "assets/project-template/.cursor",
+            "assets/project-template/.vscode",
+            "scripts/merge-codex-config.ps1",
+        ):
+            self.assertFalse((plugin / relative).exists(), relative)
 
     def test_orchestration_uses_only_native_official_defaults(self):
         skill = (PLUGIN / "skills/orchestrate-codex-team/SKILL.md").read_text(encoding="utf-8")

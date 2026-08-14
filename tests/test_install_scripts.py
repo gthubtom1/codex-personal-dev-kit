@@ -53,15 +53,18 @@ class InstallScriptTests(unittest.TestCase):
         codex_home: Path,
         workspace: Path,
         *arguments: str,
+        claude_home: Path | None = None,
         expected: int = 0,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
+        claude_args = ("-ClaudeHome", str(claude_home)) if claude_home is not None else ()
         return self.run_script(
             INSTALL_SCRIPT,
             "-CodexHome",
             str(codex_home),
             "-WorkspaceRoot",
             str(workspace),
+            *claude_args,
             *arguments,
             expected=expected,
             env=env,
@@ -96,19 +99,17 @@ class InstallScriptTests(unittest.TestCase):
             source_root, head = self.make_clean_source(root)
             codex_home = root / "codex-home"
             workspace = root / "workspace"
-            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head)
+            claude_home = root / "claude-home"
+            self.run_install(codex_home, workspace, claude_home=claude_home, *("-Source", str(source_root), "-Ref", head))
             self.assertFalse(codex_home.exists())
 
-            installed = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            installed = self.run_install(codex_home, workspace, claude_home=claude_home, *("-Source", str(source_root), "-Ref", head, "-Apply"))
             self.assertIn("Fully exit Codex Desktop", installed.stdout)
             self.assertIn("does not install or merge any native subagent", installed.stdout)
             agents = codex_home / "AGENTS.md"
-            agents_text = agents.read_text(encoding="utf-8")
-            self.assertIn("<!-- codex-dev-kit:start -->", agents_text)
-            self.assertIn(str(workspace / "AGENTS.md"), agents_text)
-            self.assertIn(str(codex_home / "skills"), agents_text)
-            self.assertNotIn("C:\\Users\\Administrator\\.codex", agents_text)
-            self.assertNotIn("{{CODEX_HOME}}", agents_text)
+            self.assertFalse(agents.exists(), "install must not write any global AGENTS.md")
+            self.assertFalse((codex_home / "config.toml").exists())
+            self.assertNotIn("C:\\Users\\Administrator\\.codex", installed.stdout)
             self.assertFalse((codex_home / "rules/codex-dev-kit.rules").exists())
             self.assertFalse((codex_home / "agents/codex-kit-reviewer.toml").exists())
             self.assertTrue((codex_home / "skills/codex-development-assistant/SKILL.md").is_file())
@@ -118,7 +119,9 @@ class InstallScriptTests(unittest.TestCase):
             self.assertFalse((codex_home / "skills/codex-safe-development/scripts/__pycache__").exists())
             self.assertTrue((codex_home / "codex-dev-kit/scripts/feature_guard.py").is_file())
             self.assertTrue((codex_home / "codex-dev-kit/source.json").is_file())
-            self.assertFalse((codex_home / "config.toml").exists())
+            self.assertTrue((claude_home / "skills/codex-development-assistant/SKILL.md").is_file())
+            self.assertTrue((claude_home / "skills/orchestrate-codex-team/SKILL.md").is_file())
+            self.assertFalse((claude_home / "AGENTS.md").exists())
             source = json.loads((codex_home / "codex-dev-kit/source.json").read_text(encoding="utf-8"))
             self.assertEqual(source["sourceType"], "local")
             self.assertEqual(source["mode"], "standalone")
@@ -127,25 +130,41 @@ class InstallScriptTests(unittest.TestCase):
             manifest = json.loads((codex_home / "codex-dev-kit/managed-files.json").read_text(encoding="utf-8"))
             self.assertFalse(any("__pycache__" in item["path"] or item["path"].endswith((".pyc", ".pyo")) for item in manifest["files"]))
 
-            second = self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
-            agent_lines = [line for line in second.stdout.splitlines() if str(agents) in line]
-            self.assertTrue(any("unchanged" in line for line in agent_lines), second.stdout)
+            version_path = codex_home / "codex-dev-kit/VERSION"
+            second = self.run_install(codex_home, workspace, claude_home=claude_home, *("-Source", str(source_root), "-Ref", head, "-Apply"))
+            version_lines = [line for line in second.stdout.splitlines() if str(version_path) in line]
+            self.assertTrue(any("unchanged" in line for line in version_lines), second.stdout)
 
-            content = agents.read_text(encoding="utf-8")
-            customized = "# My personal rule\n\n" + content.replace(
-                "The user is a complete software-development beginner.",
-                "OUTDATED MANAGED CONTENT.",
-                1,
-            )
-            agents.write_text(customized, encoding="utf-8")
-            self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
+            skill = codex_home / "skills/codex-development-assistant/SKILL.md"
+            original = skill.read_text(encoding="utf-8")
+            skill.write_text("# My personal skill customization\n\n" + original, encoding="utf-8")
+            self.run_install(codex_home, workspace, claude_home=claude_home, *("-Source", str(source_root), "-Ref", head, "-Apply"))
 
-            updated = agents.read_text(encoding="utf-8")
-            self.assertIn("# My personal rule", updated)
-            self.assertNotIn("OUTDATED MANAGED CONTENT", updated)
-            backups = list((codex_home / "backups/codex-dev-kit").rglob("AGENTS.md"))
+            updated = skill.read_text(encoding="utf-8")
+            self.assertEqual(updated, original)
+            backups = list((codex_home / "backups/codex-dev-kit").rglob("SKILL.md"))
             self.assertTrue(backups)
-            self.assertIn("OUTDATED MANAGED CONTENT", backups[-1].read_text(encoding="utf-8"))
+            self.assertIn("# My personal skill customization", backups[-1].read_text(encoding="utf-8"))
+
+    def test_install_rejects_same_name_skill_in_claude_home(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root, head = self.make_clean_source(root)
+            codex_home = root / "codex-home"
+            workspace = root / "workspace"
+            claude_home = root / "claude-home"
+            conflicting = claude_home / "skills/research-and-reuse"
+            conflicting.mkdir(parents=True)
+            (conflicting / "SKILL.md").write_text("---\nname: research-and-reuse\n---\n", encoding="utf-8")
+
+            blocked = self.run_install(
+                codex_home,
+                workspace,
+                claude_home=claude_home,
+                *("-Source", str(source_root), "-Ref", head, "-Apply"),
+                expected=1,
+            )
+            self.assertIn("research-and-reuse", blocked.stdout)
 
     def test_blank_computer_install_creates_and_links_both_agents_layers(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -187,12 +206,11 @@ class InstallScriptTests(unittest.TestCase):
             global_agents = codex_home / "AGENTS.md"
             self.assertTrue(workspace_agents.is_file())
             self.assertTrue((workspace / "workspace.json").is_file())
-            self.assertTrue((workspace / ".codex/config.toml").is_file())
+            self.assertFalse((workspace / ".codex").exists())
             self.assertTrue((workspace / "projects").is_dir())
             self.assertTrue((workspace / "archives").is_dir())
             workspace_text = workspace_agents.read_text(encoding="utf-8")
             workspace_metadata = (workspace / "workspace.json").read_text(encoding="utf-8")
-            global_text = global_agents.read_text(encoding="utf-8")
             expected_workspace_text = (
                 (source_root / "plugins/codex-personal-dev-kit/assets/workspace-template/AGENTS.md")
                 .read_text(encoding="utf-8")
@@ -204,10 +222,9 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(expected_workspace_text, workspace_text)
             self.assertIn(str(workspace), workspace_text)
             self.assertIn(str(source_root / "plugins/codex-personal-dev-kit/skills"), workspace_text)
-            self.assertIn(str(workspace_agents), global_text)
+            self.assertFalse(global_agents.exists(), "install must not write a global AGENTS.md")
             self.assertNotIn("{{", workspace_text)
             self.assertNotIn("{{", workspace_metadata)
-            self.assertNotIn("{{", global_text)
 
             second = self.run_script(
                 INSTALL_SCRIPT,
@@ -248,7 +265,7 @@ class InstallScriptTests(unittest.TestCase):
             )
 
             self.assertEqual(custom_agents, (workspace / "AGENTS.md").read_text(encoding="utf-8"))
-            self.assertIn(str(workspace / "AGENTS.md"), (codex_home / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertFalse((codex_home / "AGENTS.md").exists())
             self.assertIn("preserve-custom-workspace", result.stdout)
 
     def test_diagnose_reports_workspace_agents_template_drift_without_exposing_content(self) -> None:
@@ -619,20 +636,16 @@ class InstallScriptTests(unittest.TestCase):
             codex_home = root / "codex-home"
             workspace = root / "custom-workspace"
             self.run_install(codex_home, workspace, "-Source", str(source_root), "-Ref", head, "-Apply")
-            agents = codex_home / "AGENTS.md"
-            agents.write_text(agents.read_text(encoding="utf-8").replace(str(workspace / "AGENTS.md"), "D:\\wrong\\AGENTS.md"), encoding="utf-8")
 
             installed_update = codex_home / "codex-dev-kit/scripts/bootstrap/update.ps1"
-            self.run_script(
+            result = self.run_script(
                 installed_update,
                 "-CodexHome",
                 str(codex_home),
-                "-Apply",
             )
-
-            updated_agents = agents.read_text(encoding="utf-8")
-            self.assertIn(str(workspace / "AGENTS.md"), updated_agents)
-            self.assertNotIn("D:\\wrong\\AGENTS.md", updated_agents)
+            self.assertIn("Preview only", result.stdout)
+            self.assertIn(str(workspace), result.stdout)
+            self.assertFalse((codex_home / "AGENTS.md").exists())
 
     def test_legacy_install_requires_explicit_migration_and_backs_up_removed_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -814,13 +827,14 @@ class InstallScriptTests(unittest.TestCase):
             )
             self.assertRegex(diagnosis.stdout, r"Legacy Dev Kit Plugin not installed\s+True")
 
-    def test_damaged_global_agents_markers_stop_before_legacy_switch(self) -> None:
+    def test_install_never_touches_existing_global_agents_even_when_damaged(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source_root, head = self.make_clean_source(root)
             codex_home = root / "codex-home"
             codex_home.mkdir()
-            (codex_home / "AGENTS.md").write_text("<!-- codex-dev-kit:start -->\ndamaged\n", encoding="utf-8")
+            damaged = "<!-- codex-dev-kit:start -->\ndamaged\n"
+            (codex_home / "AGENTS.md").write_text(damaged, encoding="utf-8")
             legacy_agent = codex_home / "agents/codex-kit-reviewer.toml"
             legacy_agent.parent.mkdir()
             legacy_agent.write_text("name = \"legacy\"\n", encoding="utf-8")
@@ -834,7 +848,7 @@ class InstallScriptTests(unittest.TestCase):
                 encoding="ascii",
             )
 
-            blocked = self.run_install(
+            self.run_install(
                 codex_home,
                 workspace,
                 "-Source",
@@ -843,13 +857,12 @@ class InstallScriptTests(unittest.TestCase):
                 head,
                 "-Apply",
                 "-MigrateLegacy",
-                expected=1,
                 env={"CODEX_CLI": str(fake_codex), "CODEX_TEST_LOG": str(command_log)},
             )
-            self.assertIn("incomplete or duplicate", blocked.stdout)
-            self.assertTrue(legacy_agent.exists())
-            self.assertNotIn("plugin remove", command_log.read_text(encoding="utf-8"))
-            self.assertFalse((codex_home / "codex-dev-kit/source.json").exists())
+            self.assertEqual((codex_home / "AGENTS.md").read_text(encoding="utf-8"), damaged)
+            self.assertFalse(legacy_agent.exists())
+            self.assertIn("plugin remove", command_log.read_text(encoding="utf-8"))
+            self.assertTrue((codex_home / "codex-dev-kit/source.json").exists())
 
     def test_legacy_migration_removes_only_dev_kit_hook_handlers(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

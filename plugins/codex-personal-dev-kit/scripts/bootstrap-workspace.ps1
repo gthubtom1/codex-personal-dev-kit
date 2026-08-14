@@ -6,7 +6,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "merge-codex-config.ps1")
 $workspacePath = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $codexHomePath = if (-not [string]::IsNullOrWhiteSpace($CodexHome)) {
     [System.IO.Path]::GetFullPath($CodexHome)
@@ -39,18 +38,13 @@ $workspaceName = Split-Path -Leaf $workspacePath
 $targets = @(
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "projects") },
     [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath "archives") },
-    [pscustomobject]@{ Type = "directory"; Path = (Join-Path $workspacePath ".codex") },
     [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "AGENTS.md"); Source = (Join-Path $templateRoot "AGENTS.md") },
-    [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath ".codex\config.toml"); Source = (Join-Path $templateRoot ".codex\config.toml") },
     [pscustomobject]@{ Type = "file"; Path = (Join-Path $workspacePath "workspace.json"); Source = (Join-Path $templateRoot "workspace.json") }
 )
 
 $preview = foreach ($target in $targets) {
     $action = if (-not (Test-Path -LiteralPath $target.Path)) {
         "create"
-    }
-    elseif ($target.Type -eq "file" -and $target.Path -eq (Join-Path $workspacePath ".codex\config.toml")) {
-        "merge"
     }
     else {
         "keep"
@@ -70,14 +64,6 @@ if (-not $Apply) {
 New-Item -ItemType Directory -Path $workspacePath -Force | Out-Null
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($target in $targets) {
-    if ($target.Type -eq "file" -and $target.Path -eq (Join-Path $workspacePath ".codex\config.toml") -and (Test-Path -LiteralPath $target.Path)) {
-        $existing = [System.IO.File]::ReadAllText($target.Path)
-        $merged = Merge-CodexProjectDefaults -Content $existing
-        if ($merged -ne $existing) {
-            [System.IO.File]::WriteAllText($target.Path, $merged, $utf8NoBom)
-        }
-        continue
-    }
     if (Test-Path -LiteralPath $target.Path) {
         continue
     }

@@ -1,4 +1,4 @@
-interface:
+﻿interface:
   display_name: "Research and Reuse"
-  short_description: "Research trusted solutions and reuse them safely"
+  short_description: "Research and reuse trusted approaches for the current software project"
   default_prompt: "Use $research-and-reuse to research trustworthy existing solutions before designing or implementing this capability."

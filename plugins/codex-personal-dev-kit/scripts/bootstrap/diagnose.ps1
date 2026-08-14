@@ -20,7 +20,7 @@ function Add-Check {
 
 $agentsPath = Join-Path $codexHomePath "AGENTS.md"
 $agentsContent = if (Test-Path -LiteralPath $agentsPath -PathType Leaf) { Get-Content -Raw $agentsPath } else { "" }
-Add-Check "Short global AGENTS block" ($agentsContent.Contains("<!-- codex-dev-kit:start -->") -and $agentsContent.Contains($workspacePath)) $agentsPath
+Add-Check "No Dev Kit global AGENTS block" (-not $agentsContent.Contains("<!-- codex-dev-kit:start -->")) $agentsPath
 $workspaceAgents = Join-Path $workspacePath "AGENTS.md"
 Add-Check "Detailed mother-folder AGENTS" (Test-Path -LiteralPath $workspaceAgents -PathType Leaf) $workspaceAgents
 

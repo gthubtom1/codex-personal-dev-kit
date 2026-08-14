@@ -37,10 +37,12 @@ class PreToolGuardTests(unittest.TestCase):
 
         push = pre_tool_guard.classify_command("git push origin main")
         self.assertIn("feature_guard.py publish", push.reason)
-        self.assertIn("feature_guard.py sync", pre_tool_guard.classify_command("git pull origin main").reason)
         self.assertIn("feature_guard.py integrate", pre_tool_guard.classify_command("git merge feature").reason)
         self.assertIn("feature_guard.py unstage", pre_tool_guard.classify_command("git restore --staged app.js").reason)
         self.assertIn("feature_guard.py remove-worktree", pre_tool_guard.classify_command("git worktree remove ../old").reason)
+        self.assert_allowed("git pull origin main")
+        self.assert_allowed("git pull")
+        self.assert_allowed("git -C repo pull --ff-only")
 
     def test_new_worktrees_must_be_created_outside_the_project(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -67,14 +69,23 @@ class PreToolGuardTests(unittest.TestCase):
             "Remove-Item -Recurse -Force C:\\",
             "npm install typescript -g",
             "npm --global install typescript",
-            "pip install ruff",
-            "pip --isolated install ruff",
-            "python -m pip install ruff",
+            "pipx install ruff",
             "winget upgrade Git.Git",
             "winget --source winget upgrade Git.Git",
         ):
             with self.subTest(command=command):
                 self.assert_blocked(command)
+
+    def test_allows_project_pip_install_and_ordinary_git(self) -> None:
+        for command in (
+            "pip install ruff",
+            "pip --isolated install ruff",
+            "python -m pip install ruff",
+            "pip3 install --upgrade ruff",
+            "git pull origin main",
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(command)
 
     def test_allows_local_development_commands(self) -> None:
         for command in (
@@ -100,11 +111,9 @@ class PreToolGuardTests(unittest.TestCase):
 
     def test_blocked_high_risk_actions_do_not_delegate_raw_commands_to_beginner(self) -> None:
         for command in (
-            "git pull origin main",
             "git worktree remove ../old-worktree",
             "gh release create v1.0.0",
             "winget install Git.Git",
-            "pip install ruff",
             "npm publish",
         ):
             with self.subTest(command=command):

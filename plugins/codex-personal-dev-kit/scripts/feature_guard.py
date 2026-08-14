@@ -32,7 +32,6 @@ WRITE_LOCK_MAX_AGE_SECONDS = 12 * 3600
 FEATURE_MAP_RELATIVE = Path("docs/FEATURES.md")
 FEATURE_MAP_DIRECTORY_RELATIVE = Path("docs/features")
 STATUS_RELATIVE = Path("docs/STATUS.md")
-PROJECT_CONFIG_RELATIVE = Path(".codex/config.toml")
 RECOVERY_STATUS_MAX_CHARS = 1600
 RECOVERY_NEXT_ACTION_MAX_CHARS = 700
 RECOVERY_PACKET_MAX_CHARS = 3600
@@ -222,7 +221,6 @@ def _resolve_project_root(start: Path, require_managed: bool = True) -> Path | N
     root = Path(result.stdout.strip()).resolve()
     if require_managed and not (
         (root / FEATURE_MAP_RELATIVE).is_file()
-        and (root / PROJECT_CONFIG_RELATIVE).is_file()
         and (root / "AGENTS.md").is_file()
     ):
         return None
@@ -232,7 +230,7 @@ def _resolve_project_root(start: Path, require_managed: bool = True) -> Path | N
 def _require_root(value: str) -> Path:
     root = _resolve_project_root(Path(value), require_managed=True)
     if root is None:
-        raise GuardError("Select one Dev Kit project Git repository with AGENTS.md, docs/FEATURES.md, and .codex/config.toml.")
+        raise GuardError("Select one Dev Kit project Git repository with AGENTS.md and docs/FEATURES.md.")
     return root
 
 

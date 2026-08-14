@@ -1,4 +1,4 @@
-interface:
+﻿interface:
   display_name: "Codex Safe Development"
-  short_description: "Implement and recover changes through guarded Git and tool workflows"
+  short_description: "Implement and verify code changes with guarded checkpoints"
   default_prompt: "Use $codex-safe-development to implement or safely synchronize this change with tests, guarded operations, review, and local checkpoints."

@@ -47,67 +47,17 @@ class ForcePushBypassTests(unittest.TestCase):
 
 
 class CursorHostAdaptationFilesTests(unittest.TestCase):
-    """New projects on a snapshot/watch host must ship the worktree hard-guard and
-    the artifact watcher-exclusion, or the editor-freeze half of the fix silently
-    returns for every project created later."""
+    """The project template must not inject host hooks or settings into onboarded
+    projects; adaptation lives in prose rules plus the host's own settings."""
 
-    def test_project_template_ships_cursor_hook_and_watcher_exclude(self) -> None:
+    def test_project_template_ships_no_host_hooks_or_settings(self) -> None:
         for relative in (
             ".cursor/hooks.json",
             ".cursor/hooks/worktree_guard.py",
             ".vscode/settings.json",
+            ".codex/config.toml",
         ):
-            self.assertTrue((TEMPLATE_ROOT / relative).is_file(), relative)
-
-    def test_hook_wires_before_shell_execution_to_the_guard(self) -> None:
-        hooks = json.loads((TEMPLATE_ROOT / ".cursor/hooks.json").read_text(encoding="utf-8"))
-        entries = hooks.get("hooks", {}).get("beforeShellExecution", [])
-        self.assertTrue(entries)
-        self.assertTrue(any("worktree_guard.py" in entry.get("command", "") for entry in entries))
-
-    def test_watcher_exclude_covers_regenerated_artifacts(self) -> None:
-        text = (TEMPLATE_ROOT / ".vscode/settings.json").read_text(encoding="utf-8")
-        for token in ("files.watcherExclude", "__pycache__", "*.sqlite3", "*.db"):
-            self.assertIn(token, text)
-
-
-class CursorWorktreeGuardTests(unittest.TestCase):
-    GUARD = TEMPLATE_ROOT / ".cursor/hooks/worktree_guard.py"
-
-    def _run(self, payload: dict) -> str:
-        result = subprocess.run(
-            [sys.executable, str(self.GUARD)],
-            input=json.dumps(payload),
-            capture_output=True,
-            text=True,
-        )
-        return (result.stdout or "").replace(" ", "")
-
-    def test_blocks_worktree_inside_workspace(self) -> None:
-        base = {"cwd": r"D:\proj", "workspace_roots": [r"D:\proj"]}
-        for command in (
-            "git worktree add .local/wt-x",
-            "git worktree add -b wt/x wt-inside",
-            "git status\ngit worktree add .local/wt-y",
-        ):
-            with self.subTest(command=command):
-                self.assertIn('"permission":"deny"', self._run({"command": command, **base}))
-
-    def test_blocks_inside_parent_folder_workspace(self) -> None:
-        out = self._run(
-            {"command": "git worktree add projects/p/.local/wt", "cwd": r"D:\ws", "workspace_roots": [r"D:\ws"]}
-        )
-        self.assertIn('"permission":"deny"', out)
-
-    def test_allows_outside_and_read_only(self) -> None:
-        base = {"cwd": r"D:\proj", "workspace_roots": [r"D:\proj"]}
-        for command in (
-            r"git worktree add ..\.proj-worktrees\wt-x",
-            "git status",
-            "git worktree list",
-        ):
-            with self.subTest(command=command):
-                self.assertNotIn('"permission":"deny"', self._run({"command": command, **base}))
+            self.assertFalse((TEMPLATE_ROOT / relative).exists(), relative)
 
 
 class WorktreeRuleTextTests(unittest.TestCase):
