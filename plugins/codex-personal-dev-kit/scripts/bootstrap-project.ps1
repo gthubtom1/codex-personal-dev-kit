@@ -32,21 +32,28 @@ function Test-RouteGateMark {
         Write-Output "分派标记读不出来，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
         exit 1
     }
-    if ([string]$decision.decision -eq "ask") {
+    $hasAsk = $null -ne $decision.PSObject.Properties["ask"]
+    $hasDecision = $null -ne $decision.PSObject.Properties["decision"]
+    $hasTask = $null -ne $decision.PSObject.Properties["task_id"]
+    $hasVersion = $null -ne $decision.PSObject.Properties["route_version"]
+    $hasStamp = $null -ne $decision.PSObject.Properties["created_at"]
+    if ($hasDecision -and [string]$decision.decision -eq "ask") {
         Write-Output "这个任务的方向还没选定，先把路由那句 1/2/3 回掉。"
         exit 1
     }
-    if ([string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "codex-personal-dev-kit") {
+    if ((-not $hasTask) -or (-not $hasDecision) -or [string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "codex-personal-dev-kit") {
         Write-Output "这个任务的分派结果不是走我这条流程。先运行 route.ps1 确认分派，它会告诉你走哪条流程。"
         exit 1
     }
-    $routeVersion = [string]$decision.route_version
+    $routeVersion = if ($hasVersion) { [string]$decision.route_version } else { "" }
     if (-not [string]::IsNullOrWhiteSpace($routeVersion) -and $routeVersion -ne "1.0") {
         Write-Output "分派标记的版本和当前路由版本对不上，我先停一下。重新运行 route.ps1（约 1 秒）更新标记，我马上接着干。"
         exit 1
     }
     $routeStamp = $null
-    try { $routeStamp = [DateTime]$decision.created_at } catch { }
+    if ($hasStamp) {
+        try { $routeStamp = [DateTime]$decision.created_at } catch { }
+    }
     if ($null -ne $routeStamp) {
         $alreadyStarted = (Test-Path -LiteralPath $ProjectRoot -PathType Container) -and (Test-Path -LiteralPath (Join-Path $ProjectRoot ".git"))
         if (-not $alreadyStarted -and (Get-Date).ToUniversalTime() - $routeStamp -gt [TimeSpan]::FromHours(12)) {
