@@ -31,7 +31,7 @@ function Test-RouteGateMark {
         Write-Output "分派标记读不出来，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
         exit 1
     }
-    if ([string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "dev-kit") {
+    if ([string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "codex-personal-dev-kit") {
         Write-Output "这个任务的分派结果不是走我这条流程。先运行 route.ps1 确认分派，它会告诉你走哪条流程。"
         exit 1
     }
