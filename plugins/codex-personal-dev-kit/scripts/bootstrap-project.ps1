@@ -17,23 +17,42 @@ function Test-RouteGateMark {
 
     $gateDir = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".route-gate"
     if (Test-Path -LiteralPath (Join-Path $gateDir "DISABLED")) {
+        Write-Output "逃生模式开着（门禁已关），这次放行。要恢复：删除 ~/.route-gate/DISABLED 或双击桌面恢复。"
         return
     }
-    $activePath = Join-Path $gateDir "active.json"
-    if (-not (Test-Path -LiteralPath $activePath -PathType Leaf)) {
+    $decisionPath = Join-Path $gateDir ($TaskId + "\decision.json")
+    if (-not (Test-Path -LiteralPath $decisionPath -PathType Leaf)) {
         Write-Output "这个活还没走分派，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
         exit 1
     }
     try {
-        $decision = Get-Content -Raw -Encoding UTF8 -LiteralPath $activePath | ConvertFrom-Json
+        $decision = [System.IO.File]::ReadAllText($decisionPath) | ConvertFrom-Json
     }
     catch {
         Write-Output "分派标记读不出来，我先不直接开工。先运行 route.ps1 领个号（约 1 秒），领完我马上接着干。"
         exit 1
     }
+    if ([string]$decision.decision -eq "ask") {
+        Write-Output "这个任务的方向还没选定，先把路由那句 1/2/3 回掉。"
+        exit 1
+    }
     if ([string]$decision.task_id -ne $TaskId -or [string]$decision.decision -ne "codex-personal-dev-kit") {
         Write-Output "这个任务的分派结果不是走我这条流程。先运行 route.ps1 确认分派，它会告诉你走哪条流程。"
         exit 1
+    }
+    $routeVersion = [string]$decision.route_version
+    if (-not [string]::IsNullOrWhiteSpace($routeVersion) -and $routeVersion -ne "1.0") {
+        Write-Output "分派标记的版本和当前路由版本对不上，我先停一下。重新运行 route.ps1（约 1 秒）更新标记，我马上接着干。"
+        exit 1
+    }
+    $routeStamp = $null
+    try { $routeStamp = [DateTime]$decision.created_at } catch { }
+    if ($null -ne $routeStamp) {
+        $alreadyStarted = (Test-Path -LiteralPath $ProjectRoot -PathType Container) -and (Test-Path -LiteralPath (Join-Path $ProjectRoot ".git"))
+        if (-not $alreadyStarted -and (Get-Date).ToUniversalTime() - $routeStamp -gt [TimeSpan]::FromHours(12)) {
+            Write-Output "分派标记已经过期了，我先停一下。重新运行 route.ps1（约 1 秒）更新标记，我马上接着干。"
+            exit 1
+        }
     }
 }
 
