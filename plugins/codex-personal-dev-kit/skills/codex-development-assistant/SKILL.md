@@ -1,6 +1,6 @@
 ---
 name: codex-development-assistant
-description: 面向零基础用户的一句话软件开发入口，把“我想做一个应用”“帮我加这个功能”“继续上次开发”等自然语言需求扩展成合理产品范围、可维护架构、分阶段实现、测试审查和可恢复项目状态。用户没有主动提到 Git、Goal、Skills、子代理或 Worktree，但希望 Codex 像完整专业团队一样负责长期开发时使用。
+description: 面向零基础用户的一句话软件开发入口（通用编程任务兜底），把“我想做一个应用”“帮我加这个功能”“继续上次开发”等自然语言需求扩展成合理产品范围、可维护架构、分阶段实现、测试审查和可恢复项目状态。用户没有主动提到 Git、Goal、Skills、子代理或 Worktree，但希望 Codex 像完整专业团队一样负责长期开发时使用。
 ---
 
 # Codex Development Assistant

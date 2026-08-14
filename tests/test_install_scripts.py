@@ -29,6 +29,12 @@ class InstallScriptTests(unittest.TestCase):
         process_env = os.environ.copy()
         if env:
             process_env.update(env)
+        if "CLAUDE_HOME" not in process_env:
+            args_list = list(arguments)
+            for index, argument in enumerate(args_list):
+                if argument == "-CodexHome" and index + 1 < len(args_list):
+                    process_env["CLAUDE_HOME"] = str(Path(args_list[index + 1]).parent / "test-claude-home")
+                    break
         result = subprocess.run(
             [
                 POWERSHELL,
@@ -57,14 +63,16 @@ class InstallScriptTests(unittest.TestCase):
         expected: int = 0,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
-        claude_args = ("-ClaudeHome", str(claude_home)) if claude_home is not None else ()
+        if claude_home is None:
+            claude_home = codex_home.parent / "test-claude-home"
         return self.run_script(
             INSTALL_SCRIPT,
             "-CodexHome",
             str(codex_home),
             "-WorkspaceRoot",
             str(workspace),
-            *claude_args,
+            "-ClaudeHome",
+            str(claude_home),
             *arguments,
             expected=expected,
             env=env,
