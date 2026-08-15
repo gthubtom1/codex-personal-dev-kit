@@ -1,4 +1,4 @@
-# Secrets and local configuration
+﻿# Secrets and local configuration
 .env
 .env.*
 !.env.example
@@ -66,3 +66,8 @@ Thumbs.db
 .codex/current-change.json
 .codex/active-plan.md
 .codex/write-lock.json
+work/
+scratch/
+.trash/
+*.tmp
+cache/
